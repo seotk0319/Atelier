@@ -241,7 +241,20 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       request: finalRequest,
       count: batchCount
     })
-    if (result.blockedReason) toast(enqueueBlockedMessage(result.blockedReason), 'info')
+    if (result.blockedReason === 'busy' || result.blockedReason === 'pending') {
+      // 계정이 모두 생성 중이거나 씬 예약이 남아 있어도 메인 생성은 거절하지 않는다.
+      // 누른 순서대로 바로 뽑기 줄에 넣어, 계정이 비는 대로 이어서 뽑는다 (씬 예약보다 먼저).
+      for (let i = 0; i < batchCount; i++) {
+        const seed = i === 0 ? finalRequest.seed : (finalRequest.seed + i) % 4294967296
+        const quick = await window.nais.invoke('queue:enqueueQuick', {
+          request: i === 0 ? finalRequest : { ...finalRequest, seed }
+        })
+        if (quick.blockedReason) {
+          toast(enqueueBlockedMessage(quick.blockedReason), 'info')
+          break
+        }
+      }
+    } else if (result.blockedReason) toast(enqueueBlockedMessage(result.blockedReason), 'info')
   },
 
   cancelAll: async () => {

@@ -102,4 +102,39 @@ describe('acceleration account selection', () => {
     await tick()
     expect(off.used).toEqual(['a1'])
   })
+
+  // 메인 생성은 거절되면(모든 계정 생성 중) 바로 뽑기 줄로 넣는다. 그 줄이 받아서 순서대로 도는지 본다.
+  it('queues extra main generations in click order while both checked accounts are busy', async () => {
+    const used: string[] = []
+    const seeds: number[] = []
+    const finish: Record<string, () => void> = {}
+    const queue = new GenerationQueue(
+      (r, id, _signal, account) => {
+        used.push(account.id)
+        seeds.push(r.seed)
+        return new Promise<string>((resolve) => {
+          finish[account.id] = () => resolve('done-' + id)
+        })
+      },
+      {
+        getAccounts: () => accounts,
+        accelerationAvailable: true,
+        isAccelerationEnabled: () => true,
+        getAccelerationExcluded: () => ['a3']
+      }
+    )
+    queue.setDelayMs(0)
+    queue.enqueue({ ...request, seed: 1 }, 1)
+    queue.enqueue({ ...request, seed: 2 }, 1)
+    await tick()
+    expect(queue.tryEnqueue({ ...request, seed: 3 }, 1).blockedReason).toBe('busy')
+    expect(queue.tryEnqueueQuick({ ...request, seed: 3 }).ids).toHaveLength(1)
+    expect(queue.tryEnqueueQuick({ ...request, seed: 4 }).ids).toHaveLength(1)
+    finish.a2()
+    for (let i = 0; i < 5; i++) await tick()
+    finish.a1()
+    for (let i = 0; i < 5; i++) await tick()
+    expect(seeds).toEqual([1, 2, 3, 4])
+    expect(used).toEqual(['a1', 'a2', 'a2', 'a1'])
+  })
 })
