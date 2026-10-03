@@ -78,6 +78,7 @@ import {
   getNaiTokenInfo,
   getSetting,
   setNaiToken,
+  setAccountAccelerated,
   setSetting
 } from './db/settings'
 import { anlasUsage, logBalance } from './nai/anlas-log'
@@ -359,6 +360,12 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     if (PROFILE === 1) setSetting('acceleration_mode', enabled ? '1' : '0')
     ctx.queue.refreshConfiguration()
     return ctx.queue.status()
+  })
+  handle('acceleration:setAccount', ({ id, enabled }) => {
+    if (PROFILE !== 1) return { ok: false, error: '가속 모드는 Custom 1에서만 쓸 수 있어요' }
+    const result = setAccountAccelerated(String(id || ''), enabled === true)
+    if (result.ok) ctx.queue.refreshConfiguration()
+    return result
   })
   handle('anlasSpending:set', ({ enabled }) => {
     if (PROFILE === 1) setSetting('anlas_spending', enabled ? '1' : '0')

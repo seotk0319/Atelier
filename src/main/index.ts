@@ -5,7 +5,7 @@ import sharp from 'sharp'
 import icon from '../../resources/icon.png?asset'
 import iconInverted from '../../resources/icon-inverted.png?asset'
 import { closeDb, getDb, initDb } from './db'
-import { getNaiAccounts, getSetting } from './db/settings'
+import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settings'
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
 import { fragmentSource } from './fragments/repo'
@@ -381,6 +381,7 @@ app.whenReady().then(() => {
       getAccounts: () => getNaiAccounts(),
       accelerationAvailable: PROFILE === 1,
       isAccelerationEnabled: () => getSetting('acceleration_mode') === '1',
+      getAccelerationExcluded: () => getAccelerationExcluded(),
       isAnlasSpendingEnabled: () => PROFILE !== 1 || getSetting('anlas_spending') !== '0'
     }
   )

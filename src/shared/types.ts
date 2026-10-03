@@ -187,6 +187,8 @@ export interface NaiAccountInfo {
   name: string
   prefix: string
   length: number
+  /** 가속 모드에서 이 계정을 쓰는지 */
+  accelerated: boolean
 }
 
 /** V5 무료 생성 사용량. 서버는 정확한 장수 대신 정수 비율과 1%당 충전 시간을 제공한다. */
@@ -494,6 +496,10 @@ export interface IpcInvokeMap {
   'queue:reset': { req: void; res: void }
   'queue:status': { req: void; res: QueueStatus }
   'acceleration:set': { req: { enabled: boolean }; res: QueueStatus }
+  'acceleration:setAccount': {
+    req: { id: string; enabled: boolean }
+    res: { ok: boolean; error?: string }
+  }
   'anlasSpending:set': { req: { enabled: boolean }; res: QueueStatus }
   'presets:manage': {
     req: { kind: 'prompt' | 'scene'; action: 'duplicate' | 'delete'; ids: number[] }

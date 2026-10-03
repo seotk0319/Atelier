@@ -640,6 +640,22 @@ function AccountSection(): React.JSX.Element {
   const [message, setMessage] = useState('')
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   const refreshAnlas = useGenerationStore((s) => s.refreshAnlas)
+  // 가속 모드는 Custom 1에서만 있다. 계정마다 가속에 쓸지 고른다.
+  const accelerationAvailable = useGenerationStore((s) => s.queue?.accelerationAvailable ?? false)
+  const accelerationEnabled = useGenerationStore((s) => s.queue?.accelerationEnabled ?? false)
+  const acceleratedCount = accounts.filter((account) => account.accelerated).length
+
+  async function setAccelerated(account: NaiAccountInfo, on: boolean): Promise<void> {
+    setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, accelerated: on } : a)))
+    const result = await window.nais
+      .invoke('acceleration:setAccount', { id: account.id, enabled: on })
+      .catch(() => ({ ok: false, error: '가속 계정 설정을 저장하지 못했어요' }))
+    if (!result.ok) {
+      setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, accelerated: !on } : a)))
+      setStatus('fail')
+      setMessage(result.error ?? '가속 계정 설정을 저장하지 못했어요')
+    }
+  }
 
   const refreshUsage = useCallback(async (): Promise<void> => {
     if (usageInFlight.current) return
@@ -738,7 +754,9 @@ function AccountSection(): React.JSX.Element {
         <div>
           <p className="text-[13px] text-ink">NAI API 계정</p>
           <p className="text-[11.5px] text-faint">
-            등록된 계정은 OS 키체인으로 암호화되며 가속 모드에서 각각 한 장씩 생성합니다.
+            {accelerationAvailable
+              ? `등록된 계정은 OS 키체인으로 암호화되며, 가속 모드에서는 체크한 계정이 각각 한 장씩 생성합니다${accelerationEnabled ? '' : ' (지금은 가속 모드가 꺼져 있어 계정 1만 써요)'}.`
+              : '등록된 계정은 OS 키체인으로 암호화됩니다.'}
           </p>
         </div>
         <Button
@@ -789,6 +807,28 @@ function AccountSection(): React.JSX.Element {
                 )}
                 {usageLoading && !metrics && (
                   <span className="text-[10.5px] text-faint">사용량 조회 중…</span>
+                )}
+                {accelerationAvailable && (
+                  <label
+                    className={cn(
+                      'ml-auto flex cursor-pointer select-none items-center gap-1.5 text-[11px]',
+                      account.accelerated ? 'font-medium text-accent' : 'text-faint'
+                    )}
+                    title={
+                      account.accelerated && acceleratedCount <= 1
+                        ? '가속 모드에는 계정이 하나 이상 있어야 해요'
+                        : '가속 모드에서 이 계정으로도 생성해요'
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-3.5 accent-accent"
+                      checked={account.accelerated}
+                      disabled={account.accelerated && acceleratedCount <= 1}
+                      onChange={(e) => void setAccelerated(account, e.target.checked)}
+                    />
+                    가속 모드
+                  </label>
                 )}
               </div>
               <div className="flex gap-1.5">

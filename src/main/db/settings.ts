@@ -143,12 +143,40 @@ export function getNaiAccounts(): NaiAccountSecret[] {
 }
 
 export function getNaiAccountInfos(): NaiAccountInfo[] {
+  const excluded = new Set(getAccelerationExcluded())
   return getNaiAccounts().map((account, index) => ({
     id: account.id,
     name: `계정 ${index + 1}`,
     prefix: account.token.slice(0, 4),
-    length: account.token.length
+    length: account.token.length,
+    accelerated: !excluded.has(account.id)
   }))
+}
+
+// 가속 모드에서 쓰지 않을 계정 id. 비어 있으면(기본) 모든 계정을 쓴다.
+const ACCEL_EXCLUDED_KEY = 'acceleration_excluded'
+export function getAccelerationExcluded(): string[] {
+  try {
+    const value = JSON.parse(getSetting(ACCEL_EXCLUDED_KEY) || '[]') as unknown
+    return Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+/** 계정을 가속 모드에 넣거나 뺀다. 마지막 남은 계정은 뺄 수 없다. */
+export function setAccountAccelerated(id: string, on: boolean): { ok: boolean; error?: string } {
+  const accounts = getNaiAccounts()
+  if (!accounts.some((account) => account.id === id))
+    return { ok: false, error: '계정을 찾지 못했어요' }
+  const excluded = new Set(
+    getAccelerationExcluded().filter((x) => accounts.some((account) => account.id === x))
+  )
+  if (on) excluded.delete(id)
+  else excluded.add(id)
+  if (accounts.every((account) => excluded.has(account.id)))
+    return { ok: false, error: '가속 모드에는 계정이 하나 이상 있어야 해요' }
+  setSetting(ACCEL_EXCLUDED_KEY, JSON.stringify([...excluded]))
+  return { ok: true }
 }
 
 export function getNaiAccountToken(id: string): string | null {

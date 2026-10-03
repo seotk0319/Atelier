@@ -34,6 +34,8 @@ export interface GenerationQueueOptions {
   getAccounts?: () => GenerationAccount[]
   accelerationAvailable?: boolean
   isAccelerationEnabled?: () => boolean
+  /** 가속 모드에서 쓰지 않을 계정 id (설정 > NAI 계정의 체크박스) */
+  getAccelerationExcluded?: () => string[]
   isAnlasSpendingEnabled?: () => boolean
 }
 
@@ -73,6 +75,7 @@ export class GenerationQueue extends EventEmitter {
   private readonly getAccounts: () => GenerationAccount[]
   private readonly accelerationAvailable: boolean
   private readonly isAccelerationEnabled: () => boolean
+  private readonly getAccelerationExcluded: () => string[]
   private readonly isAnlasSpendingEnabled: () => boolean
 
   constructor(
@@ -85,6 +88,7 @@ export class GenerationQueue extends EventEmitter {
       options.getAccounts ?? (() => [{ id: 'default', name: '계정 1', token: 'default' }])
     this.accelerationAvailable = options.accelerationAvailable ?? false
     this.isAccelerationEnabled = options.isAccelerationEnabled ?? (() => false)
+    this.getAccelerationExcluded = options.getAccelerationExcluded ?? (() => [])
     this.isAnlasSpendingEnabled = options.isAnlasSpendingEnabled ?? (() => true)
   }
 
@@ -218,7 +222,7 @@ export class GenerationQueue extends EventEmitter {
       } else if (item.state === 'generating') generating++
     }
     const allAccounts = this.getAccounts().filter((account) => account.id && account.token.trim())
-    const accounts = this.accelerationEnabled() ? allAccounts : allAccounts.slice(0, 1)
+    const accounts = this.usableAccounts(allAccounts)
     const busyAccountCount = allAccounts.filter((account) => this.isAccountBusy(account.id)).length
     const availableSlots = accounts.filter((account) => this.isAccountIdle(account.id)).length
     return {
@@ -244,7 +248,15 @@ export class GenerationQueue extends EventEmitter {
       if (state.retryAt <= Date.now()) this.pausedAccounts.delete(id)
     }
     const accounts = this.getAccounts().filter((account) => account.id && account.token.trim())
-    return this.accelerationEnabled() ? accounts : accounts.slice(0, 1)
+    return this.usableAccounts(accounts)
+  }
+
+  /** 기본 모드는 첫 계정만, 가속 모드는 체크한 계정만(전부 빠졌으면 첫 계정) 쓴다. */
+  private usableAccounts(accounts: GenerationAccount[]): GenerationAccount[] {
+    if (!this.accelerationEnabled()) return accounts.slice(0, 1)
+    const excluded = new Set(this.getAccelerationExcluded())
+    const chosen = accounts.filter((account) => !excluded.has(account.id))
+    return chosen.length ? chosen : accounts.slice(0, 1)
   }
 
   private accelerationEnabled(): boolean {
@@ -324,15 +336,19 @@ export class GenerationQueue extends EventEmitter {
   private nextDispatchable(): { item: InternalQueueItem; account: GenerationAccount } | undefined {
     const accounts = this.getAccounts().filter((account) => account.id && account.token.trim())
     if (accounts.length === 0) return undefined
+    // 대기 중인 작업도 가속에서 뺀 계정은 새로 쓰지 않는다. 그 작업이 쓸 수 있는 계정이
+    // 전부 빠졌을 때만 원래 계정 그대로 둔다 (영원히 대기하지 않게).
+    const excluded = new Set(this.getAccelerationExcluded())
     // 바로 뽑기(priority)를 먼저, 그다음 예약 순서대로.
     const pending = [...this.items.values()].filter((item) => item.state === 'pending')
     const ordered = [...pending.filter((i) => i.priority), ...pending.filter((i) => !i.priority)]
     for (const item of ordered) {
+      const preferred = item.allowedAccountIds.filter((id) => !excluded.has(id))
+      const allowed = preferred.length ? preferred : item.allowedAccountIds
       for (let offset = 0; offset < accounts.length; offset++) {
         const index = (this.roundRobinIndex + offset) % accounts.length
         const account = accounts[index]
-        if (!item.allowedAccountIds.includes(account.id) || !this.isAccountIdle(account.id))
-          continue
+        if (!allowed.includes(account.id) || !this.isAccountIdle(account.id)) continue
         this.roundRobinIndex = (index + 1) % accounts.length
         return { item, account }
       }
