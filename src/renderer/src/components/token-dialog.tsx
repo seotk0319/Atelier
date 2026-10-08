@@ -1106,7 +1106,7 @@ export function SettingsDialog({
     >
       <DialogContent
         aria-describedby={undefined}
-        className="grid h-[62vh] max-w-[640px] grid-rows-[1fr] gap-0 overflow-hidden p-0"
+        className="grid h-[62vh] max-w-[640px] grid-cols-[minmax(0,1fr)] grid-rows-[1fr] gap-0 overflow-hidden p-0"
       >
         <DialogTitle className="sr-only">설정</DialogTitle>
         <Tabs

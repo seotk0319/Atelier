@@ -501,6 +501,13 @@ export function AiReplySection(): React.JSX.Element {
           <p className="text-[12px] tabular-nums text-ink">
             오늘 보냄 {status.today.sent} · 초안 {status.today.drafted} · 넘김{' '}
             {status.today.skipped}
+            {status.today.sent > status.today.autoSent && (
+              <span className="text-faint">
+                {' '}
+                (자동 {status.today.autoSent} / 하루 최대 {status.config.dailyLimit}, 지난 댓글{' '}
+                {status.today.sent - status.today.autoSent})
+              </span>
+            )}
             {status.today.failed > 0 && (
               <span className="text-danger"> · 실패 {status.today.failed}</span>
             )}

@@ -92,6 +92,26 @@ async function loadLog(): Promise<void> {
   } catch {
     // 처음이면 비어 있다.
   }
+  await fillSources()
+}
+/**
+ * 2.8.0 기록에는 출처가 없다. 자동 답글은 켠 시각 뒤 댓글만 다루므로, 댓글 시각이 그 앞이면
+ * 지난 댓글 일괄 답글로 본다. 한 번 채우면 파일에 남는다.
+ */
+async function fillSources(): Promise<void> {
+  const missing = Object.values(log).filter((entry) => !entry.source)
+  if (!missing.length) return
+  try {
+    const since = Date.parse(config().since || '')
+    const at = new Map((await inboxSnapshot()).items.map((item) => [item.id, item.at]))
+    for (const entry of missing) {
+      const commented = Date.parse(at.get(entry.id) || '')
+      entry.source = Number.isFinite(since) && commented >= since ? 'auto' : 'backlog'
+    }
+    await saveLog()
+  } catch {
+    // 알림 저장소를 못 열면 다음 실행 때 다시 채운다.
+  }
 }
 async function saveLog(): Promise<void> {
   const entries = Object.values(log).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
@@ -265,7 +285,7 @@ async function tick(): Promise<void> {
     const result = await runAuto({
       config: current,
       candidates,
-      sentToday: countToday(log, new Date()).sent,
+      sentToday: countToday(log, new Date()).autoSent,
       draft: draftReply,
       send: sendAsAi,
       record: async (entry) => {
@@ -396,7 +416,8 @@ export async function startBacklog(request: AiBacklogRequest): Promise<AiReplySt
         },
         wait: waitOrStop,
         now: () => new Date(),
-        active: () => !backlogStop
+        active: () => !backlogStop,
+        source: 'backlog'
       })
       state.stopped = result.stopped ?? (backlogStop ? '중간에 멈췄어요.' : null)
     } catch {

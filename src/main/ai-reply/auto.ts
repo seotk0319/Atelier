@@ -78,15 +78,17 @@ export function autoCandidates(
 const localDay = (date: Date): string =>
   `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
 
-/** 오늘(이 PC 날짜 기준) 상태별 개수 */
+/** 오늘(이 PC 날짜 기준) 상태별 개수. autoSent는 일괄 답글을 뺀 자동 답글 보낸 수. */
 export function countToday(
   log: Record<string, AiLogEntry>,
   now: Date
-): { sent: number; drafted: number; skipped: number; failed: number } {
+): { sent: number; drafted: number; skipped: number; failed: number; autoSent: number } {
   const today = localDay(now)
-  const counts = { sent: 0, drafted: 0, skipped: 0, failed: 0 }
+  const counts = { sent: 0, drafted: 0, skipped: 0, failed: 0, autoSent: 0 }
   for (const entry of Object.values(log)) {
-    if (localDay(new Date(entry.at)) === today) counts[entry.state]++
+    if (localDay(new Date(entry.at)) !== today) continue
+    counts[entry.state]++
+    if (entry.state === 'sent' && entry.source !== 'backlog') counts.autoSent++
   }
   return counts
 }
@@ -116,6 +118,8 @@ export interface AutoDeps {
   now(): Date
   /** 도중에 꺼졌는지 매번 다시 본다 (없으면 계속 켜진 것으로 본다) */
   active?(): boolean
+  /** 기록에 남길 출처 (기본 auto) */
+  source?: 'auto' | 'backlog'
 }
 
 export interface AutoResult {
@@ -139,7 +143,8 @@ export async function runAuto(deps: AutoDeps): Promise<AutoResult> {
       id: item.id,
       platform: item.platform,
       author: item.author,
-      comment: item.comment.slice(0, 1000)
+      comment: item.comment.slice(0, 1000),
+      source: deps.source ?? 'auto'
     }
     const draft = await deps.draft(item.id)
     if (!draft.ok) {

@@ -61,6 +61,8 @@ export interface AiLogEntry {
   content: string | null
   /** 넘긴 이유나 실패 이유 */
   reason: string | null
+  /** auto: 새 댓글 자동 답글 / backlog: 지난 댓글 일괄 답글. 하루 한도는 auto만 센다. */
+  source?: 'auto' | 'backlog'
 }
 
 export interface AiReplyStatus {
@@ -71,7 +73,8 @@ export interface AiReplyStatus {
   /** 프롬프트에 넣는 말투 예시 수 / 쓸 수 있는 지난 답글 수 */
   examples: { used: number; total: number }
   usage: AiUsage & { cost: number }
-  today: { sent: number; drafted: number; skipped: number; failed: number }
+  /** 오늘 상태별 개수. autoSent는 그중 새 댓글 자동 답글로 보낸 수 (하루 한도에 쓰는 값) */
+  today: { sent: number; drafted: number; skipped: number; failed: number; autoSent: number }
   /** 자동 답글이 마지막에 멈춘 이유 (키·크레딧 문제 등) */
   lastError: string | null
   /** 지난 댓글 일괄 답글 진행 상황 (이번 실행 중 한 번도 안 돌렸으면 null) */

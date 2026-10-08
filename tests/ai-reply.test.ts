@@ -230,15 +230,28 @@ describe('auto reply selection', () => {
     expect(readAiConfig('{broken')).toMatchObject({ mode: 'off' })
   })
 
-  it('counts today by local date', () => {
+  it('counts today by local date and keeps backlog sends out of the daily limit', () => {
     const at = (d: Date): string => d.toISOString()
     const now = new Date(2026, 9, 8, 15)
     const log = {
       a: { id: 'a', at: at(new Date(2026, 9, 8, 9)), state: 'sent' } as AiLogEntry,
       b: { id: 'b', at: at(new Date(2026, 9, 8, 10)), state: 'skipped' } as AiLogEntry,
-      c: { id: 'c', at: at(new Date(2026, 9, 7, 23)), state: 'sent' } as AiLogEntry
+      c: { id: 'c', at: at(new Date(2026, 9, 7, 23)), state: 'sent' } as AiLogEntry,
+      d: {
+        id: 'd',
+        at: at(new Date(2026, 9, 8, 11)),
+        state: 'sent',
+        source: 'backlog'
+      } as AiLogEntry,
+      e: { id: 'e', at: at(new Date(2026, 9, 8, 12)), state: 'sent', source: 'auto' } as AiLogEntry
     }
-    expect(countToday(log, now)).toEqual({ sent: 1, drafted: 0, skipped: 1, failed: 0 })
+    expect(countToday(log, now)).toEqual({
+      sent: 3,
+      drafted: 0,
+      skipped: 1,
+      failed: 0,
+      autoSent: 2
+    })
   })
 })
 
@@ -288,10 +301,13 @@ describe('auto reply run', () => {
       ['b', 'b 감사해요~']
     ])
     expect(d.waits).toEqual([AUTO_GAP_MS])
-    expect(d.records.map((r) => [r.id, r.state, r.content])).toEqual([
-      ['a', 'sent', 'a 감사해요~'],
-      ['b', 'sent', 'b 감사해요~']
+    expect(d.records.map((r) => [r.id, r.state, r.content, r.source])).toEqual([
+      ['a', 'sent', 'a 감사해요~', 'auto'],
+      ['b', 'sent', 'b 감사해요~', 'auto']
     ])
+    const batch = deps({ source: 'backlog' })
+    await runAuto(batch)
+    expect(batch.records.map((r) => r.source)).toEqual(['backlog', 'backlog'])
   })
 
   it('only drafts in draft mode and hands questions to the creator', async () => {

@@ -649,7 +649,7 @@ export function InboxView(): React.JSX.Element {
                 {ai.backlog?.running
                   ? `지난 댓글 ${ai.backlog.done}/${ai.backlog.total}`
                   : ai.config.mode === 'send'
-                    ? `자동 답글 · 오늘 ${ai.today.sent}/${ai.config.dailyLimit}`
+                    ? `자동 답글 · 오늘 ${ai.today.autoSent}/${ai.config.dailyLimit}`
                     : `초안만 · 오늘 ${ai.today.drafted}`}
                 {ai.lastError && (
                   <span
