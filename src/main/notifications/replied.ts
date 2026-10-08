@@ -19,7 +19,7 @@ export function readReplied(value: unknown): RepliedRecord {
     items[id] = {
       at: entry.at,
       content: entry.content.slice(0, 1000),
-      via: entry.via === 'site' ? 'site' : 'app'
+      via: entry.via === 'site' || entry.via === 'ai' ? entry.via : 'app'
     }
   }
   return { items, edenFullAt: typeof raw.edenFullAt === 'string' ? raw.edenFullAt : null }

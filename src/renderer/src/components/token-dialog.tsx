@@ -14,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Sparkles,
   Trash2,
   Upload
 } from 'lucide-react'
@@ -46,6 +47,7 @@ import {
 } from '../stores/shortcuts-store'
 import { ThemeToggle } from './theme-toggle'
 import { TranslateSection } from './translate-settings'
+import { AiReplySection } from './ai-reply-settings'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import { Input } from './ui/input'
@@ -60,6 +62,7 @@ type SectionId =
   | 'storage'
   | 'privacy'
   | 'translate'
+  | 'ai'
   | 'shortcuts'
   | 'account'
   | 'about'
@@ -71,6 +74,7 @@ const NAV: { id: SectionId; label: string; icon: typeof Info }[] = [
   { id: 'privacy', label: '프라이버시', icon: Lock },
   // 알림 모아보기(댓글 답글)에서만 쓰므로 알림 탭이 있는 Custom 1에만 보인다.
   { id: 'translate', label: '번역', icon: Languages },
+  { id: 'ai', label: 'AI 답글', icon: Sparkles },
   { id: 'shortcuts', label: '단축키', icon: Keyboard },
   { id: 'account', label: 'NAI 계정', icon: KeyRound },
   { id: 'about', label: '정보', icon: Info }
@@ -1082,7 +1086,7 @@ export function SettingsDialog({
   useEffect(() => {
     void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
   }, [])
-  const nav = NAV.filter((n) => n.id !== 'translate' || profile === 1)
+  const nav = NAV.filter((n) => (n.id !== 'translate' && n.id !== 'ai') || profile === 1)
   // 다른 화면이 특정 섹션으로 열어 달라고 했으면 그 섹션을 먼저 보여준다.
   const requested = useLayoutStore((s) => s.settingsSection) as SectionId | null
   const clearRequested = useLayoutStore((s) => s.clearSettingsSection)
@@ -1150,6 +1154,9 @@ export function SettingsDialog({
               </TabsContent>
               <TabsContent value="translate" className="m-0">
                 <TranslateSection />
+              </TabsContent>
+              <TabsContent value="ai" className="m-0">
+                <AiReplySection />
               </TabsContent>
               <TabsContent value="shortcuts" className="m-0">
                 <ShortcutsSection />

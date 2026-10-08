@@ -32,6 +32,7 @@ import {
 import { GenerationQueue } from './queue/generation-queue'
 import { getPresetName, getScene } from './scenes/repo'
 import { startInbox, closeInbox } from './notifications/service'
+import { startAiReplies, stopAiReplies } from './ai-reply/service'
 import { arenaRenderSaved, arenaRenderTarget, initArena } from './arena/service'
 import { initManga, mangaPageSaved, mangaSubDir } from './manga/service'
 import { initGpt } from './gpt/service'
@@ -397,7 +398,10 @@ app.whenReady().then(() => {
     (jobs) => broadcast('gpt:changed', { jobs }),
     (item) => broadcast('images:added', item)
   )
-  if (PROFILE === 1) void startInbox()
+  if (PROFILE === 1) {
+    void startInbox()
+    startAiReplies()
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -422,6 +426,7 @@ let inboxClosed = false
 app.on('before-quit', (event) => {
   if (PROFILE !== 1 || inboxClosed) return
   event.preventDefault()
+  stopAiReplies()
   // Let authenticated ingestion finish its atomic write before exiting.
   void closeInbox().finally(() => {
     inboxClosed = true

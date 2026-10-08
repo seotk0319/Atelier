@@ -7,12 +7,13 @@ import { isDirectPlatform } from './direct/platforms'
 import type {
   InboxConnectResult,
   InboxQuery,
+  InboxReplied,
   InboxReplyResult,
   InboxReplyTarget,
   InboxResult
 } from '../../shared/inbox'
 import { REPLY_MAX, ReplyError } from './direct/babe-reply'
-import { canReply, type ReplyItem } from './direct/replies'
+import { canReply, type ReplyComment, type ReplyItem } from './direct/replies'
 import {
   catalogFrom,
   emptyCatalog,
@@ -343,7 +344,7 @@ const REPLY_MESSAGES: Record<string, string> = {
   REPLY_UNSUPPORTED: '이 알림은 아직 앱에서 답글을 달 수 없어요.'
 }
 
-function replyMessage(error: unknown, fallback: string): string {
+export function replyMessage(error: unknown, fallback: string): string {
   const code = error instanceof ReplyError ? error.code : ''
   const status = error instanceof ReplyError && error.status ? ` (${error.status})` : ''
   return REPLY_MESSAGES[code] || `${fallback}${status}. 잠시 뒤 다시 해주세요.`
@@ -363,12 +364,8 @@ type StoredItem = {
   url?: string | null
 }
 
-async function replyItem(id: string): Promise<ReplyItem> {
-  const s = await ready()
-  if (!direct) throw new ReplyError('LOGIN_REQUIRED')
-  const raw = (await s.view()).items.find((x) => x.id === id) as StoredItem | undefined
-  if (!raw) throw new ReplyError('COMMENT_NOT_FOUND')
-  const item: ReplyItem = {
+function toReplyItem(raw: StoredItem): ReplyItem {
+  return {
     platform: raw.platform,
     sourceType: String(raw.sourceType || ''),
     event: String(raw.event || ''),
@@ -380,6 +377,14 @@ async function replyItem(id: string): Promise<ReplyItem> {
     commentId: raw.commentId || null,
     url: raw.url || null
   }
+}
+
+async function replyItem(id: string): Promise<ReplyItem> {
+  const s = await ready()
+  if (!direct) throw new ReplyError('LOGIN_REQUIRED')
+  const raw = (await s.view()).items.find((x) => x.id === id) as StoredItem | undefined
+  if (!raw) throw new ReplyError('COMMENT_NOT_FOUND')
+  const item = toReplyItem(raw)
   if (!canReply(item)) throw new ReplyError('REPLY_UNSUPPORTED')
   return item
 }
@@ -398,13 +403,61 @@ export async function previewReply(id: string): Promise<InboxReplyTarget> {
 /** 알림이 가리키는 원래 댓글에 답글을 단다. 올리기 직전까지 모든 확인은 본체에서 한다. */
 export async function replyInbox(id: string, content: string): Promise<InboxReplyResult> {
   try {
-    const item = await replyItem(id)
-    await direct!.reply(item.platform as never, item, content)
-    await loadReplied()
-    replied.items[id] = { at: new Date().toISOString(), content: content.trim(), via: 'app' }
-    await saveReplied()
+    await sendReplyAs(id, content, 'app')
     return { ok: true, message: '답글을 달았어요.' }
   } catch (error) {
     return { ok: false, message: replyMessage(error, '답글을 달지 못했어요') }
   }
+}
+
+/** 답글을 달고 기록한다. via는 화면에 "NAIS3에서 / AI 자동"으로 보인다. 실패하면 ReplyError를 던진다. */
+export async function sendReplyAs(id: string, content: string, via: 'app' | 'ai'): Promise<void> {
+  const item = await replyItem(id)
+  await direct!.reply(item.platform as never, item, content)
+  await loadReplied()
+  replied.items[id] = { at: new Date().toISOString(), content: content.trim(), via }
+  await saveReplied()
+}
+
+/** AI 답글이 쓰는 원래 댓글: 알림 정보와, 사이트에서 다시 찾은 댓글 전체. */
+export async function replyTargetFor(
+  id: string
+): Promise<{ item: ReplyItem; target: ReplyComment; work: string | null }> {
+  const item = await replyItem(id)
+  const target = await direct!.resolveReply(item.platform as never, item)
+  const raw = (await (await ready()).view()).items.find((x) => x.id === id) as
+    (StoredItem & { work?: { title?: string | null } }) | undefined
+  return { item, target, work: raw?.work?.title ? displayText(raw.work.title) : null }
+}
+
+export interface InboxSnapshotItem {
+  id: string
+  platform: string
+  event: string
+  at: string | null
+  author: string | null
+  body: string
+  canReply: boolean
+}
+/** AI 답글이 쓰는 저장된 알림과 내 답글 기록. 저장소가 아직 없으면 빈 목록. */
+export async function inboxSnapshot(): Promise<{
+  items: InboxSnapshotItem[]
+  replied: Record<string, InboxReplied>
+}> {
+  await startInbox()
+  if (!store) return { items: [], replied: {} }
+  await loadReplied()
+  const items = ((await store.view()).items as StoredItem[]).map((raw) => {
+    const item = toReplyItem(raw)
+    return {
+      id: raw.id,
+      platform: raw.platform,
+      event: item.event,
+      at: item.at,
+      author: item.actor.name,
+      body: item.body,
+      canReply: canReply(item)
+    }
+  })
+  return { items, replied: replied.items }
 }

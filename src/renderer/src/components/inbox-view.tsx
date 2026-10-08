@@ -5,11 +5,13 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CirclePause,
   ExternalLink,
   Pause,
   Play,
   Search,
   Settings2,
+  Sparkles,
   TriangleAlert,
   X
 } from 'lucide-react'
@@ -22,6 +24,7 @@ import type {
   InboxReplyTarget
 } from '@shared/inbox'
 import { cn } from '../lib/utils'
+import { useAiReplyStore } from '../stores/ai-reply-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { useTranslateStore } from '../stores/translate-store'
 import { ReplyComposer, TranslatableText } from './inbox-translate'
@@ -194,6 +197,14 @@ export function InboxView(): React.JSX.Element {
   useEffect(() => {
     if (!settingsOpen) void loadTranslate()
   }, [settingsOpen, loadTranslate])
+  // AI 답글 상태(모드·오늘 개수). 설정을 닫을 때와 목록을 다시 읽을 때마다 같이 읽는다.
+  const ai = useAiReplyStore((s) => s.status)
+  const loadAi = useAiReplyStore((s) => s.load)
+  const setAiConfig = useAiReplyStore((s) => s.setConfig)
+  const openSettingsAt = useLayoutStore((s) => s.openSettingsAt)
+  useEffect(() => {
+    if (!settingsOpen) void loadAi()
+  }, [settingsOpen, loadAi])
   // 답글 대상 확인: 알림별로 한 번 불러와 기억한다 (크랙·네코는 시각으로 찾으므로 보여주고 보낸다).
   const [targets, setTargets] = useState<Record<string, InboxReplyTarget | 'loading'>>({})
   const replyTarget = selected ? targets[selected.id] : undefined
@@ -280,6 +291,7 @@ export function InboxView(): React.JSX.Element {
         if (disposed) return
         setNow(Date.now())
         setData(result)
+        void loadAi()
         pendingRef.current = result.thumbnailsPending === true || result.repliesPending === true
         setError(result.error || '')
         setSelected((previous) =>
@@ -296,7 +308,7 @@ export function InboxView(): React.JSX.Element {
       disposed = true
       clearTimeout(timer)
     }
-  }, [platform, eventQuery, unreadOnly, unrepliedQuery, search, page, revision])
+  }, [platform, eventQuery, unreadOnly, unrepliedQuery, search, page, revision, loadAi])
 
   const totalPages = data ? Math.max(1, Math.ceil(data.filtered / data.pageSize)) : 1
   const latest =
@@ -626,6 +638,34 @@ export function InboxView(): React.JSX.Element {
       <main className="flex min-w-0 flex-1 flex-col gap-3 p-5">
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-[21px] font-semibold tracking-tight">알림 모아보기</h1>
+          {ai && ai.config.mode !== 'off' && (
+            <div className="flex items-center overflow-hidden rounded-lg border border-line bg-paper text-[12px]">
+              <button
+                onClick={() => openSettingsAt('ai')}
+                title={ai.lastError || '자동 답글 설정'}
+                className="flex items-center gap-1.5 whitespace-nowrap py-2 pl-3 pr-2.5 text-ink transition-colors hover:bg-surface-2"
+              >
+                <Sparkles size={14} className="shrink-0 text-accent" />
+                {ai.config.mode === 'send'
+                  ? `자동 답글 · 오늘 ${ai.today.sent}/${ai.config.dailyLimit}`
+                  : `초안만 · 오늘 ${ai.today.drafted}`}
+                {ai.lastError && (
+                  <span
+                    className="size-1.5 shrink-0 rounded-full bg-danger"
+                    aria-label="문제 있음"
+                  />
+                )}
+              </button>
+              <button
+                aria-label="자동 답글 끄기"
+                title="자동 답글 끄기"
+                onClick={() => void setAiConfig({ mode: 'off' })}
+                className="grid size-[34px] place-items-center border-l border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                <CirclePause size={15} />
+              </button>
+            </div>
+          )}
           <div className="flex w-64 items-center gap-2 rounded-lg border border-line bg-paper px-3">
             <Search size={15} className="shrink-0 text-faint" />
             <input
@@ -1070,7 +1110,9 @@ export function InboxView(): React.JSX.Element {
                     <span className="ml-1 font-normal text-faint">
                       {mine.via === 'site'
                         ? INBOX_PLATFORMS[selected.platform] + '에서 · '
-                        : 'NAIS3에서 · '}
+                        : mine.via === 'ai'
+                          ? 'AI 자동 · '
+                          : 'NAIS3에서 · '}
                       {mine.at ? ago(mine.at, now) : '방금'}
                     </span>
                   </p>
@@ -1084,6 +1126,7 @@ export function InboxView(): React.JSX.Element {
           {selected.canReply && (
             <ReplyComposer
               key={selected.id + ':reply'}
+              itemId={selected.id}
               value={replyText}
               onChange={setReplyText}
               source={

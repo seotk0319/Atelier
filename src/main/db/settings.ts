@@ -127,6 +127,19 @@ export function deleteDeeplKey(): void {
   getDb().prepare('DELETE FROM settings WHERE key = ?').run(DEEPL_KEY)
 }
 
+// AI 답글용 Claude API 키. DeepL 키와 같은 방식으로 암호화해 저장한다.
+const CLAUDE_KEY = 'claude_key_encrypted'
+export function getClaudeKey(): string | null {
+  const stored = getSetting(CLAUDE_KEY)
+  return stored ? decryptValue(stored) : null
+}
+export function setClaudeKey(key: string): void {
+  setSetting(CLAUDE_KEY, encryptValue(key.trim()))
+}
+export function deleteClaudeKey(): void {
+  getDb().prepare('DELETE FROM settings WHERE key = ?').run(CLAUDE_KEY)
+}
+
 /** 마스킹 표시용 메타 (WHIMS 프로바이더 키 UI 패턴) */
 export function getNaiTokenInfo(): { hasToken: boolean; prefix: string; length: number } {
   const token = getNaiToken()

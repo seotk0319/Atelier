@@ -48,8 +48,8 @@ export interface InboxItem {
 export interface InboxReplied {
   at: string
   content: string
-  /** app: NAIS3에서 보냄 / site: 사이트에서 직접 단 답글을 찾음 */
-  via: 'app' | 'site'
+  /** app: NAIS3에서 보냄 / site: 사이트에서 직접 단 답글을 찾음 / ai: AI 자동 답글이 보냄 */
+  via: 'app' | 'site' | 'ai'
 }
 export interface InboxPlatformStatus {
   status?: string

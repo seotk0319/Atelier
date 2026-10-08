@@ -28,6 +28,15 @@ import {
   translateUsage
 } from './translate/service'
 import {
+  aiEntry,
+  aiLog,
+  aiStatus,
+  draftReply,
+  removeAiKey,
+  saveAiKey,
+  setAiConfig
+} from './ai-reply/service'
+import {
   createCharacter,
   createFolder,
   deleteCharacter,
@@ -207,6 +216,17 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     handle('translate:setKey', ({ key }) => saveTranslateKey(String(key || '')))
     handle('translate:deleteKey', () => removeTranslateKey())
     handle('translate:run', ({ text, target }) => translateText(String(text || ''), target))
+    handle('aiReply:status', () => aiStatus())
+    handle('aiReply:setKey', ({ key }) => saveAiKey(String(key || '')))
+    handle('aiReply:deleteKey', () => removeAiKey())
+    handle('aiReply:setConfig', (patch) => setAiConfig(patch || {}))
+    handle('aiReply:draft', async ({ id }) => {
+      const result = await draftReply(String(id || ''))
+      delete result.code
+      return result
+    })
+    handle('aiReply:entry', ({ id }) => aiEntry(String(id || '')))
+    handle('aiReply:log', (req) => aiLog(Number(req?.limit) || 30))
   }
   const censorFolderFiles = new Set<string>()
   const censorPathKey = (filePath: string): string => resolve(filePath).toLowerCase()

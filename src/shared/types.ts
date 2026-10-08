@@ -19,6 +19,7 @@ import type {
 } from './arena'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
 import type { TranslateResult, TranslateStatus, TranslateTarget, TranslateUsage } from './translate'
+import type { AiDraftResult, AiLogEntry, AiReplyConfig, AiReplyStatus } from './ai-reply'
 import type {
   MangaBrief,
   MangaCastInput,
@@ -453,6 +454,17 @@ export interface IpcInvokeMap {
   }
   'translate:deleteKey': { req: void; res: { ok: true } }
   'translate:run': { req: { text: string; target: TranslateTarget }; res: TranslateResult }
+  /** AI 답글 (Custom 1만) */
+  'aiReply:status': { req: void; res: AiReplyStatus }
+  'aiReply:setKey': { req: { key: string }; res: { ok: boolean; message: string } }
+  'aiReply:deleteKey': { req: void; res: { ok: true } }
+  'aiReply:setConfig': {
+    req: Partial<Pick<AiReplyConfig, 'mode' | 'excluded' | 'dailyLimit'>>
+    res: AiReplyStatus
+  }
+  'aiReply:draft': { req: { id: string }; res: AiDraftResult }
+  'aiReply:entry': { req: { id: string }; res: AiLogEntry | null }
+  'aiReply:log': { req: { limit?: number }; res: AiLogEntry[] }
   'db:status': { req: void; res: { version: number; path: string } }
   /** 앱 버전 */
   'app:version': { req: void; res: { version: string } }
