@@ -5,6 +5,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   usageCost,
+  type AiBacklogPreview,
+  type AiBacklogRequest,
+  type AiBacklogState,
   type AiDraftResult,
   type AiLogEntry,
   type AiReplyConfig,
@@ -15,7 +18,14 @@ import { INBOX_PLATFORMS, type InboxPlatform } from '../../shared/inbox'
 import { deleteClaudeKey, getClaudeKey, getSetting, setClaudeKey, setSetting } from '../db/settings'
 import { ReplyError } from '../notifications/direct/babe-reply'
 import { inboxSnapshot, replyMessage, replyTargetFor, sendReplyAs } from '../notifications/service'
-import { autoCandidates, countToday, readAiConfig, runAuto } from './auto'
+import {
+  autoCandidates,
+  backlogCandidates,
+  countToday,
+  readAiConfig,
+  runAuto,
+  type AutoItem
+} from './auto'
 import { ClaudeError, claudeMessage, claudeVerify, type ClaudeResponse } from './claude'
 import { addUsage, draftRequest, pickExamples, readDraft, type StyleExample } from './prompt'
 
@@ -121,7 +131,8 @@ export async function aiStatus(): Promise<AiReplyStatus> {
     examples,
     usage: { ...shown, cost: usageCost(shown) },
     today: countToday(log, new Date()),
-    lastError
+    lastError,
+    backlog
   }
 }
 
@@ -219,9 +230,28 @@ export async function aiLog(limit = 30): Promise<AiLogEntry[]> {
 const TICK_MS = 60_000
 let timer: ReturnType<typeof setInterval> | null = null
 let running = false
+
+async function sendAsAi(
+  id: string,
+  content: string
+): Promise<{ ok: boolean; message: string; code?: string }> {
+  try {
+    await sendReplyAs(id, content, 'ai')
+    return { ok: true, message: '' }
+  } catch (error) {
+    return {
+      ok: false,
+      message: replyMessage(error, '답글을 달지 못했어요'),
+      code: error instanceof ReplyError ? error.code : undefined
+    }
+  }
+}
+const snapshotItems = (items: Awaited<ReturnType<typeof inboxSnapshot>>['items']): AutoItem[] =>
+  items.map((item) => ({ ...item, comment: item.body }))
+
 async function tick(): Promise<void> {
   const current = config()
-  if (running || current.mode === 'off') return
+  if (running || backlog?.running || current.mode === 'off') return
   if (!getClaudeKey()) {
     lastError = AI_MESSAGES.NO_KEY
     return
@@ -230,30 +260,14 @@ async function tick(): Promise<void> {
   try {
     const snapshot = await inboxSnapshot()
     await loadLog()
-    const candidates = autoCandidates(
-      snapshot.items.map((item) => ({ ...item, comment: item.body })),
-      current,
-      snapshot.replied,
-      log
-    )
+    const candidates = autoCandidates(snapshotItems(snapshot.items), current, snapshot.replied, log)
     if (!candidates.length) return
     const result = await runAuto({
       config: current,
       candidates,
       sentToday: countToday(log, new Date()).sent,
       draft: draftReply,
-      send: async (id, content) => {
-        try {
-          await sendReplyAs(id, content, 'ai')
-          return { ok: true, message: '' }
-        } catch (error) {
-          return {
-            ok: false,
-            message: replyMessage(error, '답글을 달지 못했어요'),
-            code: error instanceof ReplyError ? error.code : undefined
-          }
-        }
-      },
+      send: sendAsAi,
       record: async (entry) => {
         log[entry.id] = entry
         await saveLog()
@@ -277,4 +291,125 @@ export function startAiReplies(): void {
 export function stopAiReplies(): void {
   if (timer) clearInterval(timer)
   timer = null
+  backlogStop = true
+}
+
+// 지난 댓글 일괄 답글. 자동 답글과 같은 규칙(넘김·간격·멈춤)으로, 최근 댓글부터 다룬다.
+// 진행 상황은 메모리에만 두고, 다룬 댓글은 기록에 남으므로 다시 시작하면 남은 것부터 이어진다.
+let backlog: AiBacklogState | null = null
+let backlogStop = false
+const DEFAULT_PER_REPLY = 0.0006
+
+export async function previewBacklog(days: number): Promise<AiBacklogPreview> {
+  const snapshot = await inboxSnapshot()
+  await loadLog()
+  const list = backlogCandidates(
+    snapshotItems(snapshot.items),
+    Object.keys(INBOX_PLATFORMS),
+    snapshot.replied,
+    log,
+    { days: Number(days) || 0, now: new Date(), includeDrafted: true }
+  )
+  const byPlatform: AiBacklogPreview['byPlatform'] = {}
+  for (const item of list) {
+    const key = item.platform as InboxPlatform
+    byPlatform[key] = (byPlatform[key] || 0) + 1
+  }
+  const usage = readUsage()
+  return {
+    byPlatform,
+    drafted: list.filter((item) => log[item.id]?.state === 'drafted').length,
+    perReply: usage && usage.requests > 0 ? usageCost(usage) / usage.requests : DEFAULT_PER_REPLY
+  }
+}
+
+const waitOrStop = async (ms: number): Promise<void> => {
+  for (let left = ms; left > 0 && !backlogStop; left -= 500)
+    await new Promise((resolve) => setTimeout(resolve, Math.min(500, left)))
+}
+
+export async function startBacklog(request: AiBacklogRequest): Promise<AiReplyStatus> {
+  if (backlog?.running) return aiStatus()
+  const mode = request.mode === 'send' ? 'send' : 'draft'
+  const platforms = (request.platforms || []).filter((p) => p in INBOX_PLATFORMS)
+  const started = new Date().toISOString()
+  const empty: AiBacklogState = {
+    running: false,
+    mode,
+    total: 0,
+    done: 0,
+    sent: 0,
+    drafted: 0,
+    skipped: 0,
+    failed: 0,
+    startedAt: started,
+    finishedAt: started,
+    stopped: null
+  }
+  if (!getClaudeKey()) {
+    backlog = { ...empty, stopped: AI_MESSAGES.NO_KEY }
+    return aiStatus()
+  }
+  const snapshot = await inboxSnapshot()
+  await loadLog()
+  const all = backlogCandidates(snapshotItems(snapshot.items), platforms, snapshot.replied, log, {
+    days: Number(request.days) || 0,
+    now: new Date(),
+    includeDrafted: mode === 'send'
+  })
+  const limit = Number(request.limit) || 0
+  const candidates = limit > 0 ? all.slice(0, limit) : all
+  const state: AiBacklogState = {
+    ...empty,
+    running: true,
+    total: candidates.length,
+    finishedAt: null
+  }
+  backlog = state
+  backlogStop = false
+  void (async () => {
+    try {
+      // 자동 답글이 도는 중이면 끝날 때까지 기다린다 (같은 댓글에 겹쳐 보내지 않게).
+      while (running && !backlogStop) await new Promise((resolve) => setTimeout(resolve, 500))
+      const result = await runAuto({
+        config: { ...config(), mode, dailyLimit: Number.MAX_SAFE_INTEGER },
+        candidates,
+        sentToday: 0,
+        draft: async (id) => {
+          const previous = log[id]
+          if (mode === 'send' && previous?.state === 'drafted' && previous.replies.length)
+            return {
+              ok: true,
+              message: '',
+              replies: previous.replies,
+              handoff: false,
+              reason: null
+            }
+          return draftReply(id)
+        },
+        send: sendAsAi,
+        record: async (entry) => {
+          log[entry.id] = entry
+          await saveLog()
+          state.done++
+          state[entry.state]++
+        },
+        wait: waitOrStop,
+        now: () => new Date(),
+        active: () => !backlogStop
+      })
+      state.stopped = result.stopped ?? (backlogStop ? '중간에 멈췄어요.' : null)
+    } catch {
+      state.stopped = '알림 저장소를 읽지 못해 멈췄어요.'
+    } finally {
+      state.running = false
+      state.finishedAt = new Date().toISOString()
+    }
+  })()
+  return aiStatus()
+}
+
+export async function stopBacklog(): Promise<AiReplyStatus> {
+  backlogStop = true
+  return aiStatus()
 }

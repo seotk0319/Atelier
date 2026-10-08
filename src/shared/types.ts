@@ -19,7 +19,14 @@ import type {
 } from './arena'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
 import type { TranslateResult, TranslateStatus, TranslateTarget, TranslateUsage } from './translate'
-import type { AiDraftResult, AiLogEntry, AiReplyConfig, AiReplyStatus } from './ai-reply'
+import type {
+  AiBacklogPreview,
+  AiBacklogRequest,
+  AiDraftResult,
+  AiLogEntry,
+  AiReplyConfig,
+  AiReplyStatus
+} from './ai-reply'
 import type {
   MangaBrief,
   MangaCastInput,
@@ -465,6 +472,9 @@ export interface IpcInvokeMap {
   'aiReply:draft': { req: { id: string }; res: AiDraftResult }
   'aiReply:entry': { req: { id: string }; res: AiLogEntry | null }
   'aiReply:log': { req: { limit?: number }; res: AiLogEntry[] }
+  'aiReply:backlogPreview': { req: { days: number }; res: AiBacklogPreview }
+  'aiReply:backlogStart': { req: AiBacklogRequest; res: AiReplyStatus }
+  'aiReply:backlogStop': { req: void; res: AiReplyStatus }
   'db:status': { req: void; res: { version: number; path: string } }
   /** 앱 버전 */
   'app:version': { req: void; res: { version: string } }

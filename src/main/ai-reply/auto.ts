@@ -195,3 +195,26 @@ export async function runAuto(deps: AutoDeps): Promise<AutoResult> {
   }
   return { handled, sent: sentNow, stopped: null }
 }
+/**
+ * 지난 댓글 일괄 답글 대상: 범위 안의 답글 안 단 댓글, 최근 것부터.
+ * 이미 다룬 댓글(보냄·넘김·실패)은 빼고, 바로 보내기일 때만 초안이 남은 댓글을 넣는다.
+ */
+export function backlogCandidates(
+  items: AutoItem[],
+  platforms: string[],
+  replied: Record<string, unknown>,
+  log: Record<string, AiLogEntry>,
+  options: { days: number; now: Date; includeDrafted: boolean }
+): AutoItem[] {
+  const from = options.days > 0 ? options.now.getTime() - options.days * 86_400_000 : -Infinity
+  const allowed = new Set(platforms)
+  return items
+    .filter((item) => {
+      if (item.event !== 'comment' || !item.canReply || !allowed.has(item.platform)) return false
+      const at = item.at ? Date.parse(item.at) : NaN
+      if (!(at >= from) || replied[item.id]) return false
+      const entry = log[item.id]
+      return !entry || (options.includeDrafted && entry.state === 'drafted')
+    })
+    .sort((a, b) => Date.parse(b.at!) - Date.parse(a.at!))
+}

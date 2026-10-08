@@ -74,6 +74,49 @@ export interface AiReplyStatus {
   today: { sent: number; drafted: number; skipped: number; failed: number }
   /** 자동 답글이 마지막에 멈춘 이유 (키·크레딧 문제 등) */
   lastError: string | null
+  /** 지난 댓글 일괄 답글 진행 상황 (이번 실행 중 한 번도 안 돌렸으면 null) */
+  backlog: AiBacklogState | null
+}
+
+/** 사이트에서 직접 단 답글까지 확인되는 플랫폼. 나머지는 NAIS3에서 보낸 답글만 안다. */
+export const SITE_REPLY_CHECKED: InboxPlatform[] = ['eden']
+export const AI_BACKLOG_RANGES = [
+  { days: 7, label: '최근 7일' },
+  { days: 30, label: '최근 30일' },
+  { days: 90, label: '최근 90일' },
+  { days: 0, label: '전체' }
+] as const
+/** 한 번에 다룰 개수. 0은 전부. */
+export const AI_BACKLOG_LIMITS = [50, 100, 200, 0] as const
+
+export type AiBacklogMode = 'draft' | 'send'
+export interface AiBacklogRequest {
+  days: number
+  mode: AiBacklogMode
+  limit: number
+  platforms: InboxPlatform[]
+}
+export interface AiBacklogState {
+  running: boolean
+  mode: AiBacklogMode
+  total: number
+  done: number
+  sent: number
+  drafted: number
+  skipped: number
+  failed: number
+  startedAt: string
+  finishedAt: string | null
+  /** 멈춘 이유. 끝까지 돌았으면 null */
+  stopped: string | null
+}
+export interface AiBacklogPreview {
+  /** 플랫폼별 답글 안 단 지난 댓글 수 (범위 안) */
+  byPlatform: Partial<Record<InboxPlatform, number>>
+  /** 그중 자동 답글 초안이 이미 있는 수 (바로 보내기에선 그 초안을 쓴다) */
+  drafted: number
+  /** 답글 하나에 드는 예상 비용 (달러) */
+  perReply: number
 }
 
 export interface AiDraftResult {

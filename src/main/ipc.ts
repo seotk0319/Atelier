@@ -32,9 +32,12 @@ import {
   aiLog,
   aiStatus,
   draftReply,
+  previewBacklog,
   removeAiKey,
   saveAiKey,
-  setAiConfig
+  setAiConfig,
+  startBacklog,
+  stopBacklog
 } from './ai-reply/service'
 import {
   createCharacter,
@@ -227,6 +230,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     })
     handle('aiReply:entry', ({ id }) => aiEntry(String(id || '')))
     handle('aiReply:log', (req) => aiLog(Number(req?.limit) || 30))
+    handle('aiReply:backlogPreview', ({ days }) => previewBacklog(Number(days) || 0))
+    handle('aiReply:backlogStart', (request) => startBacklog(request))
+    handle('aiReply:backlogStop', () => stopBacklog())
   }
   const censorFolderFiles = new Set<string>()
   const censorPathKey = (filePath: string): string => resolve(filePath).toLowerCase()

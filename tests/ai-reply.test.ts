@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   autoCandidates,
+  backlogCandidates,
   countToday,
   readAiConfig,
   runAuto,
@@ -375,6 +376,40 @@ describe('auto reply run', () => {
       ['c', 'failed', '원래 댓글을 찾지 못했어요'],
       ['d', 'failed', 'AI가 답글을 쓰지 않았어요']
     ])
+  })
+})
+
+describe('backlog selection', () => {
+  it('takes unanswered comments in range, newest first, reusing drafts only when sending', () => {
+    const now = new Date('2026-10-08T12:00:00Z')
+    const items = [
+      item('old', { at: '2026-08-01T00:00:00Z' }),
+      item('week', { at: '2026-10-03T00:00:00Z' }),
+      item('today', { at: '2026-10-08T09:00:00Z' }),
+      item('drafted', { at: '2026-10-07T00:00:00Z' }),
+      item('skipped', { at: '2026-10-07T01:00:00Z' }),
+      item('sent', { at: '2026-10-07T02:00:00Z' }),
+      item('answered', { at: '2026-10-07T03:00:00Z' }),
+      item('babe', { platform: 'babe', at: '2026-10-07T04:00:00Z' }),
+      item('reply', { event: 'reply', at: '2026-10-07T05:00:00Z' }),
+      item('cannot', { canReply: false, at: '2026-10-07T06:00:00Z' })
+    ]
+    const log = {
+      drafted: { id: 'drafted', state: 'drafted' } as AiLogEntry,
+      skipped: { id: 'skipped', state: 'skipped' } as AiLogEntry,
+      sent: { id: 'sent', state: 'sent' } as AiLogEntry
+    }
+    const pick = (days: number, includeDrafted: boolean, platforms = ['eden']): string[] =>
+      backlogCandidates(items, platforms, { answered: true }, log, {
+        days,
+        now,
+        includeDrafted
+      }).map((x) => x.id)
+    expect(pick(30, false)).toEqual(['today', 'week'])
+    expect(pick(30, true)).toEqual(['today', 'drafted', 'week'])
+    expect(pick(0, false)).toEqual(['today', 'week', 'old'])
+    expect(pick(30, false, ['eden', 'babe'])).toEqual(['today', 'babe', 'week'])
+    expect(pick(30, false, [])).toEqual([])
   })
 })
 

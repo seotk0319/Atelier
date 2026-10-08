@@ -638,7 +638,7 @@ export function InboxView(): React.JSX.Element {
       <main className="flex min-w-0 flex-1 flex-col gap-3 p-5">
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-[21px] font-semibold tracking-tight">알림 모아보기</h1>
-          {ai && ai.config.mode !== 'off' && (
+          {ai && (ai.config.mode !== 'off' || ai.backlog?.running) && (
             <div className="flex items-center overflow-hidden rounded-lg border border-line bg-paper text-[12px]">
               <button
                 onClick={() => openSettingsAt('ai')}
@@ -646,9 +646,11 @@ export function InboxView(): React.JSX.Element {
                 className="flex items-center gap-1.5 whitespace-nowrap py-2 pl-3 pr-2.5 text-ink transition-colors hover:bg-surface-2"
               >
                 <Sparkles size={14} className="shrink-0 text-accent" />
-                {ai.config.mode === 'send'
-                  ? `자동 답글 · 오늘 ${ai.today.sent}/${ai.config.dailyLimit}`
-                  : `초안만 · 오늘 ${ai.today.drafted}`}
+                {ai.backlog?.running
+                  ? `지난 댓글 ${ai.backlog.done}/${ai.backlog.total}`
+                  : ai.config.mode === 'send'
+                    ? `자동 답글 · 오늘 ${ai.today.sent}/${ai.config.dailyLimit}`
+                    : `초안만 · 오늘 ${ai.today.drafted}`}
                 {ai.lastError && (
                   <span
                     className="size-1.5 shrink-0 rounded-full bg-danger"
@@ -657,9 +659,13 @@ export function InboxView(): React.JSX.Element {
                 )}
               </button>
               <button
-                aria-label="자동 답글 끄기"
-                title="자동 답글 끄기"
-                onClick={() => void setAiConfig({ mode: 'off' })}
+                aria-label={ai.backlog?.running ? '지난 댓글 답글 멈추기' : '자동 답글 끄기'}
+                title={ai.backlog?.running ? '지난 댓글 답글 멈추기' : '자동 답글 끄기'}
+                onClick={() =>
+                  void (ai.backlog?.running
+                    ? window.nais.invoke('aiReply:backlogStop', undefined).then(() => loadAi())
+                    : setAiConfig({ mode: 'off' }))
+                }
                 className="grid size-[34px] place-items-center border-l border-line text-muted transition-colors hover:bg-surface-2 hover:text-ink"
               >
                 <CirclePause size={15} />

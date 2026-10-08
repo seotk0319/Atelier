@@ -1,6 +1,15 @@
-import { Sparkles } from 'lucide-react'
+import { CirclePause, Sparkles, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { AI_DAILY_LIMITS, type AiLogEntry, type AiReplyMode } from '@shared/ai-reply'
+import {
+  AI_BACKLOG_LIMITS,
+  AI_BACKLOG_RANGES,
+  AI_DAILY_LIMITS,
+  SITE_REPLY_CHECKED,
+  type AiBacklogMode,
+  type AiBacklogPreview,
+  type AiLogEntry,
+  type AiReplyMode
+} from '@shared/ai-reply'
 import { INBOX_PLATFORMS, type InboxPlatform } from '@shared/inbox'
 import { cn } from '../lib/utils'
 import { useAiReplyStore } from '../stores/ai-reply-store'
@@ -40,6 +49,257 @@ const clock = (value: string | null): string =>
     : ''
 const dollars = (value: number): string =>
   value < 0.01 ? '$' + value.toFixed(4) : '$' + value.toFixed(2)
+const duration = (seconds: number): string => {
+  if (seconds < 60) return '1분 안'
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `약 ${minutes}분`
+  return `약 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분`
+}
+/** 보낸 답글 사이 20초 + 초안 받는 시간 */
+const SECONDS_PER_SEND = 23
+const SECONDS_PER_DRAFT = 3
+
+/** 지난 댓글에 한꺼번에 답글. 범위·개수·플랫폼을 고르고 미리 본 뒤 시작한다. */
+function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element {
+  const run = useAiReplyStore((s) => s.status?.backlog ?? null)
+  const load = useAiReplyStore((s) => s.load)
+  const [days, setDays] = useState(30)
+  const [limit, setLimit] = useState(100)
+  const [mode, setMode] = useState<AiBacklogMode>('draft')
+  const [platforms, setPlatforms] = useState<InboxPlatform[]>([...SITE_REPLY_CHECKED])
+  const [preview, setPreview] = useState<AiBacklogPreview | null>(null)
+  const running = !!run?.running
+
+  useEffect(() => {
+    let live = true
+    void window.nais
+      .invoke('aiReply:backlogPreview', { days })
+      .then((result) => {
+        if (live) setPreview(result)
+      })
+      .catch(() => {
+        if (live) setPreview(null)
+      })
+    return () => {
+      live = false
+    }
+  }, [days, running])
+  useEffect(() => {
+    if (!running) return
+    const timer = setInterval(() => void load(), 2000)
+    return () => clearInterval(timer)
+  }, [running, load])
+
+  const shown = (Object.keys(INBOX_PLATFORMS) as InboxPlatform[]).filter(
+    (id) => (preview?.byPlatform[id] || 0) > 0
+  )
+  const available = platforms.reduce((total, id) => total + (preview?.byPlatform[id] || 0), 0)
+  const count = limit > 0 ? Math.min(limit, available) : available
+  const unchecked = platforms.filter(
+    (id) => !SITE_REPLY_CHECKED.includes(id) && (preview?.byPlatform[id] || 0) > 0
+  )
+  const seconds = count * (mode === 'send' ? SECONDS_PER_SEND : SECONDS_PER_DRAFT)
+  const cost = count * (preview?.perReply ?? 0.0006)
+
+  function toggle(id: InboxPlatform): void {
+    setPlatforms((list) => (list.includes(id) ? list.filter((p) => p !== id) : [...list, id]))
+  }
+  async function start(): Promise<void> {
+    if (!count) return
+    if (mode === 'send') {
+      const ok = await askConfirm(`지난 댓글 ${count}개에 답글을 달까요?`, {
+        message: '20초 간격으로 하나씩 보내요. 문의·불만은 넘기고, 언제든 멈출 수 있어요.',
+        confirmLabel: '보내기 시작'
+      })
+      if (!ok) return
+    }
+    try {
+      const status = await window.nais.invoke('aiReply:backlogStart', {
+        days,
+        mode,
+        limit,
+        platforms
+      })
+      useAiReplyStore.setState({ status })
+    } catch {
+      await load()
+    }
+  }
+  async function stop(): Promise<void> {
+    try {
+      useAiReplyStore.setState({
+        status: await window.nais.invoke('aiReply:backlogStop', undefined)
+      })
+    } catch {
+      await load()
+    }
+  }
+
+  const tally = run
+    ? [
+        run.sent && `보냄 ${run.sent}`,
+        run.drafted && `초안 ${run.drafted}`,
+        run.skipped && `넘김 ${run.skipped}`,
+        run.failed && `실패 ${run.failed}`
+      ]
+        .filter(Boolean)
+        .join(' · ') || '아직 없음'
+    : ''
+
+  return (
+    <section className={cn('flex flex-col gap-3', !connected && 'pointer-events-none opacity-45')}>
+      <h3 className="text-[13px] font-semibold text-ink">지난 댓글에 답글</h3>
+      {running && run ? (
+        <div className="rounded-xl border border-line p-3.5">
+          <p className="flex items-baseline justify-between text-[12px]">
+            <span className="text-ink">
+              {run.mode === 'send' ? '답글 다는 중' : '초안 만드는 중'}
+            </span>
+            <span className="tabular-nums text-muted">
+              {run.done} / {run.total}
+            </span>
+          </p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-accent transition-[width]"
+              style={{ width: `${run.total ? (run.done / run.total) * 100 : 0}%` }}
+            />
+          </div>
+          <p className="mt-2 text-[11.5px] tabular-nums text-muted">{tally}</p>
+          <Button variant="ghost" className="mt-2 w-full gap-1.5" onClick={() => void stop()}>
+            <CirclePause size={14} /> 멈추기
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-[11.5px] text-muted">
+              범위
+              <select
+                aria-label="지난 댓글 범위"
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+                className="rounded-lg border border-line bg-paper px-2 py-1.5 text-[12px] text-ink"
+              >
+                {AI_BACKLOG_RANGES.map((r) => (
+                  <option key={r.days} value={r.days}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[11.5px] text-muted">
+              한 번에
+              <select
+                aria-label="한 번에 다룰 개수"
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="rounded-lg border border-line bg-paper px-2 py-1.5 text-[12px] text-ink"
+              >
+                {AI_BACKLOG_LIMITS.map((n) => (
+                  <option key={n} value={n}>
+                    {n ? `${n}개` : '전부'}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {preview && shown.length === 0 ? (
+            <p className="text-[12px] text-muted">이 범위에는 답글 안 단 댓글이 없어요.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5">
+              {shown.map((id) => {
+                const on = platforms.includes(id)
+                const checked = SITE_REPLY_CHECKED.includes(id)
+                return (
+                  <label
+                    key={id}
+                    title={checked ? undefined : '사이트에서 직접 단 답글은 확인하지 못해요'}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors',
+                      on ? 'border-accent/40 bg-accent-soft/50 text-ink' : 'border-line text-muted'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => toggle(id)}
+                      className="accent-[var(--accent)]"
+                    />
+                    <span className="min-w-0 truncate">{INBOX_PLATFORMS[id]}</span>
+                    <span className="ml-auto shrink-0 tabular-nums text-faint">
+                      {(preview?.byPlatform[id] || 0).toLocaleString()}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {unchecked.length > 0 && (
+            <p className="flex items-start gap-1.5 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
+              <TriangleAlert size={13} className="mt-0.5 shrink-0" />
+              <span>
+                {unchecked.map((id) => INBOX_PLATFORMS[id]).join(', ')}은 사이트에서 이미 단 답글을
+                확인하지 못해요. 직접 답한 댓글에 답글이 한 번 더 달릴 수 있어요.
+              </span>
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <div
+              role="radiogroup"
+              aria-label="지난 댓글 답글 방식"
+              className="flex gap-0.5 rounded-lg bg-surface-2 p-0.5"
+            >
+              {(
+                [
+                  ['draft', '초안만'],
+                  ['send', '바로 보내기']
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  role="radio"
+                  aria-checked={mode === id}
+                  onClick={() => setMode(id)}
+                  className={cn(
+                    'h-7 whitespace-nowrap rounded-md px-3 text-[12px] font-semibold transition-colors',
+                    mode === id ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Button
+              variant="accent"
+              className="ml-auto"
+              disabled={!connected || !count}
+              onClick={() => void start()}
+            >
+              {mode === 'send' ? '보내기 시작' : '초안 만들기'}
+            </Button>
+          </div>
+          <p className="text-[11.5px] leading-relaxed text-muted">
+            이번에 {count.toLocaleString()}개 · {duration(seconds)} · 약 {dollars(cost)}
+            {mode === 'send' && (preview?.drafted || 0) > 0 && (
+              <span className="text-faint"> · 초안이 있는 댓글은 그 초안으로 보내요</span>
+            )}
+          </p>
+          {run && (
+            <p className={cn('text-[11.5px]', run.stopped ? 'text-danger' : 'text-muted')}>
+              지난 실행: {run.done} / {run.total} · {tally}
+              {run.stopped
+                ? ` · ${run.stopped}`
+                : run.done < run.total
+                  ? ' · 남은 댓글은 로그인이 풀린 플랫폼이라 건너뛰었어요'
+                  : ''}
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
 
 /** 설정 > AI 답글. Claude 키를 확인해 저장하고, 자동 답글 모드와 최근 기록을 보여준다. */
 export function AiReplySection(): React.JSX.Element {
@@ -294,6 +554,8 @@ export function AiReplySection(): React.JSX.Element {
           </div>
         </div>
       </section>
+
+      <BacklogBlock connected={connected} />
 
       {log.length > 0 && (
         <section>
