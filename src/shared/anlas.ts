@@ -28,6 +28,8 @@ export interface AnlasEstimateInput {
   batchCount: number
   /** 이번 생성에서 새로 인코딩해야 하는 바이브 수 (캐시된 것 제외) */
   unencodedVibes?: number
+  /** V5 Full Medium은 웹 비용식에서 스텝 항에 1/1.06521739를 곱한다 (2026-10-09 번들 확인) */
+  model?: string
 }
 
 export interface AnlasEstimate {
@@ -119,7 +121,10 @@ export function estimateAnlas(input: AnlasEstimateInput): AnlasEstimate {
   const px = Math.max(input.width * input.height, 65536)
   const strength = input.strength ?? 1
 
-  const base = Math.ceil(2.951823174884865e-6 * px + 5.753298233447344e-7 * px * input.steps)
+  const stepFactor = input.model?.startsWith('nai-diffusion-5-full-medium') ? 1 / 1.06521739 : 1
+  const base = Math.ceil(
+    2.951823174884865e-6 * px + 5.753298233447344e-7 * px * input.steps * stepFactor
+  )
   const perImage = Math.max(Math.ceil(base * strength), 2)
 
   // 캐릭레퍼는 무료 조건을 깨지 않는다 (실측) — 대신 아래에서 별도 사용료 부과

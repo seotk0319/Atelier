@@ -1,6 +1,6 @@
 import { Dice5, Lock, LockOpen } from 'lucide-react'
 import type { UcPresetIndex } from '@shared/types'
-import { isV5Model } from '@shared/nai-models'
+import { isMediumEffort, isV5Model, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
 import { NOISE_SCHEDULES, SAMPLERS, UC_PRESET_OPTIONS } from '../lib/constants'
 import { ResolutionPicker } from './resolution-picker'
 import { useGenerationStore } from '../stores/generation-store'
@@ -42,6 +42,9 @@ export function ParamsDialog({
   const patch = useGenerationStore((s) => s.patchRequest)
   const seedLocked = useGenerationStore((s) => s.seedLocked)
   const setSeedLocked = useGenerationStore((s) => s.setSeedLocked)
+  // V5 절약(Medium) 모드는 스텝·샘플러·Rescale·UC 프리셋이 고정이라 잠가 둔다 (저장값은 그대로)
+  const medium = isMediumEffort(request.model)
+  const fixedHint = medium ? '절약 모드 고정' : undefined
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,19 +79,25 @@ export function ParamsDialog({
               >
                 {seedLocked ? <Lock size={14} /> : <LockOpen size={14} />}
               </Button>
-              <Button size="icon" variant="ghost" title="랜덤 시드" onClick={() => patch({ seed: -1 })}>
+              <Button
+                size="icon"
+                variant="ghost"
+                title="랜덤 시드"
+                onClick={() => patch({ seed: -1 })}
+              >
                 <Dice5 size={14} />
               </Button>
             </div>
           </Row>
 
-          <Row label={`스텝 ${request.steps}`}>
+          <Row label={`스텝 ${medium ? MEDIUM_EFFORT_STEPS : request.steps}`} hint={fixedHint}>
             <Slider
               className="w-52"
               min={1}
               max={50}
               step={1}
-              value={[request.steps]}
+              disabled={medium}
+              value={[medium ? MEDIUM_EFFORT_STEPS : request.steps]}
               onValueChange={([v]) => patch({ steps: v })}
             />
           </Row>
@@ -104,19 +113,24 @@ export function ParamsDialog({
             />
           </Row>
 
-          <Row label={`Rescale ${request.cfgRescale}`}>
+          <Row label={`Rescale ${medium ? 0 : request.cfgRescale}`} hint={fixedHint}>
             <Slider
               className="w-52"
               min={0}
               max={1}
               step={0.02}
-              value={[request.cfgRescale]}
+              disabled={medium}
+              value={[medium ? 0 : request.cfgRescale]}
               onValueChange={([v]) => patch({ cfgRescale: Math.round(v * 100) / 100 })}
             />
           </Row>
 
-          <Row label="샘플러">
-            <Select value={request.sampler} onValueChange={(v) => patch({ sampler: v })}>
+          <Row label="샘플러" hint={fixedHint}>
+            <Select
+              disabled={medium}
+              value={medium ? 'k_euler_ancestral' : request.sampler}
+              onValueChange={(v) => patch({ sampler: v })}
+            >
               <SelectTrigger className="w-52">
                 <SelectValue />
               </SelectTrigger>
@@ -131,7 +145,10 @@ export function ParamsDialog({
           </Row>
 
           <Row label="노이즈 스케줄">
-            <Select value={request.noiseSchedule} onValueChange={(v) => patch({ noiseSchedule: v })}>
+            <Select
+              value={request.noiseSchedule}
+              onValueChange={(v) => patch({ noiseSchedule: v })}
+            >
               <SelectTrigger className="w-52">
                 <SelectValue />
               </SelectTrigger>
@@ -145,9 +162,10 @@ export function ParamsDialog({
             </Select>
           </Row>
 
-          <Row label="UC 프리셋">
+          <Row label="UC 프리셋" hint={medium ? '절약 모드는 Heavy 고정' : undefined}>
             <Select
-              value={String(request.ucPreset)}
+              disabled={medium}
+              value={medium ? '0' : String(request.ucPreset)}
               onValueChange={(v) => patch({ ucPreset: Number(v) as UcPresetIndex })}
             >
               <SelectTrigger className="w-52">

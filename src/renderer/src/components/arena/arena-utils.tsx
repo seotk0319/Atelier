@@ -357,7 +357,7 @@ export function useLimitGate(): {
   const gate = (needed: number, model: string, run: (limit?: number) => void): void => {
     const usage = useGenerationStore.getState().v5Usage
     if (!usage || !isV5Model(model) || needed <= 0) return run()
-    const remaining = estimateV5Images(usage)
+    const remaining = estimateV5Images(usage, model)
     if (needed <= remaining) return run()
     setChoice('today')
     setAsk({ needed, remaining, run })

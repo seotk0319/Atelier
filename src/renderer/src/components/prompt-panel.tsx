@@ -16,7 +16,14 @@ import {
 import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { estimateAnlas } from '@shared/anlas'
-import { fullModelForVersion, isV5Model, tokenLimitForModel } from '@shared/nai-models'
+import {
+  fullModelForVersion,
+  isMediumEffort,
+  isV5Model,
+  MEDIUM_EFFORT_STEPS,
+  tokenLimitForModel,
+  withEffort
+} from '@shared/nai-models'
 import { removeComments } from '@shared/nai-presets'
 import { cn } from '../lib/utils'
 import { useCharactersStore } from '../stores/characters-store'
@@ -56,6 +63,13 @@ export function PromptPanel(): React.JSX.Element {
   const request = useGenerationStore((s) => s.request)
   const patch = useGenerationStore((s) => s.patchRequest)
   const v5Enabled = isV5Model(request.model)
+  // V5 Full 절약(Medium) 모드: 스텝 14 고정, 네거티브는 보내지 않는다
+  const medium = isMediumEffort(request.model)
+  const steps = medium ? MEDIUM_EFFORT_STEPS : request.steps
+  const setMedium = (on: boolean): void => {
+    localStorage.setItem('v5_effort', on ? 'medium' : 'high')
+    patch({ model: withEffort(request.model, on) })
+  }
   const tokenLimit = tokenLimitForModel(request.model)
   const patchPromptParts = useGenerationStore((s) => s.patchPromptParts)
   const promptSplitEnabled = useGenerationStore((s) => s.promptSplitEnabled)
@@ -188,13 +202,22 @@ export function PromptPanel(): React.JSX.Element {
       estimateAnlas({
         width: request.width,
         height: request.height,
-        steps: request.steps,
+        steps,
+        model: request.model,
         charRefCount: enabledCrefs,
         isOpus: subscriptionTier === 'opus',
         batchCount,
         unencodedVibes: 0 // 캐시 상태는 오버레이에서 확인 — 배지로만 안내
       }),
-    [request.width, request.height, request.steps, subscriptionTier, batchCount, enabledCrefs]
+    [
+      request.width,
+      request.height,
+      steps,
+      request.model,
+      subscriptionTier,
+      batchCount,
+      enabledCrefs
+    ]
   )
 
   // 파라미터 요약 줄: 씬 모드는 씬마다 해상도가 달라서, 예약된 씬(없으면 전체 씬) 중 가장 큰 해상도로 판단한다.
@@ -202,7 +225,7 @@ export function PromptPanel(): React.JSX.Element {
     const seedText = seedLocked && request.seed >= 0 ? `시드 ${request.seed}` : '시드 무작위'
     if (!isScene) {
       return {
-        text: `${request.width} × ${request.height} · ${request.steps}스텝 · ${seedText}`,
+        text: `${request.width} × ${request.height} · ${steps}스텝${medium ? ' (절약)' : ''} · ${seedText}`,
         free: anlas.total === 0,
         cost: anlas.total,
         tip: anlasTooltip(anlas, batchCount)
@@ -218,16 +241,19 @@ export function PromptPanel(): React.JSX.Element {
     const perImage = estimateAnlas({
       width: largest.width,
       height: largest.height,
-      steps: request.steps,
+      steps,
+      model: request.model,
       charRefCount: enabledCrefs,
       isOpus: subscriptionTier === 'opus',
       batchCount: 1,
       unencodedVibes: 0
     })
     const sizeText =
-      sizes.size > 1 ? `씬별 해상도 (최대 ${largest.width} × ${largest.height})` : `${largest.width} × ${largest.height}`
+      sizes.size > 1
+        ? `씬별 해상도 (최대 ${largest.width} × ${largest.height})`
+        : `${largest.width} × ${largest.height}`
     return {
-      text: `${sizeText} · ${request.steps}스텝 · ${seedText}`,
+      text: `${sizeText} · ${steps}스텝${medium ? ' (절약)' : ''} · ${seedText}`,
       free: perImage.total === 0,
       cost: perImage.total,
       tip:
@@ -235,7 +261,19 @@ export function PromptPanel(): React.JSX.Element {
           ? '예약한 씬이 모두 무료 범위예요 (Opus · 1024² 이하 · 28스텝 이하)'
           : `가장 큰 씬 기준 장당 약 ${perImage.total} Anlas`
     }
-  }, [isScene, presetScenes, request.width, request.height, request.steps, request.seed, seedLocked, anlas, batchCount, enabledCrefs, subscriptionTier])
+  }, [
+    isScene,
+    presetScenes,
+    request.width,
+    request.height,
+    request.steps,
+    request.seed,
+    seedLocked,
+    anlas,
+    batchCount,
+    enabledCrefs,
+    subscriptionTier
+  ])
 
   // 오버레이는 하나만 열림 — 서로 배타
   const only = (target: 'char' | 'frag' | 'vibe' | 'cref'): void => {
@@ -322,7 +360,8 @@ export function PromptPanel(): React.JSX.Element {
                 patch({
                   model: fullModelForVersion(
                     enabled ? '5' : '4.5',
-                    request.model.includes('inpainting')
+                    request.model.includes('inpainting'),
+                    enabled && localStorage.getItem('v5_effort') === 'medium'
                   )
                 })
               }
@@ -336,6 +375,42 @@ export function PromptPanel(): React.JSX.Element {
             </span>
           </span>
         </label>
+        {/* V5 생성 모드 — 절약(Medium): 사용량 약 42% 절약, 14스텝·Euler Ancestral·네거티브 고정 */}
+        {v5Enabled && (
+          <div
+            className="-mt-1 flex h-9 shrink-0 items-center justify-between rounded-xl bg-paper px-3"
+            title="절약 모드는 V5 Full을 14스텝으로 줄인 모델이에요. NAI 기준 사용량이 약 42% 적고 품질은 비슷해요. 대신 스텝·샘플러·CFG Rescale·네거티브를 바꿀 수 없어요."
+          >
+            <span className="text-[11px] font-medium text-muted">생성 모드</span>
+            <span
+              role="radiogroup"
+              aria-label="V5 생성 모드"
+              className="flex rounded-lg bg-surface-2 p-0.5"
+            >
+              {(
+                [
+                  [true, '절약'],
+                  [false, '일반']
+                ] as const
+              ).map(([on, label]) => (
+                <button
+                  key={label}
+                  role="radio"
+                  aria-checked={medium === on}
+                  onClick={() => setMedium(on)}
+                  className={cn(
+                    'h-6 rounded-md px-3 text-[11px] font-semibold transition-colors',
+                    medium === on
+                      ? 'bg-surface text-accent shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
+                      : 'text-faint hover:text-ink'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </span>
+          </div>
+        )}
         {/* 프롬프트 프리셋 — 포지티브 프롬프트 위 */}
         <PromptPresetBar />
         {/* 헤더를 제외한 실제 편집 영역을 기준으로 리사이즈한다. 최소 높이보다
@@ -403,14 +478,22 @@ export function PromptPanel(): React.JSX.Element {
               onToggle={() => setNegCollapsed((v) => !v)}
             />
             {!negCollapsed && (
-              <PromptEditor
-                negative
-                className="min-h-0 flex-1"
-                value={request.negativePrompt}
-                tokensOverride={tokenTotals.neg}
-                placeholder="UC 프리셋 뒤에 이어 붙습니다"
-                onValueChange={(v) => patch({ negativePrompt: v })}
-              />
+              <>
+                {medium && (
+                  <p className="shrink-0 rounded-lg bg-accent-soft px-2.5 py-1.5 text-[11px] leading-relaxed text-accent">
+                    절약 모드는 네거티브를 보내지 않아요. 빼고 싶은 건 프롬프트에 -3::hat:: 처럼 써
+                    주세요. 아래 내용은 일반 모드에서 다시 쓰여요.
+                  </p>
+                )}
+                <PromptEditor
+                  negative
+                  className={cn('min-h-0 flex-1', medium && 'opacity-45')}
+                  value={request.negativePrompt}
+                  tokensOverride={tokenTotals.neg}
+                  placeholder="UC 프리셋 뒤에 이어 붙습니다"
+                  onValueChange={(v) => patch({ negativePrompt: v })}
+                />
+              </>
             )}
           </div>
         </div>
@@ -496,10 +579,7 @@ export function PromptPanel(): React.JSX.Element {
               className="flex cursor-pointer items-center gap-1.5"
               title={`등록 계정 ${queue.accountCount}개 · 현재 ${queue.busyAccountCount}개 생성 중`}
             >
-              <Zap
-                size={12}
-                className={queue.accelerationEnabled ? 'text-accent' : 'text-faint'}
-              />
+              <Zap size={12} className={queue.accelerationEnabled ? 'text-accent' : 'text-faint'} />
               가속 모드
               <Switch
                 aria-label={`가속 모드 ${queue.accelerationEnabled ? '켜짐' : '꺼짐'}`}
@@ -919,7 +999,9 @@ function ToolButton({
         <span
           className={cn(
             'grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold tabular-nums',
-            active ? 'bg-white/25 text-white dark:text-paper' : 'bg-accent text-white dark:text-paper'
+            active
+              ? 'bg-white/25 text-white dark:text-paper'
+              : 'bg-accent text-white dark:text-paper'
           )}
         >
           {badge}

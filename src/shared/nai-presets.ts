@@ -12,6 +12,13 @@ export const QUALITY_TAGS_SUFFIX = ', very aesthetic, masterpiece, no text'
 const UC_HEAVY =
   'nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page'
 
+/**
+ * V5 계열 heavy 프리셋 (NAI 웹 코드 2026-10-09 확인). V4.5와 달리 nsfw가 없다.
+ * V5 Full Medium은 네거티브를 받지 않고 이 텍스트만 보낸다.
+ */
+export const UC_HEAVY_V5 =
+  'lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page'
+
 /** 인덱스 매핑 (실캡처): 0=Heavy, 1=Light, 3=Human Focus, 4=None. 2는 미사용 */
 export const UC_PRESETS_V45_FULL: Record<UcPresetIndex, string> = {
   0: UC_HEAVY,

@@ -154,7 +154,8 @@ function ArenaStartForm(): React.JSX.Element {
     : positive
       ? BUDGETS[budget].prelim
       : 2 + 2 * avoided.length
-  const remaining = v5Usage && isV5Model(params.model) ? estimateV5Images(v5Usage) : null
+  const remaining =
+    v5Usage && isV5Model(params.model) ? estimateV5Images(v5Usage, params.model) : null
   const defaultName =
     seed && !positive
       ? seed.label + ' 네거티브'

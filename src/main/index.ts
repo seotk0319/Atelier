@@ -8,6 +8,7 @@ import { closeDb, getDb, initDb } from './db'
 import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settings'
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
+import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
 import { sniffImage, thumbAllowed } from './notifications/work-images'
@@ -163,7 +164,9 @@ app.whenReady().then(() => {
 
   // 생성 파이프라인: 큐 → 조각/와일드카드 치환 → 바이브/캐릭레퍼 준비 → 스트리밍 생성 → 저장
   const queue = new GenerationQueue(
-    async (rawRequest, id, signal, account) => {
+    async (queuedRequest, id, signal, account) => {
+      // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
+      const rawRequest = withFixedSettings(queuedRequest)
       const token = account.token
       // 그림체 월드컵 이미지는 바이브·캐릭터 레퍼런스 없이 그림체만 비교한다
       const arenaRenderId = rawRequest.arenaRenderId

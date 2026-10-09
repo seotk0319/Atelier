@@ -19,6 +19,7 @@ import { useVibesStore, useCharRefsStore } from '../stores/refs-store'
 import { estimateAnlas } from '@shared/anlas'
 import type { V5UsageStatus } from '@shared/types'
 import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
+import { isMediumEffort, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
 import { PageNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
 
@@ -104,8 +105,17 @@ function formatDuration(seconds: number): string {
 }
 
 /** V5 잔량과 예상 장수. 충전 속도·완충 시간은 툴팁으로 보여준다. */
-function V5UsageStat({ usage }: { usage: V5UsageStatus | null }): React.JSX.Element | null {
+function V5UsageStat({
+  usage,
+  model
+}: {
+  usage: V5UsageStatus | null
+  /** 지금 고른 모델 — 절약(Medium)이면 예상 장수를 그 기준으로 */
+  model: string
+}): React.JSX.Element | null {
   if (!usage) return null
+  const medium = isMediumEffort(model)
+  const images = estimateV5Images(usage, model)
   const secondsPerPercent = usage.timeUntilNextPercent
   const refillRate = secondsPerPercent > 0 ? Math.round((3600 / secondsPerPercent) * 10) / 10 : 0
   const percentToFull = usage.isNegative ? usage.percent + 100 : 100 - usage.percent
@@ -120,19 +130,24 @@ function V5UsageStat({ usage }: { usage: V5UsageStatus | null }): React.JSX.Elem
         usage.percent >= 100
           ? '충전 완료'
           : `충전 속도 ${refillRate}%/시간 · 1%당 ${formatDuration(secondsPerPercent)}\n100%까지 약 ${formatDuration(fullIn)}`
-      }\n${refillText}\n약 ${estimateV5Images(usage).toLocaleString()}장: ${V5_ESTIMATE_BASIS}`}
+      }\n${refillText}\n약 ${images.toLocaleString()}장: ${medium ? '절약 모드 기준(일반보다 약 42% 적게 씀) · ' : ''}${V5_ESTIMATE_BASIS}`}
     >
       <span className="font-medium text-muted">V5</span>
-      <span className={cn('font-semibold tabular-nums', usage.isNegative ? 'text-danger' : 'text-ink')}>
+      <span
+        className={cn('font-semibold tabular-nums', usage.isNegative ? 'text-danger' : 'text-ink')}
+      >
         {usage.isNegative ? '−' : ''}
         {usage.percent}%
       </span>
       {/* 좁은 창에서는 덜 중요한 것부터 숨긴다: 약 N장(1420px 미만) → 막대(1300px 미만). 소모량 칩(-N)이 붙어도 안 잘리는 폭 */}
       <span className="hidden h-1 w-10 overflow-hidden rounded-full bg-surface-2 min-[1300px]:block">
-        <span className="block h-full rounded-full bg-[#1fa56a]" style={{ width: `${barPercent}%` }} />
+        <span
+          className="block h-full rounded-full bg-[#1fa56a]"
+          style={{ width: `${barPercent}%` }}
+        />
       </span>
       <span className="hidden tabular-nums text-muted min-[1420px]:inline">
-        {usage.isNegative ? '제한됨' : `약 ${estimateV5Images(usage).toLocaleString()}장`}
+        {usage.isNegative ? '제한됨' : `약 ${images.toLocaleString()}장`}
       </span>
     </span>
   )
@@ -186,7 +201,8 @@ export function Titlebar(): React.JSX.Element {
   const anlasCost = estimateAnlas({
     width: request.width,
     height: request.height,
-    steps: request.steps,
+    steps: isMediumEffort(request.model) ? MEDIUM_EFFORT_STEPS : request.steps,
+    model: request.model,
     strength: request.source ? (request.i2iStrength ?? 0.7) : 1,
     charRefCount: enabledCrefs,
     isOpus: tier === 'opus',
@@ -222,7 +238,7 @@ export function Titlebar(): React.JSX.Element {
           <div className="no-drag ml-2 flex h-9 min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap rounded-xl bg-surface px-3 text-[12.5px]">
             <AnlasStat balance={anlasBalance} cost={anlasCost} />
             {anlasBalance !== null && v5Usage && <span className="h-3.5 w-px shrink-0 bg-line" />}
-            <V5UsageStat usage={v5Usage} />
+            <V5UsageStat usage={v5Usage} model={request.model} />
           </div>
         )}
       </div>

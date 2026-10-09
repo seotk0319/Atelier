@@ -1,5 +1,5 @@
 import type { GenerationRequest } from '../../shared/types'
-import { isV5Model, snapToGrid } from '../../shared/nai-models'
+import { isMediumEffort, isV5Model, snapToGrid, withFixedSettings } from '../../shared/nai-models'
 
 /**
  * NAI 웹과 바이트 단위로 동일한 payload를 만드는 것이 이 모듈의 존재 이유다 (P1).
@@ -29,7 +29,12 @@ export {
   mergeUcPreset,
   removeComments
 } from '../../shared/nai-presets'
-import { mergeQualityTags, mergeUcPreset, removeComments } from '../../shared/nai-presets'
+import {
+  mergeQualityTags,
+  mergeUcPreset,
+  removeComments,
+  UC_HEAVY_V5
+} from '../../shared/nai-presets'
 
 /**
  * Variety+(skip_cfg_above_sigma) 값.
@@ -126,14 +131,19 @@ export interface BuildOptions {
 }
 
 export function buildGenerateImagePayload(
-  req: GenerationRequest,
+  incoming: GenerationRequest,
   opts: BuildOptions = {}
 ): NaiImagePayload {
+  // V5 Full Medium: 스텝·샘플러·네거티브 고정 (웹과 같은 값)
+  const req = withFixedSettings(incoming)
+  const medium = isMediumEffort(req.model)
   const v5 = isV5Model(req.model)
   // V5 투명 배경: NAI 웹과 같이 퀄리티 접미사 앞에 태그를 붙이고 tag_hint로 알린다
   const transparent = v5 && req.transparentBackground === true
   const prompt = mergeQualityTags(removeComments(req.prompt), req.qualityToggle, transparent)
-  const negative = mergeUcPreset(removeComments(req.negativePrompt), req.ucPreset)
+  const negative = medium
+    ? UC_HEAVY_V5
+    : mergeUcPreset(removeComments(req.negativePrompt), req.ucPreset)
 
   // 캐릭터 프롬프트도 주석(#) 제거 — 기본/네거만 걸러지고 캐릭터 칸은 그대로 전송되던 버그 수정
   const activeChars = req.characterPrompts

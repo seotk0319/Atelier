@@ -1,5 +1,5 @@
 import type { GenerationRequest, ImageMetadata, UcPresetIndex } from '@shared/types'
-import { NAI_MODEL_V45_FULL, NAI_MODEL_V5_FULL } from '@shared/nai-models'
+import { NAI_MODEL_V45_FULL, NAI_MODEL_V5_FULL, NAI_MODEL_V5_FULL_MEDIUM } from '@shared/nai-models'
 
 type MetadataFallbacks = Partial<
   Pick<GenerationRequest, 'steps' | 'cfgScale' | 'cfgRescale' | 'sampler' | 'noiseSchedule'>
@@ -24,6 +24,9 @@ interface RequestFromMetadataInput {
 export function modelFromMetadata(name?: string): string {
   if (!name) return NAI_MODEL_V45_FULL
   const lower = name.toLowerCase()
+  // V5 Full Medium(절약) 이미지의 Source 표기 (NAI 웹 코드 확인)
+  if (lower.includes('nai-diffusion-5-full-medium') || /v5 (93f4bd30|70ab5786)/.test(lower))
+    return NAI_MODEL_V5_FULL_MEDIUM
   if (lower.includes('nai-diffusion-5') || lower.includes('v5') || lower.includes('diffusion 5')) {
     return lower.includes('curated') ? 'nai-diffusion-5-curated' : NAI_MODEL_V5_FULL
   }
