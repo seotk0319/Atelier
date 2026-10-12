@@ -91,6 +91,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const scenes = useScenesStore((s) => s.scenes)
   const showMeta = useMetadataStore((s) => s.show)
   const imageRevisions = useGenerationStore((s) => s.imageRevisions)
+  const generateOne = useScenesStore((s) => s.generateOne)
 
   const [sceneId, setSceneId] = useState<number | null>(scenes[0]?.id ?? null)
   const [images, setImages] = useState<SceneImage[]>([])
@@ -128,6 +129,20 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const reloadVersion = useRef(0)
   sceneIdRef.current = sceneId
   const scene = scenes.find((s) => s.id === sceneId) ?? null
+  // 이 씬에 대기 중이거나 생성 중인 장 수 (선별 화면의 "1장 생성"과 씬 탭 예약 모두)
+  const liveForScene = useGenerationStore(
+    (s) =>
+      s.queue?.items.filter(
+        (i) => i.request.sceneId === sceneId && (i.state === 'pending' || i.state === 'generating')
+      ).length ?? 0
+  )
+  // 여기서 누른 생성의 결과가 오면 새 그림(목록 맨 앞)으로 바로 넘어간다
+  const followNew = useRef<Map<number, number>>(new Map())
+  function generateHere(): void {
+    if (sceneId == null) return
+    followNew.current.set(sceneId, (followNew.current.get(sceneId) ?? 0) + 1)
+    void generateOne(sceneId)
+  }
   const current = images[index] ?? null
   const currentRef = useRef(current)
   currentRef.current = current
@@ -154,7 +169,11 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   // 인페인트 결과 등 새 이미지가 이 씬에 생기면 목록 갱신 (현재 보던 위치 유지)
   useEffect(() => {
     return window.nais.on('scenes:changed', ({ sceneId: changed }) => {
-      if (changed === sceneIdRef.current) void reload(changed, false)
+      if (changed !== sceneIdRef.current) return
+      const waiting = followNew.current.get(changed) ?? 0
+      if (waiting > 0) followNew.current.set(changed, waiting - 1)
+      // 새 이미지는 최신순 목록 맨 앞이다 — 여기서 누른 생성이면 그 그림을 바로 보여준다
+      void reload(changed, waiting > 0)
     })
   }, [reload])
 
@@ -668,7 +687,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
-                <div className="flex shrink-0 items-center justify-center gap-2 border-t border-line py-1.5">
+                <div className="relative flex shrink-0 items-center justify-center gap-2 border-t border-line py-1.5">
                   <Button
                     size="icon"
                     variant="ghost"
@@ -690,11 +709,15 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                   >
                     <ChevronRight size={16} />
                   </Button>
+                  <GenerateHereButton live={liveForScene} onClick={generateHere} />
                 </div>
               </>
             ) : (
-              <div className="flex flex-1 items-center justify-center text-[13px] text-faint">
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-faint">
                 {loading ? '불러오는 중…' : '이 씬에는 생성된 이미지가 없습니다'}
+                {!loading && scene && (
+                  <GenerateHereButton live={liveForScene} onClick={generateHere} inline />
+                )}
               </div>
             )}
           </div>
@@ -792,6 +815,32 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
  * 내장 인페인트 — 현재 후보 이미지를 소스로 마스크를 칠해 부분 재생성.
  * 캔버스는 원본 해상도로 두고 CSS로만 축소 표시 (mask-editor와 동일 원리) + 되돌리기 지원.
  */
+/** 선별 화면에서 지금 씬을 한 장 더 뽑는 버튼. 누른 만큼 즉시 생성 줄에 쌓이고, 대기 중인 장 수를 보여준다. */
+function GenerateHereButton({
+  live,
+  onClick,
+  inline = false
+}: {
+  live: number
+  onClick: () => void
+  inline?: boolean
+}): React.JSX.Element {
+  return (
+    <Button
+      size="sm"
+      variant="accent"
+      className={cn('gap-1.5', !inline && 'absolute right-2 top-1/2 -translate-y-1/2')}
+      onClick={onClick}
+      title="이 씬을 지금 설정으로 1장 더 생성해요. 누를 때마다 1장씩, 예약보다 먼저 뽑아요."
+    >
+      <ImagePlus size={14} /> 1장 생성
+      {live > 0 && (
+        <span className="rounded-full bg-white/25 px-1.5 text-[11px] tabular-nums">{live}</span>
+      )}
+    </Button>
+  )
+}
+
 function InpaintPanel({
   target,
   onCancel,
