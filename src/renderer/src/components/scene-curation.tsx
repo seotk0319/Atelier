@@ -104,6 +104,12 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const [refStrength, setRefStrength] = useState('0.6')
   const [refFidelity, setRefFidelity] = useState('0.6')
   const [refDragOver, setRefDragOver] = useState(false)
+  // 기준 그림 칸 보이기 (끄면 후보 이미지를 넓게 본다). 기준 그림 자체와 레퍼런스 적용은 그대로.
+  const [showRef, setShowRef] = useState(() => localStorage.getItem('curation_show_ref') !== '0')
+  const toggleShowRef = (on: boolean): void => {
+    localStorage.setItem('curation_show_ref', on ? '1' : '0')
+    setShowRef(on)
+  }
 
   // 내장 인페인트
   const [inpaint, setInpaint] = useState<InpaintTarget | null>(null)
@@ -419,6 +425,19 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
             <h2 className="text-[14px] font-semibold">선별 작업</h2>
           </div>
           <div className="h-5 w-px shrink-0 bg-line" />
+          <label
+            className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[12px]"
+            title="끄면 기준 그림 칸을 숨기고 후보 이미지를 크게 봐요. 기준 그림과 레퍼런스 적용은 그대로예요."
+          >
+            <input
+              type="checkbox"
+              className="size-3.5 accent-accent"
+              checked={showRef}
+              onChange={(e) => toggleShowRef(e.target.checked)}
+            />
+            기준 그림
+          </label>
+          <div className="h-5 w-px shrink-0 bg-line" />
           <div
             className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5"
             data-testid="scene-curation-reference-settings"
@@ -512,64 +531,73 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
           </Button>
         </div>
 
-        {/* 본문 — 기준 그림과 후보 이미지 패널은 같은 폭, 우측 목록은 좁게 */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[minmax(360px,1fr)_minmax(360px,1fr)_minmax(260px,0.55fr)] lg:overflow-hidden">
+        {/* 본문 — 기준 그림과 후보 이미지 패널은 같은 폭, 우측 목록은 좁게. 기준 칸을 끄면 후보가 그 자리까지 넓어진다 */}
+        <div
+          className={cn(
+            'grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:overflow-hidden',
+            showRef
+              ? 'lg:grid-cols-[minmax(360px,1fr)_minmax(360px,1fr)_minmax(260px,0.55fr)]'
+              : 'lg:grid-cols-[minmax(360px,2fr)_minmax(260px,0.55fr)]'
+          )}
+        >
           {/* 좌: 기준 그림 */}
-          <div
-            className={cn(
-              'flex min-h-64 flex-col overflow-hidden rounded-lg border bg-surface lg:min-h-0',
-              refDragOver ? 'border-accent' : 'border-line'
-            )}
-            onDragOver={(e) => {
-              if (e.dataTransfer.types.includes(DRAG_MIME)) {
+          {showRef && (
+            <div
+              className={cn(
+                'flex min-h-64 flex-col overflow-hidden rounded-lg border bg-surface lg:min-h-0',
+                refDragOver ? 'border-accent' : 'border-line'
+              )}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes(DRAG_MIME)) {
+                  e.preventDefault()
+                  setRefDragOver(true)
+                }
+              }}
+              onDragLeave={() => setRefDragOver(false)}
+              onDrop={(e) => {
                 e.preventDefault()
-                setRefDragOver(true)
-              }
-            }}
-            onDragLeave={() => setRefDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setRefDragOver(false)
-              try {
-                const data = JSON.parse(e.dataTransfer.getData(DRAG_MIME)) as ReferenceSelection
-                if (data?.filePath) setReference(data)
-              } catch {
-                // 형식이 다른 드롭은 무시
-              }
-            }}
-          >
-            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-              <span className="text-[12.5px] font-medium">기준 그림</span>
-              {reference && (
-                <button
-                  className="ml-auto grid size-5 place-items-center rounded text-faint hover:text-danger"
-                  onClick={() => setReference(null)}
-                  title="기준 해제"
-                >
-                  <X size={12} />
-                </button>
+                setRefDragOver(false)
+                try {
+                  const data = JSON.parse(e.dataTransfer.getData(DRAG_MIME)) as ReferenceSelection
+                  if (data?.filePath) setReference(data)
+                } catch {
+                  // 형식이 다른 드롭은 무시
+                }
+              }}
+            >
+              <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+                <span className="text-[12.5px] font-medium">기준 그림</span>
+                {reference && (
+                  <button
+                    className="ml-auto grid size-5 place-items-center rounded text-faint hover:text-danger"
+                    onClick={() => setReference(null)}
+                    title="기준 해제"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              {reference ? (
+                <div className="relative min-h-0 flex-1">
+                  <img
+                    src={imageUrl(reference.filePath, imageRevisions[reference.filePath])}
+                    className="absolute inset-0 h-full w-full object-contain p-2"
+                    draggable={false}
+                    alt=""
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-faint">
+                  <ImagePlus size={30} strokeWidth={1.3} className="opacity-50" />
+                  <p className="text-center text-[12px]">
+                    우측 이미지 목록에서 끌어다 놓거나
+                    <br />
+                    더블클릭으로 기준 지정
+                  </p>
+                </div>
               )}
             </div>
-            {reference ? (
-              <div className="relative min-h-0 flex-1">
-                <img
-                  src={imageUrl(reference.filePath, imageRevisions[reference.filePath])}
-                  className="absolute inset-0 h-full w-full object-contain p-2"
-                  draggable={false}
-                  alt=""
-                />
-              </div>
-            ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-faint">
-                <ImagePlus size={30} strokeWidth={1.3} className="opacity-50" />
-                <p className="text-center text-[12px]">
-                  우측 이미지 목록에서 끌어다 놓거나
-                  <br />
-                  더블클릭으로 기준 지정
-                </p>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* 중앙: 현재 이미지 / 내장 인페인트 */}
           <div className="flex min-h-80 flex-col overflow-hidden rounded-lg border border-line bg-surface lg:min-h-0">
