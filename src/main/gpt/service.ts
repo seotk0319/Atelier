@@ -4,12 +4,13 @@
  */
 import { randomUUID } from 'crypto'
 import sharp from 'sharp'
-import type { GptAuthStatus, GptJob, GptRef, GptRequest } from '../../shared/gpt'
+import type { GptAuthStatus, GptEdit, GptJob, GptRef, GptRequest } from '../../shared/gpt'
 import type { HistoryItem } from '../../shared/types'
 import { getDb } from '../db'
 import { saveGeneratedImage } from '../images/storage'
 import { GptAuthError, getCredentials } from './auth'
 import { GptHttpError, GptNoImageError, requestImage } from './client'
+import { alphaMask } from './mask'
 
 type Broadcast = (jobs: GptJob[]) => void
 type Added = (item: HistoryItem) => void
@@ -67,10 +68,26 @@ async function prepareRefs(refs: GptRef[]): Promise<GptRef[]> {
   )
 }
 
+/**
+ * 고칠 그림을 보낼 모양으로 맞춘다. 그림은 레퍼런스처럼 긴 변 2048로 줄이고, 마스크(칠한 곳=흰색)는
+ * 같은 크기의 알파 마스크로 바꾼다: 칠한 곳은 투명(고칠 곳), 나머지는 불투명 검정.
+ */
+export async function prepareEdit(edit: GptEdit): Promise<GptEdit> {
+  const [image] = await prepareRefs([edit])
+  if (!edit.maskB64) return { b64: image.b64, mime: image.mime, name: edit.name }
+  const meta = await sharp(Buffer.from(image.b64, 'base64')).metadata()
+  const width = meta.width ?? 0
+  const height = meta.height ?? 0
+  if (!width || !height) throw new Error('고칠 그림을 읽지 못했어요')
+  const maskB64 = await alphaMask(edit.maskB64, width, height)
+  return { b64: image.b64, mime: image.mime, name: edit.name, maskB64 }
+}
+
 export async function generate(req: GptRequest, count: number): Promise<{ ids: string[] }> {
   const prompt = req.prompt.trim()
   if (!prompt) throw new Error('프롬프트를 적어 주세요')
-  const refs = await prepareRefs(req.refs)
+  const edit = req.edit ? await prepareEdit(req.edit) : undefined
+  const refs = await prepareRefs(req.refs.slice(0, edit ? 15 : 16))
   const n = Math.max(1, Math.min(100, Math.round(count) || 1))
   const ids: string[] = []
   for (let i = 0; i < n; i++) {
@@ -82,11 +99,12 @@ export async function generate(req: GptRequest, count: number): Promise<{ ids: s
       size: req.size,
       model: req.model,
       refCount: refs.length,
+      edit: edit ? (edit.maskB64 ? 'mask' : 'whole') : undefined,
       startedAt: Date.now(),
       attempt: 1
     })
     ids.push(id)
-    void run(id, { ...req, prompt, refs })
+    void run(id, { ...req, prompt, refs, edit })
   }
   changed()
   return { ids }

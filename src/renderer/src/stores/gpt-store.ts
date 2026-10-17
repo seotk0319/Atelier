@@ -1,8 +1,10 @@
 import { create } from 'zustand'
+import { GPT_STARTER_PRESETS } from '@shared/gpt'
 import type {
   GptAuthStatus,
   GptJob,
   GptModel,
+  GptPreset,
   GptPromptMode,
   GptQuality,
   GptRef,
@@ -10,10 +12,19 @@ import type {
   GptSize
 } from '@shared/gpt'
 import type { HistoryItem } from '@shared/types'
+import { useLayoutStore } from './layout-store'
 import { toast } from './toast-store'
 
 export interface GptRefItem extends GptRef {
   key: string
+}
+
+/** 고칠 그림. 칠하기 창에 원본 크기가 필요해서 크기도 들고 있다 */
+export interface GptEditItem extends GptRef {
+  width: number
+  height: number
+  /** 칠한 곳=흰색 PNG */
+  maskB64?: string
 }
 
 interface Form {
@@ -31,12 +42,22 @@ interface GptState extends Form {
   images: HistoryItem[]
   total: number
   refs: GptRefItem[]
+  edit: GptEditItem | null
+  presets: GptPreset[]
   /** 실패한 장을 다시 보낼 때 쓰는 원래 요청 */
   requests: Record<string, GptRequest>
   setForm: (patch: Partial<Form>) => void
   addRefs: (refs: GptRef[]) => void
   removeRef: (key: string) => void
   clearRefs: () => void
+  /** 이 그림을 고칠 그림으로 (마스크는 지운다) */
+  setEdit: (ref: GptRef | null) => Promise<void>
+  setMask: (maskB64: string | undefined) => void
+  loadPresets: () => Promise<void>
+  savePreset: (name: string, text: string) => void
+  removePreset: (id: string) => void
+  /** 프롬프트 칸 끝에 프리셋 문장을 이어 붙인다 */
+  applyPreset: (preset: GptPreset) => void
   checkStatus: () => Promise<void>
   loadImages: (more?: boolean) => Promise<void>
   generate: () => Promise<void>
@@ -80,6 +101,8 @@ export const useGptStore = create<GptState>((set, get) => ({
   images: [],
   total: 0,
   refs: [],
+  edit: null,
+  presets: [],
   requests: {},
   setForm: (patch) => {
     set(patch)
@@ -95,6 +118,52 @@ export const useGptStore = create<GptState>((set, get) => ({
     }),
   removeRef: (key) => set({ refs: get().refs.filter((r) => r.key !== key) }),
   clearRefs: () => set({ refs: [] }),
+  setEdit: async (ref) => {
+    if (!ref) return set({ edit: null })
+    const size = await imageSize(ref)
+    if (!size) {
+      toast('그림을 읽지 못했어요', 'error')
+      return
+    }
+    set({ edit: { b64: ref.b64, mime: ref.mime, name: ref.name, ...size } })
+  },
+  setMask: (maskB64) => {
+    const edit = get().edit
+    if (edit) set({ edit: { ...edit, maskB64 } })
+  },
+  loadPresets: async () => {
+    const { value } = await window.nais.invoke('settings:get', { key: 'gpt_presets' })
+    let presets = GPT_STARTER_PRESETS
+    try {
+      if (value) presets = JSON.parse(value) as GptPreset[]
+    } catch {
+      // 손상된 값이면 예시로
+    }
+    set({ presets })
+  },
+  savePreset: (name, text) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    const presets = [
+      ...get().presets,
+      {
+        id: Math.random().toString(36).slice(2),
+        name: name.trim() || trimmed.slice(0, 12),
+        text: trimmed
+      }
+    ]
+    set({ presets })
+    void window.nais.invoke('settings:set', { key: 'gpt_presets', value: JSON.stringify(presets) })
+  },
+  removePreset: (id) => {
+    const presets = get().presets.filter((p) => p.id !== id)
+    set({ presets })
+    void window.nais.invoke('settings:set', { key: 'gpt_presets', value: JSON.stringify(presets) })
+  },
+  applyPreset: (preset) => {
+    const prompt = get().prompt.trimEnd()
+    get().setForm({ prompt: prompt ? prompt + '\n' + preset.text : preset.text })
+  },
   checkStatus: async () => {
     set({ status: await window.nais.invoke('gpt:status', undefined) })
   },
@@ -115,7 +184,12 @@ export const useGptStore = create<GptState>((set, get) => ({
       size: s.size,
       quality: s.quality,
       model: s.model,
-      mode: s.mode
+      mode: s.mode,
+      ...(s.edit
+        ? {
+            edit: { b64: s.edit.b64, mime: s.edit.mime, name: s.edit.name, maskB64: s.edit.maskB64 }
+          }
+        : {})
     }
     try {
       const { ids } = await window.nais.invoke('gpt:generate', { request, count: s.count })
@@ -180,4 +254,28 @@ export async function pathToRef(filePath: string): Promise<GptRef | null> {
   const mime =
     ext === 'webp' ? 'image/webp' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'
   return { b64: res.base64, mime, name: filePath.split(/[\\/]/).pop() }
+}
+
+/** 그림의 원본 크기 (칠하기 창용) */
+function imageSize(ref: GptRef): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    img.onerror = () => resolve(null)
+    img.src = 'data:' + ref.mime + ';base64,' + ref.b64
+  })
+}
+
+/** 다른 탭(메인·씬·라이브러리 등)의 그림을 GPT 이미지로 보낸다: 고칠 그림 또는 레퍼런스 */
+export async function sendToGpt(filePath: string, as: 'edit' | 'ref'): Promise<void> {
+  const ref = await pathToRef(filePath)
+  if (!ref) {
+    toast('이미지를 읽지 못했어요', 'error')
+    return
+  }
+  const st = useGptStore.getState()
+  if (as === 'edit') await st.setEdit(ref)
+  else st.addRefs([ref])
+  useLayoutStore.getState().setCenterMode('gpt')
+  toast(as === 'edit' ? '고칠 그림으로 넣었어요' : '레퍼런스로 넣었어요', 'success')
 }

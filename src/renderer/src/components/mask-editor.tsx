@@ -19,7 +19,9 @@ export function MaskEditor({
   height,
   onConfirm,
   onCancel,
-  showStrength = false
+  showStrength = false,
+  title = '인페인트 마스크 — 재생성할 영역을 칠하세요',
+  confirmLabel
 }: {
   imageBase64: string
   width: number
@@ -27,6 +29,8 @@ export function MaskEditor({
   onConfirm: (maskBase64: string, strength?: number) => void
   onCancel: () => void
   showStrength?: boolean
+  title?: string
+  confirmLabel?: string
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [brush, setBrush] = useState(40)
@@ -160,7 +164,7 @@ export function MaskEditor({
   return (
     <Dialog open onOpenChange={(o) => !o && onCancel()}>
       <DialogContent className="max-w-[680px] p-4">
-        <DialogTitle className="mb-3">인페인트 마스크 — 재생성할 영역을 칠하세요</DialogTitle>
+        <DialogTitle className="mb-3">{title}</DialogTitle>
         <div className="flex flex-col items-center gap-3">
           <div
             className="relative overflow-hidden rounded-md border border-line bg-paper"
@@ -257,7 +261,7 @@ export function MaskEditor({
               취소
             </Button>
             <Button variant="accent" onClick={confirm}>
-              적용
+              {confirmLabel ?? '적용'}
             </Button>
           </div>
         </div>

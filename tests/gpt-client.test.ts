@@ -3,6 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SseReader, buildBody } from '../src/main/gpt/client'
+import { alphaMask } from '../src/main/gpt/mask'
 import { getCredentials, jwtClaims } from '../src/main/gpt/auth'
 import type { GptRequest } from '../src/shared/gpt'
 
@@ -47,6 +48,51 @@ describe('gpt client', () => {
       effort: 'low'
     })
     expect((buildBody(req()) as { reasoning: unknown }).reasoning).toEqual({ effort: 'none' })
+  })
+
+  it('edits the first image, adds the alpha mask to the tool, and keeps refs after it', () => {
+    const body = buildBody(
+      req({
+        refs: [{ b64: 'REF', mime: 'image/png' }],
+        edit: { b64: 'EDIT', mime: 'image/webp', maskB64: 'MASK' }
+      })
+    ) as { input: { content: unknown }[]; tools: Record<string, unknown>[] }
+    const content = body.input[1].content as { type: string; image_url?: string; text?: string }[]
+    expect(content.map((c) => c.image_url).filter(Boolean)).toEqual([
+      'data:image/webp;base64,EDIT',
+      'data:image/png;base64,REF'
+    ])
+    expect(content.at(-1)?.text).toContain('only inside the transparent area')
+    expect(content.at(-1)?.text).toContain('references only')
+    expect(body.tools[0].input_image_mask).toEqual({ image_url: 'data:image/png;base64,MASK' })
+    const whole = buildBody(req({ edit: { b64: 'EDIT', mime: 'image/png' } })) as {
+      tools: Record<string, unknown>[]
+    }
+    expect(whole.tools[0].input_image_mask).toBeUndefined()
+  })
+
+  it('turns a painted (white) mask into a transparent hole the size of the edited image', async () => {
+    const sharp = (await import('sharp')).default
+    const painted = await sharp({
+      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 0 } }
+    })
+      .composite([
+        {
+          input: {
+            create: { width: 2, height: 2, channels: 3, background: { r: 255, g: 255, b: 255 } }
+          },
+          left: 0,
+          top: 0
+        }
+      ])
+      .png()
+      .toBuffer()
+    const out = Buffer.from(await alphaMask(painted.toString('base64'), 8, 8), 'base64')
+    const { data, info } = await sharp(out).raw().toBuffer({ resolveWithObject: true })
+    expect([info.width, info.height, info.channels]).toEqual([8, 8, 4])
+    const alphaAt = (x: number, y: number): number => data[(y * 8 + x) * 4 + 3]
+    expect(alphaAt(1, 1)).toBe(0)
+    expect(alphaAt(6, 6)).toBe(255)
   })
 
   it('sends references as input images before the prompt and asks for the canvas shape', () => {

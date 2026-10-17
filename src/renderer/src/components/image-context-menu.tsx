@@ -7,6 +7,8 @@ import {
   ImageIcon,
   Layers,
   Paintbrush,
+  PencilLine,
+  Sparkles,
   Trash2,
   Wand2
 } from 'lucide-react'
@@ -16,6 +18,7 @@ import { openInDirector } from '../stores/director-store'
 import { setI2iSource, useGenerationStore } from '../stores/generation-store'
 import { useMetadataStore } from '../stores/metadata-store'
 import { openCensor } from '../stores/censor-store'
+import { sendToGpt } from '../stores/gpt-store'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -72,6 +75,13 @@ export function ImageContextMenu({
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => openCensor(filePath)}>
           <Paintbrush size={13} className="text-red-300" /> 검열하기
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => void sendToGpt(filePath, 'edit')}>
+          <PencilLine size={13} className="text-accent" /> GPT로 고치기
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void sendToGpt(filePath, 'ref')}>
+          <Sparkles size={13} className="text-accent" /> GPT 레퍼런스로 넣기
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => void showMeta({ filePath })}>

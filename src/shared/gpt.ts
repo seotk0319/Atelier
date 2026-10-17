@@ -55,7 +55,44 @@ export interface GptRequest {
   quality: GptQuality
   model: GptModel
   mode: GptPromptMode
+  /** 고칠 그림. 있으면 이 그림을 첫 이미지로 보내 고친다 (부분 수정이면 마스크도) */
+  edit?: GptEdit
 }
+
+export interface GptEdit {
+  b64: string
+  mime: string
+  name?: string
+  /** 칠한 곳=흰색, 나머지=검정인 PNG (마스크 에디터 출력). 본체가 알파 마스크로 바꿔 보낸다 */
+  maskB64?: string
+}
+
+/** 자주 쓰는 지시 (프롬프트 칸에 이어 붙인다) */
+export interface GptPreset {
+  id: string
+  name: string
+  text: string
+}
+
+/** 저장된 프리셋이 아직 없을 때 처음 보여주는 예시. 지우거나 고쳐 쓸 수 있다 */
+export const GPT_STARTER_PRESETS: GptPreset[] = [
+  {
+    id: 'starter-bubble',
+    name: '말풍선 넣기',
+    text: '오른쪽 위에 말풍선을 넣고 안에 "대사" 라고 써 줘'
+  },
+  {
+    id: 'starter-sign',
+    name: '글자 바꾸기',
+    text: '그림 속 글자를 "새 글자" 로 바꿔 줘. 글씨체와 위치는 그대로'
+  },
+  { id: 'starter-bg', name: '배경만 바꾸기', text: '인물은 그대로 두고 배경만 ( ) 로 바꿔 줘' },
+  {
+    id: 'starter-outfit',
+    name: '옷만 바꾸기',
+    text: '얼굴·머리·자세는 그대로 두고 옷만 ( ) 로 바꿔 줘'
+  }
+]
 
 export type GptJobState = 'running' | 'retrying' | 'done' | 'failed' | 'cancelled'
 
@@ -66,6 +103,8 @@ export interface GptJob {
   size: GptSize
   model: GptModel
   refCount: number
+  /** 그림을 고치는 작업인지 (부분 수정이면 'mask') */
+  edit?: 'whole' | 'mask'
   startedAt: number
   finishedAt?: number
   attempt: number

@@ -18,6 +18,12 @@ const DIRECT_RULES =
 const AUTO_RULES =
   "Turn the user prompt into a clear, detailed visual prompt that keeps the user's intent, subjects, style and any quoted text exactly. Keep the user's requested style; do not default to photorealism."
 
+const EDIT_WHOLE =
+  'Edit the first image as the user asks. Keep everything the request does not mention identical: composition, characters, faces, outfits, art style and colors.'
+const EDIT_MASK =
+  'Edit the first image only inside the transparent area of the mask, as the user asks. Keep everything outside the mask identical.'
+const OTHER_REFS = 'Any other images are references only.'
+
 export class GptHttpError extends Error {
   constructor(
     message: string,
@@ -48,13 +54,21 @@ function sizeLine(size: string): string {
 }
 
 export function buildBody(req: GptRequest): Record<string, unknown> {
+  const edit = req.edit
   const text =
     sizeLine(req.size) +
-    (req.mode === 'direct' ? 'Generate an image with this exact prompt: ' : 'Generate an image: ') +
+    (edit
+      ? (edit.maskB64 ? EDIT_MASK : EDIT_WHOLE) +
+        (req.refs.length ? ' ' + OTHER_REFS : '') +
+        '\n\nRequest: '
+      : req.mode === 'direct'
+        ? 'Generate an image with this exact prompt: '
+        : 'Generate an image: ') +
     req.prompt
-  const content = req.refs.length
+  const images = edit ? [edit, ...req.refs] : req.refs
+  const content = images.length
     ? [
-        ...req.refs.map((r) => ({
+        ...images.map((r) => ({
           type: 'input_image',
           image_url: 'data:' + r.mime + ';base64,' + r.b64
         })),
@@ -71,7 +85,18 @@ export function buildBody(req: GptRequest): Record<string, unknown> {
       },
       { role: 'user', content }
     ],
-    tools: [{ type: 'image_generation', quality: req.quality, size: req.size, moderation: 'low' }],
+    tools: [
+      {
+        type: 'image_generation',
+        quality: req.quality,
+        size: req.size,
+        moderation: 'low',
+        // 투명한 곳 = 고칠 곳 (2026-10-17 실제 요청으로 확인, 서버가 action "edit"로 처리)
+        ...(edit?.maskB64
+          ? { input_image_mask: { image_url: 'data:image/png;base64,' + edit.maskB64 } }
+          : {})
+      }
+    ],
     tool_choice: 'required',
     reasoning: { effort: reasoningEffortFor(req.model) },
     store: false,

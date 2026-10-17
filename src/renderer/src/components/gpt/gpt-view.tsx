@@ -3,6 +3,8 @@ import {
   ImagePlus,
   Loader2,
   Minus,
+  Paintbrush,
+  PencilLine,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -21,14 +23,18 @@ import { useLayoutStore } from '../../stores/layout-store'
 import { toast } from '../../stores/toast-store'
 import { ImageContextMenu } from '../image-context-menu'
 import { Lightbox } from '../lightbox'
+import { MaskEditor } from '../mask-editor'
 import { ContextMenuItem } from '../ui/context-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select'
 
-/** 스튜디오 → GPT 이미지. ChatGPT 로그인(Codex)으로 이미지를 만든다 */
+/** GPT 이미지. ChatGPT 로그인(Codex)으로 이미지를 만들고 고친다 */
 export function GptView(): React.JSX.Element {
   const visible = useLayoutStore((s) => s.centerMode === 'gpt')
   const status = useGptStore((s) => s.status)
   useEffect(() => bindGptEvents(), [])
+  useEffect(() => {
+    void useGptStore.getState().loadPresets()
+  }, [])
   useEffect(() => {
     if (!visible) return
     const st = useGptStore.getState()
@@ -113,7 +119,10 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
             </div>
           </div>
         )}
-        <div className="text-[15px] font-bold text-ink">무엇을 그릴까요?</div>
+        <EditCard />
+        <div className="text-[15px] font-bold text-ink">
+          {s.edit ? '무엇을 바꿀까요?' : '무엇을 그릴까요?'}
+        </div>
         <textarea
           value={s.prompt}
           onChange={(e) => s.setForm({ prompt: e.target.value })}
@@ -124,9 +133,14 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
             }
           }}
           rows={8}
-          placeholder="예) 창가 카페에서 코코아를 든 소녀, 부드러운 아침 햇살, 애니메이션 일러스트 — 말풍선 글자도 그대로 써져요"
+          placeholder={
+            s.edit
+              ? '예) 머리색만 은색으로 바꿔 줘 / 표지판 글자를 "좋은 하루"로'
+              : '예) 창가 카페에서 코코아를 든 소녀, 부드러운 아침 햇살, 애니메이션 일러스트 — 말풍선 글자도 그대로 써져요'
+          }
           className="mt-2 w-full resize-none rounded-2xl bg-surface px-4 py-3 text-[14px] leading-relaxed text-ink outline-none placeholder:text-faint focus:ring-2 focus:ring-accent/30"
         />
+        <Presets />
 
         <Label
           title="레퍼런스"
@@ -164,6 +178,16 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
                     className="size-full object-cover"
                     draggable={false}
                   />
+                  <button
+                    title="이 그림 고치기"
+                    onClick={() => {
+                      void s.setEdit(r)
+                      s.removeRef(r.key)
+                    }}
+                    className="absolute bottom-0.5 left-0.5 grid size-5 place-items-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100"
+                  >
+                    <PencilLine size={10} />
+                  </button>
                   <button
                     onClick={() => s.removeRef(r.key)}
                     className="absolute right-0.5 top-0.5 grid size-5 place-items-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100"
@@ -254,11 +278,148 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
             onClick={() => void s.generate()}
             className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-bold text-white transition hover:opacity-90 disabled:opacity-50 dark:text-paper"
           >
-            <Sparkles size={16} /> 생성 · {s.count}장
+            {s.edit ? <PencilLine size={16} /> : <Sparkles size={16} />}
+            {s.edit ? '고치기' : '생성'} · {s.count}장
           </button>
         </div>
       </div>
     </aside>
+  )
+}
+
+/** 고칠 그림: 그림 전체를 보고 고치거나, 칠한 곳만 고친다 */
+function EditCard(): React.JSX.Element | null {
+  const edit = useGptStore((s) => s.edit)
+  const setEdit = useGptStore((s) => s.setEdit)
+  const setMask = useGptStore((s) => s.setMask)
+  const [painting, setPainting] = useState(false)
+  if (!edit) return null
+  const src = 'data:' + edit.mime + ';base64,' + edit.b64
+  const maskUrl = edit.maskB64 ? 'url(data:image/png;base64,' + edit.maskB64 + ')' : undefined
+  return (
+    <div className="mb-4 rounded-2xl bg-surface p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[13px] font-bold text-ink">고칠 그림</span>
+        <span className="text-[12px] text-faint">
+          {edit.maskB64 ? '칠한 곳만 고쳐요' : '그림 전체를 보고 고쳐요'}
+        </span>
+        <div className="flex-1" />
+        <button
+          title="그만 고치기"
+          onClick={() => void setEdit(null)}
+          className="grid size-6 place-items-center rounded-md text-muted hover:bg-paper hover:text-ink"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="relative size-24 shrink-0 overflow-hidden rounded-xl bg-paper">
+          <img src={src} className="size-full object-contain" draggable={false} />
+          {maskUrl && (
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-danger/55"
+              style={{
+                maskImage: maskUrl,
+                WebkitMaskImage: maskUrl,
+                maskMode: 'luminance',
+                maskSize: 'contain',
+                maskPosition: 'center',
+                maskRepeat: 'no-repeat'
+              }}
+            />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <button
+            onClick={() => setPainting(true)}
+            className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-paper text-[12.5px] font-semibold text-ink hover:bg-accent-soft hover:text-accent"
+          >
+            <Paintbrush size={14} /> {edit.maskB64 ? '칠한 곳 다시 칠하기' : '고칠 곳만 칠하기'}
+          </button>
+          {edit.maskB64 && (
+            <button
+              onClick={() => setMask(undefined)}
+              className="h-8 rounded-xl text-[12px] font-semibold text-muted hover:bg-paper hover:text-ink"
+            >
+              칠한 곳 지우기 (전체 고치기)
+            </button>
+          )}
+        </div>
+      </div>
+      {painting && (
+        <MaskEditor
+          imageBase64={edit.b64}
+          width={edit.width}
+          height={edit.height}
+          title="고칠 곳만 칠하세요 — 칠하지 않은 곳은 그대로 둬요"
+          confirmLabel="이 부분만 고치기"
+          onCancel={() => setPainting(false)}
+          onConfirm={(mask) => {
+            setMask(mask)
+            setPainting(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** 자주 쓰는 지시. 누르면 프롬프트 끝에 붙고, 지금 프롬프트를 새로 저장할 수 있다 */
+function Presets(): React.JSX.Element {
+  const presets = useGptStore((s) => s.presets)
+  const prompt = useGptStore((s) => s.prompt)
+  const apply = useGptStore((s) => s.applyPreset)
+  const save = useGptStore((s) => s.savePreset)
+  const remove = useGptStore((s) => s.removePreset)
+  const [naming, setNaming] = useState<string | null>(null)
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {presets.map((p) => (
+        <span key={p.id} className="group relative">
+          <button
+            onClick={() => apply(p)}
+            title={p.text}
+            className="h-7 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-muted hover:bg-accent-soft hover:text-accent"
+          >
+            {p.name}
+          </button>
+          <button
+            title="프리셋 지우기"
+            onClick={() => remove(p.id)}
+            className="absolute -right-1 -top-1 hidden size-4 place-items-center rounded-full bg-ink/70 text-paper group-hover:grid"
+          >
+            <X size={9} />
+          </button>
+        </span>
+      ))}
+      {naming === null ? (
+        <button
+          disabled={!prompt.trim()}
+          onClick={() => setNaming('')}
+          title="지금 프롬프트를 프리셋으로 저장"
+          className="flex h-7 items-center gap-1 rounded-lg px-2 text-[12px] font-semibold text-faint hover:text-ink disabled:opacity-40"
+        >
+          <Plus size={12} /> 저장
+        </button>
+      ) : (
+        <input
+          autoFocus
+          value={naming}
+          onChange={(e) => setNaming(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              save(naming, prompt)
+              setNaming(null)
+              toast('프리셋으로 저장했어요', 'success')
+            } else if (e.key === 'Escape') setNaming(null)
+          }}
+          onBlur={() => setNaming(null)}
+          placeholder="이름 적고 Enter"
+          className="h-7 w-32 rounded-lg bg-surface px-2 text-[12px] text-ink outline-none ring-2 ring-accent/30 placeholder:text-faint"
+        />
+      )}
+    </div>
   )
 }
 
@@ -364,14 +525,14 @@ function Results(): React.JSX.Element {
 function JobCard({ job }: { job: GptJob }): React.JSX.Element {
   const cancel = useGptStore((s) => s.cancel)
   const retry = useGptStore((s) => s.retry)
-  const [, tick] = useState(0)
+  const [now, setNow] = useState(job.startedAt)
   useEffect(() => {
     if (job.state === 'failed') return
-    const t = window.setInterval(() => tick((n) => n + 1), 1000)
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(t)
   }, [job.state])
-  const secs = Math.floor((Date.now() - job.startedAt) / 1000)
-  const wait = job.retryAt ? Math.max(0, Math.ceil((job.retryAt - Date.now()) / 1000)) : 0
+  const secs = Math.max(0, Math.floor((now - job.startedAt) / 1000))
+  const wait = job.retryAt ? Math.max(0, Math.ceil((job.retryAt - now) / 1000)) : 0
   const failed = job.state === 'failed'
   return (
     <div
@@ -391,7 +552,9 @@ function JobCard({ job }: { job: GptJob }): React.JSX.Element {
           </span>
         ) : (
           <span className="flex items-center gap-1 text-accent">
-            <Loader2 size={13} className="animate-spin" /> 그리는 중 · {secs}초
+            <Loader2 size={13} className="animate-spin" />{' '}
+            {job.edit ? (job.edit === 'mask' ? '부분 고치는 중' : '고치는 중') : '그리는 중'} ·{' '}
+            {secs}초
           </span>
         )}
         <div className="flex-1" />
@@ -437,11 +600,11 @@ function ResultCard({
   onOpen: () => void
 }): React.JSX.Element {
   const setForm = useGptStore((s) => s.setForm)
-  const addRefs = useGptStore((s) => s.addRefs)
+  const setEdit = useGptStore((s) => s.setEdit)
   const src = item.thumbnail
     ? 'data:image/webp;base64,' + item.thumbnail
     : thumbnailUrl(item.filePath)
-  const usePrompt = async (): Promise<void> => {
+  const loadPrompt = async (): Promise<void> => {
     const { payloadJson } = await window.nais.invoke('images:payload', { id: item.id })
     try {
       const p = JSON.parse(payloadJson ?? '{}') as { prompt?: string }
@@ -453,37 +616,40 @@ function ResultCard({
       toast('프롬프트를 찾지 못했어요', 'info')
     }
   }
+  const editThis = async (): Promise<void> => {
+    const ref = await pathToRef(item.filePath)
+    if (ref) await setEdit(ref)
+  }
   return (
     <ImageContextMenu
       filePath={item.filePath}
       extra={
-        <>
-          <ContextMenuItem onSelect={() => void usePrompt()}>
-            <Sparkles size={13} className="text-accent" /> 이 프롬프트 불러오기
-          </ContextMenuItem>
-          <ContextMenuItem
-            onSelect={async () => {
-              const ref = await pathToRef(item.filePath)
-              if (ref) addRefs([ref])
-            }}
-          >
-            <ImagePlus size={13} className="text-accent" /> 레퍼런스로 넣기
-          </ContextMenuItem>
-        </>
+        <ContextMenuItem onSelect={() => void loadPrompt()}>
+          <Sparkles size={13} className="text-accent" /> 이 프롬프트 불러오기
+        </ContextMenuItem>
       }
     >
-      <button
-        onClick={onOpen}
-        draggable
-        onDragStart={(e) => setImagePathDrag(e, item.filePath)}
-        className="group relative aspect-square overflow-hidden rounded-2xl bg-surface"
-      >
-        <img
-          src={src}
-          className="size-full object-cover transition group-hover:scale-[1.02]"
-          draggable={false}
-        />
-      </button>
+      <div className="group relative aspect-square overflow-hidden rounded-2xl bg-surface">
+        <button
+          onClick={onOpen}
+          draggable
+          onDragStart={(e) => setImagePathDrag(e, item.filePath)}
+          className="size-full"
+        >
+          <img
+            src={src}
+            className="size-full object-cover transition group-hover:scale-[1.02]"
+            draggable={false}
+          />
+        </button>
+        <button
+          onClick={() => void editThis()}
+          title="이 그림을 이어서 고치기"
+          className="absolute bottom-2 right-2 flex h-8 items-center gap-1 rounded-lg bg-black/60 px-2.5 text-[12px] font-semibold text-white opacity-0 backdrop-blur transition group-hover:opacity-100"
+        >
+          <PencilLine size={13} /> 고치기
+        </button>
+      </div>
     </ImageContextMenu>
   )
 }
