@@ -41,6 +41,14 @@ describe('gpt client', () => {
     expect(r.end()).toMatchObject({ b64: null, text: "I can't make that." })
   })
 
+  // gpt-6-astra는 reasoning 'none'을 400으로 거절한다 (2026-10-17 서버 응답)
+  it('asks gpt-6-astra for low reasoning and keeps none for the older models', () => {
+    expect((buildBody(req({ model: 'gpt-6-astra' })) as { reasoning: unknown }).reasoning).toEqual({
+      effort: 'low'
+    })
+    expect((buildBody(req()) as { reasoning: unknown }).reasoning).toEqual({ effort: 'none' })
+  })
+
   it('sends references as input images before the prompt and asks for the canvas shape', () => {
     const body = buildBody(req({ refs: [{ b64: 'AAA', mime: 'image/webp' }] })) as {
       input: { role: string; content: unknown }[]

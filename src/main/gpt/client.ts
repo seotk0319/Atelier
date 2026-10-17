@@ -1,11 +1,12 @@
 /**
  * ChatGPT Codex 응답 API로 이미지 한 장을 만든다. 요청 모양은 ima2-gen(MIT)을 참고했다.
  */
-import type { GptRequest } from '../../shared/gpt'
+import { reasoningEffortFor, type GptRequest } from '../../shared/gpt'
 import type { GptCredentials } from './auth'
 
 const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses'
-const CLIENT_VERSION = '0.144.0'
+// 서버는 이 값으로 새 모델 사용 가능 여부를 가른다. gpt-6-astra는 0.144.0이면 "더 새 Codex가 필요하다"며 거절했다.
+const CLIENT_VERSION = '0.163.0'
 
 const BASE_RULES =
   'Your only job is to call the image_generation tool once. Never reply with text only. ' +
@@ -72,7 +73,7 @@ export function buildBody(req: GptRequest): Record<string, unknown> {
     ],
     tools: [{ type: 'image_generation', quality: req.quality, size: req.size, moderation: 'low' }],
     tool_choice: 'required',
-    reasoning: { effort: 'none' },
+    reasoning: { effort: reasoningEffortFor(req.model) },
     store: false,
     stream: true
   }
