@@ -55,8 +55,6 @@ import {
   updateCharacter
 } from './characters/repo'
 import { getDbPath, getDb } from './db'
-import * as arena from './arena/service'
-import * as manga from './manga/service'
 import * as gpt from './gpt/service'
 import { analyzeArtists } from './images/artists'
 import { metadataFromPng, metadataFromPayloadJson } from './images/metadata'
@@ -169,7 +167,7 @@ import {
   reorderRefs,
   updateRefImage
 } from './refs/repo'
-import { artistNameList, searchTags } from './tags'
+import { searchTags } from './tags'
 import { imagesRoot, libraryRoot, sceneDir, scenePresetDir, scenesRoot } from './images/storage'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { readdir } from 'fs/promises'
@@ -327,61 +325,6 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('gpt:cancel', ({ id }) => gpt.cancel(id))
   handle('gpt:clearFinished', () => gpt.clearFinished())
   handle('gpt:images', ({ limit, offset }) => gpt.listImages(limit, offset))
-  handle('manga:list', () => ({ items: manga.listProjects() }))
-  handle('manga:get', ({ id }) => manga.getSnapshot(id))
-  handle('manga:create', (req) => manga.createProject(req))
-  handle('manga:expand', ({ id, ...req }) => manga.expand(id, req))
-  handle('manga:propose', ({ id }) => manga.proposeNext(id))
-  handle('manga:accept', ({ id }) => manga.acceptProposal(id))
-  handle('manga:updatePanel', ({ id, panelId, patch }) => manga.updatePanel(id, panelId, patch))
-  handle('manga:deletePanel', ({ id, panelId }) => manga.deletePanel(id, panelId))
-  handle('manga:movePanel', ({ id, panelId, dir }) => manga.movePanel(id, panelId, dir))
-  handle('manga:setLayout', ({ id, pageId, layout }) => manga.setLayout(id, pageId, layout))
-  handle('manga:reseed', ({ id, pageId }) => manga.setSeed(id, pageId))
-  handle('manga:update', ({ id, patch }) => manga.updateProject(id, patch))
-  handle('manga:delete', ({ id }) => manga.deleteProject(id))
-  handle('manga:render', ({ id, pageId, base }) => manga.renderPage(id, pageId, base))
-  handle('manga:auto', ({ id, ...opts }) => manga.setAuto(id, opts))
-  handle('manga:export', ({ id }) => manga.exportPages(id))
-  handle('arena:sessions', () => ({ items: arena.listSessions() }))
-  handle('arena:get', ({ id }) => arena.getSnapshot(id))
-  handle('arena:create', ({ config, limit }) => arena.createSession(config, limit))
-  handle('arena:delete', ({ id }) => arena.deleteSession(id))
-  handle('arena:restore', ({ id }) => arena.restoreSession(id))
-  handle('arena:rename', ({ id, name }) => arena.renameSession(id, name))
-  handle('arena:vote', ({ sessionId, result }) => arena.vote(sessionId, result))
-  handle('arena:skip', ({ sessionId }) => arena.skip(sessionId))
-  handle('arena:undo', ({ sessionId }) => arena.undo(sessionId))
-  handle('arena:advance', ({ sessionId, ...opts }) => arena.advance(sessionId, opts))
-  handle('arena:retune', ({ sessionId }) => arena.retune(sessionId))
-  handle('arena:tuneReroll', ({ sessionId }) => arena.tuneReroll(sessionId))
-  handle('arena:tuneStep', ({ sessionId, step }) => arena.tuneSetStep(sessionId, step))
-  handle('arena:orderShuffle', ({ sessionId }) => arena.orderShuffle(sessionId))
-  handle('arena:confirm', ({ sessionId }) => arena.confirm(sessionId))
-  handle('arena:enqueue', ({ sessionId, limit, retryFailed }) =>
-    arena.enqueueMissing(sessionId, { limit, retryFailed })
-  )
-  handle('arena:cancel', ({ sessionId }) => arena.cancelSession(sessionId))
-  handle('arena:addCombos', ({ sessionId, count }) => arena.addCombos(sessionId, count))
-  handle('arena:favorite', ({ comboId, favorite }) => arena.setFavorite(comboId, favorite))
-  handle('arena:artists', () => ({ items: arena.listArtists() }))
-  handle('arena:artistsParse', ({ text }) => ({ items: arena.parseArtists(text) }))
-  handle('arena:artistsAdd', ({ names, list }) => ({ added: arena.addArtists(names, list) }))
-  handle('arena:artistsUpdate', ({ tag, ...patch }) => arena.updateArtist(tag, patch))
-  handle('arena:artistsRemove', ({ tags }) => arena.removeArtists(tags))
-  handle('arena:artistNames', () => ({
-    names: [...new Set([...artistNameList(), ...arena.listArtists().map((a) => a.tag)])]
-  }))
-  handle('arena:promptFromImage', async ({ filePath }) => {
-    try {
-      const meta = await metadataFromPng(readFileSync(filePath))
-      if (!meta) return { text: '' }
-      const chars = (meta.characterPrompts ?? []).map((c) => c.prompt)
-      return { text: [meta.prompt, ...chars].filter(Boolean).join(',\n') }
-    } catch {
-      return { text: '' }
-    }
-  })
   handle('acceleration:set', ({ enabled }) => {
     if (PROFILE === 1) setSetting('acceleration_mode', enabled ? '1' : '0')
     ctx.queue.refreshConfiguration()

@@ -34,8 +34,6 @@ import { GenerationQueue } from './queue/generation-queue'
 import { getPresetName, getScene } from './scenes/repo'
 import { startInbox, closeInbox } from './notifications/service'
 import { startAiReplies, stopAiReplies } from './ai-reply/service'
-import { arenaRenderSaved, arenaRenderTarget, initArena } from './arena/service'
-import { initManga, mangaPageSaved, mangaSubDir } from './manga/service'
 import { initGpt } from './gpt/service'
 
 // Custom 프로필이면 userData를 먼저 분리 (단일 인스턴스 잠금·DB보다 앞서야 함)
@@ -168,19 +166,12 @@ app.whenReady().then(() => {
       // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
       const rawRequest = withFixedSettings(queuedRequest)
       const token = account.token
-      // 그림체 월드컵 이미지는 바이브·캐릭터 레퍼런스 없이 그림체만 비교한다
-      const arenaRenderId = rawRequest.arenaRenderId
-      const mangaPage = rawRequest.mangaPage
-      // 만화 페이지도 월드컵처럼 바이브·캐릭터 레퍼런스 없이 그린다
-      const isArena = arenaRenderId != null || mangaPage != null
       const maySpend = (): boolean => PROFILE !== 1 || getSetting('anlas_spending') !== '0'
       const ensureFree = async (): Promise<void> => {
         if (maySpend()) return
-        const rows = isArena ? [] : enabledVibeRows()
+        const rows = enabledVibeRows()
         await checkFreeGeneration(token, rawRequest, {
-          characterCount: isArena
-            ? 0
-            : enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0),
+          characterCount: enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0),
           vibeCount: rows.length,
           unencodedVibes: rows.filter((r) => !r.encoded || r.encodedIe !== r.infoExtracted).length
         })
@@ -222,17 +213,12 @@ app.whenReady().then(() => {
       }
 
       // 바이브/캐릭레퍼는 DB의 enabled 항목에서 준비 (바이브는 필요 시 인코딩 — 2 Anlas, 캐시됨)
-      const { vibes, newlyEncoded } = isArena
-        ? { vibes: [], newlyEncoded: [] }
-        : await prepareVibes(token, maySpend)
+      const { vibes, newlyEncoded } = await prepareVibes(token, maySpend)
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
-      const extraCharacterReferences =
-        !isArena && rawRequest.extraCharRefs?.length
-          ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
-          : []
-      const characterReferences = isArena
-        ? []
-        : [...extraCharacterReferences, ...(await prepareCharRefs())]
+      const extraCharacterReferences = rawRequest.extraCharRefs?.length
+        ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
+        : []
+      const characterReferences = [...extraCharacterReferences, ...(await prepareCharRefs())]
 
       let source = request.source
       // i2i/인페인트: 소스 해상도를 유효 NAI 해상도(64 배수·픽셀 상한)로 스냅하고 이미지를 맞춰 리사이즈.
@@ -317,28 +303,12 @@ app.whenReady().then(() => {
       // saveGeneratedImage가 auto_save 설정을 읽어 처리한다 (씬 포함).
       // 씬 생성은 씬루트/<프리셋>/<씬 이름>/에 모아 저장 (NAIS2와 동일 계층)
       const scene = request.sceneId ? getScene(request.sceneId) : null
-      const arenaTarget = arenaRenderId != null ? arenaRenderTarget(arenaRenderId) : null
       const saved = await saveGeneratedImage({
         png,
         sentPayload,
         seed: request.seed,
-        kind: mangaPage
-          ? 'manga'
-          : isArena
-            ? 'arena'
-            : request.sceneId
-              ? 'scene'
-              : source
-                ? source.maskBase64
-                  ? 'inpaint'
-                  : 'i2i'
-                : 't2i',
+        kind: request.sceneId ? 'scene' : source ? (source.maskBase64 ? 'inpaint' : 'i2i') : 't2i',
         sceneId: request.sceneId,
-        subDir: mangaPage
-          ? mangaSubDir(mangaPage.projectId)
-          : isArena
-            ? (arenaTarget?.dir ?? 'arena/unknown')
-            : undefined,
         format: imageFormat,
         sceneName: scene?.name,
         scenePresetName: scene ? (getPresetName(scene.presetId) ?? undefined) : undefined,
@@ -360,9 +330,7 @@ app.whenReady().then(() => {
         console.error('계정별 생성 장수 저장 실패')
       }
 
-      if (mangaPage) await mangaPageSaved(mangaPage, saved.filePath)
-      else if (arenaRenderId != null) arenaRenderSaved(arenaRenderId, saved.filePath)
-      else broadcast('images:added', saved)
+      broadcast('images:added', saved)
 
       // 씬 생성이면 해당 씬 갱신 알림 (목록 썸네일/개수, 상세 이미지 갱신용)
       if (request.sceneId)
@@ -395,8 +363,6 @@ app.whenReady().then(() => {
   if (Number.isFinite(savedDelay) && savedDelay >= 0) queue.setDelayMs(savedDelay)
 
   registerIpcHandlers({ dbVersion, queue })
-  initArena(queue, (payload) => broadcast('arena:changed', payload))
-  initManga(queue, (payload) => broadcast('manga:changed', payload))
   initGpt(
     (jobs) => broadcast('gpt:changed', { jobs }),
     (item) => broadcast('images:added', item)

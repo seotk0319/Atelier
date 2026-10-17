@@ -1,18 +1,16 @@
-import { Bell, Image, Images, LayoutGrid, Palette, Wand2, type LucideIcon } from 'lucide-react'
+import { Bell, Image, Images, LayoutGrid, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '../lib/utils'
-import { useLayoutStore } from '../stores/layout-store'
-import { isStudioMode, lastStudioMode, STUDIO_PAGES } from './studio-tabs'
+import { useLayoutStore, type CenterMode } from '../stores/layout-store'
 
-type Page = 'main' | 'scene' | 'director' | 'library' | 'studio' | 'inbox'
+type Page = CenterMode
 
-/** 그림체·만화·GPT 이미지는 "스튜디오" 하나로 묶고, 화면 안에서 전환한다 */
 const PAGES: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: 'main', label: '메인', icon: Image },
   { id: 'scene', label: '씬', icon: LayoutGrid },
   { id: 'director', label: '디렉터', icon: Wand2 },
   { id: 'library', label: '라이브러리', icon: Images },
-  { id: 'studio', label: '스튜디오', icon: Palette },
+  { id: 'gpt', label: 'GPT 이미지', icon: Sparkles },
   { id: 'inbox', label: '알림', icon: Bell }
 ]
 
@@ -30,12 +28,7 @@ export function PageNav(): React.JSX.Element {
     void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
   }, [])
   const visible = PAGES.filter(
-    (p) =>
-      (p.id !== 'inbox' || profile === 1) &&
-      (p.id === 'main' ||
-        (p.id === 'studio'
-          ? STUDIO_PAGES.some((s) => !hiddenPages.includes(s.id))
-          : !hiddenPages.includes(p.id)))
+    (p) => (p.id !== 'inbox' || profile === 1) && (p.id === 'main' || !hiddenPages.includes(p.id))
   )
   const navRef = useRef<HTMLElement>(null)
   const [boxes, setBoxes] = useState<Record<string, { x: number; w: number }>>({})
@@ -64,7 +57,7 @@ export function PageNav(): React.JSX.Element {
     const t = window.setTimeout(() => setAnimate(true), 50)
     return () => window.clearTimeout(t)
   }, [])
-  const activePage: Page = isStudioMode(centerMode) ? 'studio' : (centerMode as Page)
+  const activePage: Page = centerMode
   const pill = boxes[activePage]
 
   return (
@@ -89,11 +82,7 @@ export function PageNav(): React.JSX.Element {
           <button
             key={page.id}
             data-page={page.id}
-            onClick={() => {
-              if (page.id !== 'studio') return setCenterMode(page.id)
-              const target = lastStudioMode(hiddenPages)
-              if (target) setCenterMode(target)
-            }}
+            onClick={() => setCenterMode(page.id)}
             className={cn(
               'relative h-[34px] whitespace-nowrap rounded-[9px] px-4 text-[13px] font-semibold transition-colors',
               active ? 'text-ink' : 'text-muted hover:text-ink'

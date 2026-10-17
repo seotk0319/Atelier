@@ -21,7 +21,6 @@ import { useLayoutStore } from '../../stores/layout-store'
 import { toast } from '../../stores/toast-store'
 import { ImageContextMenu } from '../image-context-menu'
 import { Lightbox } from '../lightbox'
-import { StudioTabs } from '../studio-tabs'
 import { ContextMenuItem } from '../ui/context-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select'
 
@@ -42,7 +41,7 @@ export function GptView(): React.JSX.Element {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-surface">
       <div className="drag flex h-16 shrink-0 items-center gap-3 px-5">
-        <StudioTabs />
+        <h1 className="shrink-0 text-[22px] font-bold tracking-tight text-ink">GPT 이미지</h1>
         <div className="flex-1" />
         <LoginChip />
       </div>
