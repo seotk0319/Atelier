@@ -130,8 +130,8 @@ export function MetadataDialog(): React.JSX.Element {
                 {/* 모델은 표시만 (적용 대상 아님) */}
                 {meta.model && (
                   <div className="col-span-2 rounded-md border border-line bg-surface-2/40 px-2.5 py-1.5">
-                    <p className="text-[10.5px] text-faint">모델</p>
-                    <p className="truncate font-mono text-[12.5px] text-ink">{meta.model}</p>
+                    <p className="text-[11px] text-faint">모델</p>
+                    <p className="truncate font-mono text-[13px] text-ink">{meta.model}</p>
                   </div>
                 )}
               </div>
@@ -173,7 +173,7 @@ export function MetadataDialog(): React.JSX.Element {
                   >
                     {meta.characterPrompts.map((c, i) => (
                       <div key={i} className="rounded-md border border-line bg-surface-2/40 p-2">
-                        <p className="break-words font-mono text-[11.5px] text-ink">{c.prompt}</p>
+                        <p className="break-words font-mono text-[12px] text-ink">{c.prompt}</p>
                         {c.negativePrompt && (
                           <p className="mt-1 break-words font-mono text-[11px] text-faint">
                             uc: {c.negativePrompt}
@@ -229,7 +229,7 @@ function Part({ label, value }: { label: string; value: string }): React.JSX.Ele
   return (
     <div className="flex shrink-0 flex-col overflow-hidden rounded-md border border-line bg-surface-2/40 p-2">
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
-        <p className="text-[10.5px] font-medium text-faint">{label}</p>
+        <p className="text-[11px] font-medium text-faint">{label}</p>
         <CopyButton value={value} label={`${label} 복사`} />
       </div>
       <ReadonlyPrompt value={value} className="h-24 shrink-0 text-[12px]" />
@@ -291,7 +291,7 @@ function Field({
       <ReadonlyPrompt
         value={value}
         className={cn(
-          'rounded-md border border-line bg-surface-2/40 p-2 text-[12.5px]',
+          'rounded-md border border-line bg-surface-2/40 p-2 text-[13px]',
           grow ? 'min-h-[180px] flex-1' : 'h-36 shrink-0',
           !sel[k] && 'opacity-40'
         )}
@@ -368,8 +368,8 @@ function Stat({
         {checked && <Check size={11} strokeWidth={3} />}
       </span>
       <span className="min-w-0">
-        <span className="block text-[10.5px] text-faint">{label}</span>
-        <span className="block truncate font-mono text-[12.5px] text-ink">{value}</span>
+        <span className="block text-[11px] text-faint">{label}</span>
+        <span className="block truncate font-mono text-[13px] text-ink">{value}</span>
       </span>
     </button>
   )

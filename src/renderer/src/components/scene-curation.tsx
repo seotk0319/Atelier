@@ -270,12 +270,12 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     if (sceneId == null) return false
     const favorites = images.filter((i) => i.favorite)
     if (favorites.length === 0) {
-      toast('선별이 안되었습니다.', 'error')
+      toast('선별하지 못했어요.', 'error')
       return false
     }
     const targets = images.filter((i) => !i.favorite)
     if (targets.length === 0) {
-      toast('삭제할 이미지가 없습니다', 'info')
+      toast('삭제할 이미지가 없어요', 'info')
       return true
     }
     const { deleted } = await window.nais.invoke('scenes:deleteNonFavorites', { sceneId })
@@ -299,9 +299,9 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
         setImages([])
         setLoading(true)
         setSceneId(list[idx + 1].id)
-      } else toast('마지막 씬입니다', 'info')
+      } else toast('마지막 씬이에요', 'info')
     } catch {
-      toast('삭제에 실패했습니다. 현재 씬을 확인해주세요', 'error')
+      toast('삭제하지 못했어요. 지금 씬을 확인해 주세요', 'error')
     } finally {
       deletingRef.current = false
       setDeleting(false)
@@ -338,10 +338,10 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
         setSceneId(next.id)
         toast(`${deleted}장 모두 삭제됨 · 다음 씬으로 이동`, 'success')
       } else {
-        toast(`${deleted}장 모두 삭제됨 · 마지막 씬입니다`, 'info')
+        toast(`${deleted}장 모두 삭제됨 · 마지막 씬이에요`, 'info')
       }
     } catch {
-      toast('전체 삭제에 실패했습니다. 현재 씬을 확인해주세요', 'error')
+      toast('전체 삭제하지 못했어요. 지금 씬을 확인해 주세요', 'error')
     } finally {
       deletingRef.current = false
       setDeleting(false)
@@ -374,7 +374,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
       const st = parse01(refStrength)
       const fi = parse01(refFidelity)
       if (st === null || fi === null) {
-        toast('레퍼런스 강도/충실도는 0부터 1 사이 숫자여야 합니다', 'error')
+        toast('레퍼런스 강도/충실도는 0부터 1 사이 숫자여야 해요', 'error')
         return
       }
       extraCharRefs = [{ filePath: reference.filePath, refType, strength: st, fidelity: fi }]
@@ -382,7 +382,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
 
     const { hasToken } = await window.nais.invoke('nai:tokenStatus', undefined)
     if (!hasToken) {
-      toast('설정에서 NAI 토큰을 먼저 입력하세요', 'error')
+      toast('설정에서 NAI 토큰을 먼저 넣어 주세요', 'error')
       return
     }
 
@@ -408,7 +408,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
         }
       })
     } else {
-      toast('이미지 메타데이터가 없어 씬 프롬프트로 생성합니다', 'info')
+      toast('이미지 메타데이터가 없어서 씬 프롬프트로 생성해요', 'info')
     }
     const request: GenerationRequest = metadataRequest
       ? { ...metadataRequest, promptParts: undefined, extraCharRefs, sceneId: scene.id }
@@ -448,12 +448,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
             className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[12px]"
             title="끄면 기준 그림 칸을 숨기고 후보 이미지를 크게 봐요. 기준 그림과 레퍼런스 적용은 그대로예요."
           >
-            <input
-              type="checkbox"
-              className="size-3.5 accent-accent"
-              checked={showRef}
-              onChange={(e) => toggleShowRef(e.target.checked)}
-            />
+            <Switch checked={showRef} onCheckedChange={toggleShowRef} />
             기준 그림
           </label>
           <div className="h-5 w-px shrink-0 bg-line" />
@@ -466,7 +461,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
               레퍼런스 적용
             </label>
             <span
-              className="max-w-44 truncate rounded-md bg-surface-2 px-2 py-0.5 text-[11.5px] text-muted"
+              className="max-w-44 truncate rounded-md bg-surface-2 px-2 py-0.5 text-[12px] text-muted"
               title={reference?.sceneName}
             >
               {reference ? reference.sceneName : '기준 없음'}
@@ -483,7 +478,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                 ))}
               </SelectContent>
             </Select>
-            <label className="flex shrink-0 items-center gap-1 text-[11.5px] text-muted">
+            <label className="flex shrink-0 items-center gap-1 text-[12px] text-muted">
               강도
               <Input
                 type="number"
@@ -499,7 +494,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                 }}
               />
             </label>
-            <label className="flex shrink-0 items-center gap-1 text-[11.5px] text-muted">
+            <label className="flex shrink-0 items-center gap-1 text-[12px] text-muted">
               충실도
               <Input
                 type="number"
@@ -518,8 +513,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
           </div>
           <Button
             size="sm"
-            variant="ghost"
-            className="shrink-0 gap-1 text-danger hover:text-danger"
+            variant="danger"
+            className="shrink-0 gap-1"
             disabled={
               images.length === 0 || loading || deleting || loadedSceneId.current !== sceneId
             }
@@ -585,7 +580,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
               }}
             >
               <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-                <span className="text-[12.5px] font-medium">기준 그림</span>
+                <span className="text-[13px] font-medium">기준 그림</span>
                 {reference && (
                   <button
                     className="ml-auto grid size-5 place-items-center rounded text-faint hover:text-danger"
@@ -634,7 +629,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                     <Loader2 size={30} className="animate-spin" />
                   </div>
                 )}
-                <span className="absolute left-2 top-2 rounded-full bg-accent px-2.5 py-1 text-[11.5px] font-medium text-white shadow">
+                <span className="absolute left-2 top-2 rounded-full bg-accent px-2.5 py-1 text-[12px] font-medium text-white shadow">
                   인페인트 생성 중
                   {jobProgress ? ` ${jobProgress.stepIx}/${jobProgress.totalSteps}` : '…'}
                 </span>
@@ -714,7 +709,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
               </>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-faint">
-                {loading ? '불러오는 중…' : '이 씬에는 생성된 이미지가 없습니다'}
+                {loading ? '불러오는 중…' : '이 씬에는 아직 그림이 없어요'}
                 {!loading && scene && (
                   <GenerateHereButton live={liveForScene} onClick={generateHere} inline />
                 )}
@@ -725,9 +720,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
           {/* 우: 씬 목록 + 이미지 목록 */}
           <div className="flex min-h-96 flex-col gap-3 lg:min-h-0">
             <div className="flex max-h-[38%] min-h-28 flex-col overflow-hidden rounded-lg border border-line bg-surface">
-              <div className="border-b border-line px-3 py-2 text-[12.5px] font-medium">
-                씬 목록
-              </div>
+              <div className="border-b border-line px-3 py-2 text-[13px] font-medium">씬 목록</div>
               <div className="min-h-0 flex-1 overflow-y-auto p-1">
                 {scenes.map((s) => (
                   <button
@@ -737,7 +730,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                       if (!deletingRef.current) setSceneId(s.id)
                     }}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-surface-2',
+                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-surface-2',
                       s.id === sceneId && 'bg-surface-2 font-semibold text-accent'
                     )}
                   >
@@ -751,7 +744,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-surface">
               <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-                <span className="text-[12.5px] font-medium">이미지 목록</span>
+                <span className="text-[13px] font-medium">이미지 목록</span>
                 <span className="ml-auto text-[11px] text-faint">
                   선별 {images.filter((i) => i.favorite).length} / {images.length}
                 </span>
@@ -828,14 +821,14 @@ function GenerateHereButton({
   return (
     <Button
       size="sm"
-      variant="accent"
+      variant="tint"
       className={cn('gap-1.5', !inline && 'absolute right-2 top-1/2 -translate-y-1/2')}
       onClick={onClick}
       title="이 씬을 지금 설정으로 1장 더 생성해요. 누를 때마다 1장씩, 예약보다 먼저 뽑아요."
     >
       <ImagePlus size={14} /> 1장 생성
       {live > 0 && (
-        <span className="rounded-full bg-white/25 px-1.5 text-[11px] tabular-nums">{live}</span>
+        <span className="rounded-full bg-accent/15 px-1.5 text-[11px] tabular-nums">{live}</span>
       )}
     </Button>
   )
@@ -972,7 +965,7 @@ function InpaintPanel({
   function handleGenerate(): void {
     const { mask, hasAny } = exportMask()
     if (!hasAny) {
-      toast('재생성할 영역을 먼저 칠하세요', 'error')
+      toast('다시 그릴 곳을 먼저 칠해 주세요', 'error')
       return
     }
     void onGenerate(mask, strength)
@@ -1064,7 +1057,7 @@ function InpaintPanel({
         />
         <div className="flex-1" />
         <Button size="sm" variant="ghost" onClick={onCancel}>
-          취소
+          닫기
         </Button>
         <Button
           size="sm"

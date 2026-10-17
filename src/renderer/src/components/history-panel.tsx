@@ -27,7 +27,7 @@ export function HistoryPanel(): React.JSX.Element {
   const deleteOne = async (id: number, filePath: string): Promise<void> => {
     if (historyDeleteFile) {
       const ok = await askConfirm('파일까지 영구 삭제', {
-        message: '히스토리 기록과 저장된 이미지 파일을 함께 삭제합니다.',
+        message: '히스토리 기록과 저장한 이미지 파일을 함께 삭제해요.',
         confirmLabel: '영구 삭제',
         danger: true
       })
@@ -41,8 +41,8 @@ export function HistoryPanel(): React.JSX.Element {
   const clearAll = async (): Promise<void> => {
     const ok = await askConfirm('히스토리 전체 비우기', {
       message: historyDeleteFile
-        ? `생성 기록 ${historyTotal.toLocaleString()}개와 저장된 이미지 파일을 모두 영구 삭제합니다.`
-        : `생성 기록 ${historyTotal.toLocaleString()}개를 비웁니다. 저장 폴더의 이미지 파일은 보존됩니다.`,
+        ? `생성 기록 ${historyTotal.toLocaleString()}개와 저장한 이미지 파일을 모두 영구 삭제해요.`
+        : `생성 기록 ${historyTotal.toLocaleString()}개를 비워요. 저장 폴더의 이미지 파일은 남겨요.`,
       confirmLabel: '전체 비우기',
       danger: true
     })
@@ -61,7 +61,7 @@ export function HistoryPanel(): React.JSX.Element {
   }
 
   return (
-    <aside className="flex h-full w-[240px] flex-col rounded-2xl bg-surface">
+    <aside className="flex h-full w-[240px] flex-col rounded-xl bg-surface">
       {/* 헤더는 창 드래그 영역 */}
       <div className="drag flex h-14 shrink-0 items-center gap-2 px-4">
         <History size={15} className="text-muted" />
@@ -93,8 +93,9 @@ export function HistoryPanel(): React.JSX.Element {
               >
                 <button
                   className={cn(
-                    'group relative aspect-square overflow-hidden rounded-[10px] bg-paper transition-all',
-                    viewingFilePath === item.filePath && 'ring-2 ring-accent ring-offset-2 ring-offset-surface'
+                    'group relative aspect-square overflow-hidden rounded-lg bg-paper transition-all',
+                    viewingFilePath === item.filePath &&
+                      'ring-2 ring-accent ring-offset-2 ring-offset-surface'
                   )}
                   title={`seed ${item.seed ?? '?'}`}
                   onClick={() => {

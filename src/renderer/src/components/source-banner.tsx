@@ -29,7 +29,9 @@ export function SourceBanner(): React.JSX.Element | null {
       {/* 제목바 */}
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line bg-surface-2/50 px-2.5">
         <Icon size={15} className={className} />
-        <span className="text-[12.5px] font-medium text-ink">{isInpaint ? '인페인트 모드' : 'I2I 모드'}</span>
+        <span className="text-[13px] font-medium text-ink">
+          {isInpaint ? '인페인트 모드' : 'I2I 모드'}
+        </span>
         <div className="flex-1" />
         <button
           className="grid size-6 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
@@ -66,7 +68,12 @@ export function SourceBanner(): React.JSX.Element | null {
 
       {/* 파라미터 — 이미지 여백과 같은 배경색으로 이어지게. i2i·인페인트 모두 strength/noise 사용 */}
       <div className="flex flex-col gap-1.5 bg-surface-2 px-2.5 py-2">
-        <ParamRow label="Strength" value={strength} onChange={(v) => patch({ i2iStrength: v })} min={0.01} />
+        <ParamRow
+          label="Strength"
+          value={strength}
+          onChange={(v) => patch({ i2iStrength: v })}
+          min={0.01}
+        />
         <ParamRow label="Noise" value={noise} onChange={(v) => patch({ i2iNoise: v })} min={0} />
       </div>
     </div>
@@ -87,7 +94,7 @@ function ParamRow({
   const step = 0.01
   return (
     <div className="flex items-center gap-2">
-      <span className="w-14 shrink-0 text-[11.5px] text-muted">{label}</span>
+      <span className="w-14 shrink-0 text-[12px] text-muted">{label}</span>
       <button
         className="grid size-5 shrink-0 place-items-center rounded text-muted hover:bg-surface-2 hover:text-ink"
         onClick={() => onChange(Math.max(min, Math.round((value - step) * 100) / 100))}
@@ -108,7 +115,9 @@ function ParamRow({
       >
         <Plus size={12} />
       </button>
-      <span className="w-8 shrink-0 text-right font-mono text-[11.5px] text-ink">{value.toFixed(2)}</span>
+      <span className="w-8 shrink-0 text-right font-mono text-[12px] text-ink">
+        {value.toFixed(2)}
+      </span>
     </div>
   )
 }

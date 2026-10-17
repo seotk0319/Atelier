@@ -149,7 +149,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
   }, [scene.id, images.length, imagesTotal, imagesLoading, loadImages])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-surface">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
       {/* 헤더 */}
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <Button size="sm" variant="ghost" className="gap-1" onClick={() => select(null)}>
@@ -206,7 +206,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
       {source && (
         <p className="border-b border-line bg-surface-2 px-3 py-1 text-[11px] text-muted">
           i2i/인페인트 소스가 설정돼 있어 씬 해상도 대신 소스 해상도({source.width}×{source.height}
-          )로 생성됩니다.
+          )로 생성돼요.
         </p>
       )}
 
@@ -239,7 +239,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
           <button
             onClick={() => setFavoritesOnly(!favoritesOnly)}
             className={cn(
-              'flex h-6 items-center gap-1 rounded-md px-2 text-[11.5px] font-medium transition-colors',
+              'flex h-6 items-center gap-1 rounded-md px-2 text-[12px] font-medium transition-colors',
               favoritesOnly
                 ? 'bg-amber-400/90 text-black'
                 : 'bg-surface-2 text-muted hover:text-ink'
@@ -253,18 +253,18 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
             onClick={async () => {
               const ok = await askConfirm('즐겨찾기 제외 삭제', {
                 message:
-                  '이 씬에서 즐겨찾기하지 않은 이미지를 모두 삭제합니다 (파일 포함). 되돌릴 수 없습니다.',
+                  '이 씬에서 즐겨찾기하지 않은 이미지를 모두 삭제해요 (파일 포함). 되돌릴 수 없어요.',
                 confirmLabel: '삭제',
                 danger: true
               })
               if (!ok) return
               const n = await deleteNonFavorites(scene.id)
               toast(
-                n > 0 ? `${n.toLocaleString()}장 삭제됨` : '삭제할 이미지가 없습니다',
+                n > 0 ? `${n.toLocaleString()}장 삭제됨` : '삭제할 이미지가 없어요',
                 n > 0 ? 'success' : 'info'
               )
             }}
-            className="flex h-6 items-center gap-1 rounded-md bg-surface-2 px-2 text-[11.5px] font-medium text-muted transition-colors hover:text-danger"
+            className="flex h-6 items-center gap-1 rounded-md bg-surface-2 px-2 text-[12px] font-medium text-muted transition-colors hover:text-danger"
             title="즐겨찾기 제외 전체 삭제"
           >
             <Trash2 size={12} /> 정리
@@ -288,8 +288,8 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
         {images.length === 0 && !imagesLoading && !streaming ? (
           <p className="py-10 text-center text-[13px] text-faint">
             {favoritesOnly
-              ? '즐겨찾기한 이미지가 없습니다.'
-              : '아직 생성된 이미지가 없습니다. 위에서 예약(+)하고 좌측 생성 버튼을 누르세요.'}
+              ? '즐겨찾기한 이미지가 없어요.'
+              : '아직 그림이 없어요. 위에서 예약(+)하고 왼쪽 생성 버튼을 눌러 주세요.'}
           </p>
         ) : (
           <div
@@ -320,7 +320,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
                   </div>
                 )}
                 {streaming && (
-                  <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white">
                     생성 중…
                   </span>
                 )}

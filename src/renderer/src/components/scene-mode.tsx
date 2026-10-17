@@ -60,6 +60,7 @@ import { formatEta, useQueueRun } from '../lib/queue-run'
 import { PresetManager } from './preset-manager'
 import { SortableList, SortableRow } from './sortable-list'
 import { Button } from './ui/button'
+import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
 import { EditableCount } from './ui/editable-count'
 import {
   ContextMenu,
@@ -152,7 +153,7 @@ function PresetDropdown(): React.JSX.Element {
                       // 바인드 표시 겸 편집 진입점. 반드시 <button> — SortableRow의 onTap(행 선택)이
                       // button/input에서 시작한 클릭만 제외하므로, span이면 행 선택으로 먹혀버린다
                       <button
-                        className="flex shrink-0 cursor-pointer items-center gap-0.5 rounded-full bg-accent/12 px-1.5 py-0.5 text-[10px] font-medium text-accent hover:bg-accent/25"
+                        className="flex shrink-0 cursor-pointer items-center gap-0.5 rounded-full bg-accent/12 px-1.5 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/25"
                         title="캐릭터 바인드됨 — 클릭해서 편집"
                         onClick={(e) => {
                           e.stopPropagation()
@@ -188,7 +189,7 @@ function PresetDropdown(): React.JSX.Element {
                       onClick={async () => {
                         if (
                           await askConfirm('프리셋 삭제', {
-                            message: `"${p.name}" 프리셋과 그 안의 씬을 모두 삭제합니다.`,
+                            message: `"${p.name}" 프리셋과 그 안의 씬을 모두 삭제해요.`,
                             confirmLabel: '삭제',
                             danger: true
                           })
@@ -264,12 +265,12 @@ function PresetCharacterDialog({
         <DialogTitle className="mb-1">캐릭터 바인드 — {preset.name}</DialogTitle>
         <p className="mb-3 text-[12px] text-muted">
           바인드하면 이 프리셋의 씬을 생성할 때 사이드바에서 켜둔 캐릭터 대신 아래 캐릭터로
-          생성됩니다. 비우면 기존처럼 사이드바 캐릭터를 사용합니다.
+          생성돼요. 비우면 기존처럼 사이드바 캐릭터를 써요.
         </p>
         <div className="max-h-80 space-y-1 overflow-y-auto">
           {characters.length === 0 && (
             <p className="py-6 text-center text-[12px] text-faint">
-              캐릭터 라이브러리가 비어 있습니다
+              캐릭터 라이브러리가 비어 있어요
             </p>
           )}
           {characters.map((c) => {
@@ -289,7 +290,7 @@ function PresetCharacterDialog({
                     checked ? 'border-accent bg-accent text-white' : 'border-line'
                   )}
                 >
-                  {checked && <span className="text-[9px] leading-none">✓</span>}
+                  {checked && <span className="text-[11px] leading-none">✓</span>}
                 </span>
                 {c.thumbnail ? (
                   <img
@@ -307,7 +308,7 @@ function PresetCharacterDialog({
                     {c.name || c.prompt.slice(0, 30) || '빈 캐릭터'}
                   </span>
                   {c.name && c.prompt && (
-                    <span className="block truncate font-mono text-[10.5px] text-faint">
+                    <span className="block truncate font-mono text-[11px] text-faint">
                       {c.prompt}
                     </span>
                   )}
@@ -332,7 +333,7 @@ function PresetCharacterDialog({
           )}
           <div className="flex-1" />
           <Button variant="ghost" onClick={onClose}>
-            취소
+            닫기
           </Button>
           <Button variant="accent" onClick={save}>
             저장 ({selected.size})
@@ -649,7 +650,7 @@ function SceneGrid(): React.JSX.Element {
         void useScenesStore.getState().load()
       }
     } else {
-      toast('가져올 씬이 없습니다', 'info')
+      toast('가져올 씬이 없어요', 'info')
     }
   }
   async function exportZip(): Promise<void> {
@@ -657,41 +658,36 @@ function SceneGrid(): React.JSX.Element {
   }
   async function openPresetFolder(): Promise<void> {
     const { ok } = await window.nais.invoke('scenePresets:openFolder', { id: activePresetId })
-    if (!ok) toast('활성 씬 프리셋 폴더를 열 수 없습니다', 'error')
+    if (!ok) toast('활성 씬 프리셋 폴더를 열지 못했어요', 'error')
   }
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-surface">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
       {curationOpen ? (
         <SceneCuration onClose={() => setCurationOpen(false)} />
       ) : (
         <>
           {/* 머리줄: 제목 · 프리셋 · 도구 */}
           <div className="flex min-w-0 items-center gap-2.5 px-5 pb-3 pt-4">
-            <h1 className="shrink-0 text-[22px] font-bold tracking-tight text-ink">씬</h1>
+            <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">씬</h1>
             <PresetDropdown />
             <div className="min-w-2 flex-1" />
-            <Button variant="ghost" className="h-9 shrink-0 bg-paper px-3" onClick={importJson}>
-              <FileDown size={15} /> 불러오기
-            </Button>
             <Button
-              variant="ghost"
-              className="h-9 shrink-0 bg-paper px-3"
-              onClick={() => void openPresetFolder()}
+              className="h-9 shrink-0 px-3"
+              disabled={scenes.length === 0 || queueBusy}
+              onClick={() => setCurationOpen(true)}
+              title="씬마다 그림을 보고 고르기"
             >
-              <FolderOpen size={15} /> 폴더
+              <ListChecks size={15} /> 선별
+            </Button>
+            <Button className="h-9 shrink-0 px-3" onClick={importJson}>
+              <FileDown size={15} /> 불러오기
             </Button>
             <IconBtn
               icon={<Pencil size={16} />}
               tip="편집 모드 (여러 씬 선택)"
               active={editMode}
               onClick={() => setEditMode(!editMode)}
-            />
-            <IconBtn
-              icon={<ListChecks size={16} />}
-              tip="선별 작업"
-              disabled={scenes.length === 0 || queueBusy}
-              onClick={() => setCurationOpen(true)}
             />
             <Popover>
               <PopoverTrigger asChild>
@@ -702,7 +698,12 @@ function SceneGrid(): React.JSX.Element {
                   <MoreHorizontal size={17} />
                 </button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-52 p-1">
+              <PopoverContent align="end" className="w-60 p-1">
+                <MenuItem
+                  icon={<FolderOpen size={13} />}
+                  label="폴더 열기"
+                  onClick={() => void openPresetFolder()}
+                />
                 <MenuItem
                   icon={<FileUp size={13} />}
                   label="씬 JSON 내보내기"
@@ -730,23 +731,23 @@ function SceneGrid(): React.JSX.Element {
                   label={(cardOrientation === 'square' ? '✓ ' : '') + '정사각'}
                   onClick={() => setCardOrientation('square')}
                 />
+                <div className="my-1 h-px bg-line" />
+                <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
+                  <span>열 개수</span>
+                  <Segmented
+                    size="sm"
+                    value={String(columns)}
+                    onValueChange={(v) => v && setColumns(Number(v))}
+                  >
+                    {[2, 3, 4, 5].map((n) => (
+                      <SegmentedItem key={n} value={String(n)}>
+                        {n}
+                      </SegmentedItem>
+                    ))}
+                  </Segmented>
+                </div>
               </PopoverContent>
             </Popover>
-            {/* 열 수 (2~5) */}
-            <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-paper p-0.5">
-              {[2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setColumns(n)}
-                  className={cn(
-                    'grid h-8 w-8 place-items-center rounded-md text-[12px] font-semibold transition-colors',
-                    columns === n ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-ink'
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
           </div>
 
           <RunProgress />
@@ -754,25 +755,20 @@ function SceneGrid(): React.JSX.Element {
 
           {/* 요약 줄: 씬 개수와 이미지 장수를 나눠 보여주고, 씬마다 몇 장씩 뽑을지 정한다 */}
           <div className="flex min-w-0 flex-wrap items-center gap-2 px-5 pb-4">
-            {(
-              [
-                ['all', '전체 씬', scenes.length],
-                ['empty', '이미지 없음', stats.empty],
-                ['reserved', '예약됨', stats.reservedScenes]
-              ] as const
-            ).map(([key, label, count]) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={cn(
-                  'flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold transition-colors',
-                  filter === key ? 'bg-ink text-paper' : 'bg-paper text-muted hover:text-ink'
-                )}
-              >
-                {label}
-                <span className="tabular-nums opacity-60">{count.toLocaleString()}</span>
-              </button>
-            ))}
+            <Segmented value={filter} onValueChange={(v) => v && setFilter(v as typeof filter)}>
+              {(
+                [
+                  ['all', '전체 씬', scenes.length],
+                  ['empty', '이미지 없음', stats.empty],
+                  ['reserved', '예약됨', stats.reservedScenes]
+                ] as const
+              ).map(([key, label, count]) => (
+                <SegmentedItem key={key} value={key}>
+                  {label}
+                  <SegmentedCount>{count.toLocaleString()}</SegmentedCount>
+                </SegmentedItem>
+              ))}
+            </Segmented>
             <span className="ml-1 text-[12px] tabular-nums text-muted">
               이미지 <b className="font-semibold text-ink">{stats.images.toLocaleString()}</b>장
               {stats.reserved > 0 && (
@@ -807,7 +803,7 @@ function SceneGrid(): React.JSX.Element {
               />
               장
               <Button
-                variant="accent"
+                variant="tint"
                 className="ml-1 h-7 rounded-md px-2.5 text-[12px]"
                 disabled={targetEmpty}
                 onClick={() => void setReserveAll(perScene, reserveTarget.ids)}
@@ -1020,7 +1016,7 @@ function BulkBar(): React.JSX.Element {
         onClick={async () => {
           if (
             await askConfirm('이미지 비우기', {
-              message: `선택한 ${n}개 씬의 생성 이미지를 모두 삭제합니다. 되돌릴 수 없습니다.`,
+              message: `선택한 ${n}개 씬의 생성 이미지를 모두 삭제해요. 되돌릴 수 없어요.`,
               confirmLabel: '비우기',
               danger: true
             })
@@ -1038,7 +1034,7 @@ function BulkBar(): React.JSX.Element {
         onClick={async () => {
           if (
             await askConfirm('씬 삭제', {
-              message: `선택한 ${n}개 씬을 삭제합니다.`,
+              message: `선택한 ${n}개 씬을 삭제해요.`,
               confirmLabel: '삭제',
               danger: true
             })
@@ -1133,12 +1129,12 @@ function SceneCardBody({
   }
   const openFolder = async (): Promise<void> => {
     const { ok } = await window.nais.invoke('scenes:openFolder', { sceneId: scene.id })
-    if (!ok) toast('아직 생성된 이미지 폴더가 없습니다', 'info')
+    if (!ok) toast('아직 생성한 이미지 폴더가 없어요', 'info')
   }
   const removeScene = async (): Promise<void> => {
     if (
       await askConfirm('씬 삭제', {
-        message: `"${scene.name}" 씬을 삭제합니다.`,
+        message: `"${scene.name}" 씬을 삭제해요.`,
         confirmLabel: '삭제',
         danger: true
       })
@@ -1451,7 +1447,7 @@ function QuickTray({
     if (ids.length) void window.nais.invoke('queue:cancel', { ids })
   }
   return (
-    <div className="absolute inset-x-5 bottom-4 z-20 flex items-center gap-4 rounded-2xl bg-surface/95 py-3 pl-5 pr-3.5 shadow-[0_10px_34px_rgba(30,30,70,0.16)] ring-1 ring-line backdrop-blur">
+    <div className="absolute inset-x-5 bottom-4 z-20 flex items-center gap-4 rounded-xl bg-surface/95 py-3 pl-5 pr-3.5 shadow-[0_10px_34px_rgba(30,30,70,0.16)] ring-1 ring-line backdrop-blur">
       <div className="shrink-0 whitespace-nowrap">
         <div className="text-[14px] font-bold text-ink">
           바로 뽑기 <span className="text-accent">{items.length.toLocaleString()}장</span>
@@ -1472,7 +1468,7 @@ function QuickTray({
             <div key={it.id} className="group/q relative w-12 shrink-0" title={sc?.name}>
               <div
                 className={cn(
-                  'size-12 overflow-hidden rounded-[10px] bg-paper',
+                  'size-12 overflow-hidden rounded-lg bg-paper',
                   running && 'ring-2 ring-accent'
                 )}
               >
@@ -1486,7 +1482,7 @@ function QuickTray({
               </div>
               <span
                 className={cn(
-                  'absolute -left-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-extrabold text-white ring-2 ring-surface',
+                  'absolute -left-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[11px] font-extrabold text-white ring-2 ring-surface',
                   running ? 'bg-accent dark:text-paper' : 'bg-ink dark:text-paper'
                 )}
               >
@@ -1501,7 +1497,7 @@ function QuickTray({
                   <X size={11} strokeWidth={2.6} />
                 </button>
               )}
-              <div className="mt-1 truncate text-center text-[10px] text-faint">{label}</div>
+              <div className="mt-1 truncate text-center text-[11px] text-faint">{label}</div>
             </div>
           )
         })}

@@ -84,7 +84,7 @@ function AnlasStat({
       <span className="font-semibold tabular-nums text-ink">{balance.toLocaleString()}</span>
       {cost > 0 && (
         <span
-          className="rounded-md bg-danger/12 px-1.5 text-[11.5px] font-semibold tabular-nums text-danger"
+          className="rounded-md bg-danger/12 px-1.5 text-[12px] font-semibold tabular-nums text-danger"
           title="이번 생성에 소모될 Anlas (고해상도 · 캐릭터 레퍼런스 · 미인코딩 바이브 포함)"
         >
           -{cost}
@@ -235,7 +235,7 @@ export function Titlebar(): React.JSX.Element {
         </span>
         <UpdateButton />
         {(anlasBalance !== null || v5Usage) && (
-          <div className="no-drag ml-2 flex h-9 min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap rounded-xl bg-surface px-3 text-[12.5px]">
+          <div className="no-drag ml-2 flex h-9 min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap rounded-xl bg-surface px-3 text-[13px]">
             <AnlasStat balance={anlasBalance} cost={anlasCost} />
             {anlasBalance !== null && v5Usage && <span className="h-3.5 w-px shrink-0 bg-line" />}
             <V5UsageStat usage={v5Usage} model={request.model} />

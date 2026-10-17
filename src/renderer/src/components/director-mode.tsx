@@ -34,6 +34,7 @@ import { DropOverlay } from './drop-overlay'
 import { MosaicEditor } from './mosaic-editor'
 import { StyleRestoreCard } from './style-restore-card'
 import { Button } from './ui/button'
+import { Segmented, SegmentedItem } from './ui/segmented'
 import { Input } from './ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Slider } from './ui/slider'
@@ -48,12 +49,44 @@ const TOOLS: {
   color: string
   opt?: Opt
 }[] = [
-  { method: 'bg-removal', label: '배경 제거', desc: '캐릭터만 남기고 배경을 투명하게', icon: Eraser, color: 'text-rose-400' },
+  {
+    method: 'bg-removal',
+    label: '배경 제거',
+    desc: '캐릭터만 남기고 배경을 투명하게',
+    icon: Eraser,
+    color: 'text-rose-400'
+  },
   { method: 'lineart', label: '라인아트', desc: '선화 추출', icon: PenTool, color: 'text-sky-400' },
-  { method: 'sketch', label: '스케치', desc: '스케치풍으로 변환', icon: Pencil, color: 'text-amber-400' },
-  { method: 'colorize', label: '색칠', desc: '선화를 채색 (프롬프트로 유도)', icon: Droplets, color: 'text-emerald-400', opt: 'colorize' },
-  { method: 'emotion', label: '표정 변경', desc: '얼굴 표정을 교체', icon: Smile, color: 'text-fuchsia-400', opt: 'emotion' },
-  { method: 'declutter', label: '이미지 정리', desc: '워터마크·잡요소 제거', icon: Sparkles, color: 'text-violet-400' },
+  {
+    method: 'sketch',
+    label: '스케치',
+    desc: '스케치풍으로 변환',
+    icon: Pencil,
+    color: 'text-amber-400'
+  },
+  {
+    method: 'colorize',
+    label: '색칠',
+    desc: '선화를 채색 (프롬프트로 유도)',
+    icon: Droplets,
+    color: 'text-emerald-400',
+    opt: 'colorize'
+  },
+  {
+    method: 'emotion',
+    label: '표정 변경',
+    desc: '얼굴 표정을 교체',
+    icon: Smile,
+    color: 'text-fuchsia-400',
+    opt: 'emotion'
+  },
+  {
+    method: 'declutter',
+    label: '이미지 정리',
+    desc: '워터마크·잡요소 제거',
+    icon: Sparkles,
+    color: 'text-violet-400'
+  },
   {
     method: 'declutter-keep-bubbles',
     label: '정리 (말풍선 유지)',
@@ -136,7 +169,7 @@ export function DirectorMode(): React.JSX.Element {
     const result = await window.nais.invoke('censor:pickFolder', undefined)
     if (result.canceled) return
     if (result.filePaths.length === 0) {
-      toast('선택한 폴더에 지원 이미지가 없습니다', 'info')
+      toast('선택한 폴더에 쓸 수 있는 이미지가 없어요', 'info')
       return
     }
     openCensorBatch(result.folderPath, result.filePaths)
@@ -147,7 +180,7 @@ export function DirectorMode(): React.JSX.Element {
       {/* 캔버스 */}
       <div
         className={cn(
-          'relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border bg-surface',
+          'relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-xl border bg-surface',
           dragOver ? 'border-accent' : 'border-transparent'
         )}
         onDragOver={(e) => {
@@ -177,7 +210,12 @@ export function DirectorMode(): React.JSX.Element {
       >
         {shown ? (
           <>
-            <img src={shown} className="h-full w-full object-contain p-2" draggable={false} alt="" />
+            <img
+              src={shown}
+              className="h-full w-full object-contain p-2"
+              draggable={false}
+              alt=""
+            />
             {isResult && (
               <span className="absolute left-3 top-3 rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-medium text-white">
                 결과
@@ -185,7 +223,13 @@ export function DirectorMode(): React.JSX.Element {
             )}
             {/* 하단 컨트롤 */}
             <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-paper/85 p-1 backdrop-blur">
-              <Button size="icon" variant="ghost" className="rounded-full" title="지우기" onClick={clear}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="rounded-full"
+                title="지우기"
+                onClick={clear}
+              >
                 <X size={16} />
               </Button>
               <Button
@@ -220,8 +264,10 @@ export function DirectorMode(): React.JSX.Element {
             onClick={() => fileRef.current?.click()}
           >
             <Upload size={44} strokeWidth={1.2} className="opacity-40" />
-            <p className="text-[14px] font-medium">이미지를 열거나 드래그하세요</p>
-            <p className="text-[12px] opacity-60">히스토리 이미지를 우클릭해 바로 보낼 수도 있어요</p>
+            <p className="text-[14px] font-medium">이미지를 열거나 끌어다 놓아 주세요</p>
+            <p className="text-[12px] opacity-60">
+              히스토리 이미지를 우클릭해 바로 보낼 수도 있어요
+            </p>
           </div>
         )}
 
@@ -236,7 +282,7 @@ export function DirectorMode(): React.JSX.Element {
         <DropOverlay
           show={dragOver && !!shown}
           icon={Wand2}
-          label="여기 놓으면 이 이미지로 교체합니다"
+          label="여기 놓으면 이 이미지로 바꿔요"
           sub="디렉터 툴로 새 이미지 열기"
         />
 
@@ -254,14 +300,14 @@ export function DirectorMode(): React.JSX.Element {
       </div>
 
       {/* 툴 패널 */}
-      <div className="flex w-[320px] shrink-0 flex-col overflow-hidden rounded-2xl bg-surface">
+      <div className="flex w-[320px] shrink-0 flex-col overflow-hidden rounded-xl bg-surface">
         <div className="flex items-center gap-2 px-4 pb-2 pt-4">
           <Wand2 size={17} className="text-accent" />
-          <h2 className="text-[16px] font-bold">디렉터 도구</h2>
+          <h2 className="text-[15px] font-bold">디렉터 도구</h2>
           <Button
             size="sm"
             variant="ghost"
-            className="ml-auto gap-1.5 text-red-300"
+            className="ml-auto gap-1.5"
             onClick={() => void openCensorFolder()}
             title="폴더 전체 이미지를 검열하기"
           >
@@ -275,9 +321,9 @@ export function DirectorMode(): React.JSX.Element {
             </p>
           )}
           {/* i2i·인페인트 — 여기서 시작하면 메인 페이지로 이동 */}
+          <GroupLabel>메인으로 보내기</GroupLabel>
           <SendToMainCard
             icon={ImageIcon}
-            color="text-indigo-400"
             label="I2I"
             desc="이 이미지로 img2img (메인으로)"
             disabled={!source}
@@ -285,13 +331,12 @@ export function DirectorMode(): React.JSX.Element {
           />
           <SendToMainCard
             icon={Layers}
-            color="text-pink-400"
             label="인페인트"
             desc="마스크 칠해 부분 재생성 (메인으로)"
             disabled={!source}
             onRun={() => sendToMain('inpaint')}
           />
-          <div className="!my-3 h-px bg-line" />
+          <GroupLabel>보정</GroupLabel>
           <UpscaleCard disabled={!source || loading} cost={toolCosts?.upscale ?? null} />
           {TOOLS.map((tool) => (
             <ToolCard
@@ -305,11 +350,10 @@ export function DirectorMode(): React.JSX.Element {
               }
             />
           ))}
-          <div className="!my-3 h-px bg-line" />
+          <GroupLabel>로컬 도구</GroupLabel>
           {/* 로컬 툴 — API/Anlas 안 씀 */}
           <SendToMainCard
             icon={Grid3x3}
-            color="text-orange-400"
             label="모자이크"
             desc="브러시로 칠해 픽셀화 (로컬·무료)"
             disabled={!source || loading}
@@ -321,7 +365,6 @@ export function DirectorMode(): React.JSX.Element {
           {/* Anlas는 안 쓰지만 외부(HF Space) 호출 — 인터넷 필요 */}
           <SendToMainCard
             icon={Palette}
-            color="text-teal-400"
             label="작가 태그 분석"
             desc="그림체 닮은 작가 태그 추출 (Kaloscope·무료)"
             disabled={!source || loading}
@@ -329,7 +372,7 @@ export function DirectorMode(): React.JSX.Element {
               if (source) void useArtistTagsStore.getState().show({ base64: source })
             }}
           />
-          <div className="!my-3 h-px bg-line" />
+          <GroupLabel>그림체</GroupLabel>
           <StyleRestoreCard />
         </div>
       </div>
@@ -350,15 +393,24 @@ export function DirectorMode(): React.JSX.Element {
   )
 }
 
+/** 도구 아이콘 — 한 가지 색(회색 상자)으로 통일. 색으로 도구를 구분하지 않는다 */
+function ToolIcon({ icon: Icon }: { icon: LucideIcon }): React.JSX.Element {
+  return (
+    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted transition-colors group-hover:bg-surface group-hover:text-ink">
+      <Icon size={16} />
+    </span>
+  )
+}
+
 /** 예상 Anlas 칩 — 0=무료(초록), >0=빨간 -N */
 function CostChip({ cost }: { cost: number | null }): React.JSX.Element | null {
   if (cost == null) return null
   return cost === 0 ? (
-    <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-500">
+    <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-500">
       무료
     </span>
   ) : (
-    <span className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 font-mono text-[10px] font-medium text-danger">
+    <span className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 font-mono text-[11px] font-medium text-danger">
       -{cost}
     </span>
   )
@@ -400,18 +452,21 @@ function ToolCard({
       aria-disabled={disabled}
       onClick={() => !disabled && onRun()}
       className={cn(
-        'group rounded-xl bg-paper p-3 transition-colors',
+        'group rounded-lg bg-paper p-3 transition-colors',
         disabled ? 'opacity-60' : 'cursor-pointer hover:bg-surface-2'
       )}
     >
       <div className={cn('flex items-center gap-2.5', hasOpt && 'mb-2')}>
-        <Icon size={18} className={tool.color} />
+        <ToolIcon icon={Icon} />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">{tool.label}</p>
           <p className="truncate text-[11px] text-faint">{tool.desc}</p>
         </div>
         <CostChip cost={cost} />
-        <ChevronRight size={16} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+        <ChevronRight
+          size={16}
+          className="shrink-0 text-faint transition-colors group-hover:text-accent"
+        />
       </div>
 
       {tool.opt === 'emotion' && (
@@ -468,33 +523,35 @@ function UpscaleCard({
       aria-disabled={disabled}
       onClick={() => !disabled && void upscale(scale)}
       className={cn(
-        'group rounded-xl bg-paper p-3 transition-colors',
+        'group rounded-lg bg-paper p-3 transition-colors',
         disabled ? 'opacity-60' : 'cursor-pointer hover:bg-surface-2'
       )}
     >
       <div className="mb-2 flex items-center gap-2.5">
-        <Maximize2 size={18} className="text-cyan-400" />
+        <ToolIcon icon={Maximize2} />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">업스케일</p>
           <p className="truncate text-[11px] text-faint">해상도를 배수로 키움</p>
         </div>
         <CostChip cost={cost} />
-        <ChevronRight size={16} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+        <ChevronRight
+          size={16}
+          className="shrink-0 text-faint transition-colors group-hover:text-accent"
+        />
       </div>
       {/* 배율 선택 — 클릭이 카드 실행으로 전파되지 않게 */}
-      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-        {[2, 4].map((n) => (
-          <button
-            key={n}
-            onClick={() => setScale(n)}
-            className={cn(
-              'flex-1 rounded-md border py-1 text-[12px] font-medium transition-colors',
-              scale === n ? 'border-accent bg-accent/10 text-accent' : 'border-line text-muted hover:text-ink'
-            )}
-          >
-            {n}x
-          </button>
-        ))}
+      <div onClick={(e) => e.stopPropagation()}>
+        <Segmented
+          className="flex w-full"
+          value={String(scale)}
+          onValueChange={(v) => v && setScale(Number(v))}
+        >
+          {[2, 4].map((n) => (
+            <SegmentedItem key={n} value={String(n)} className="flex-1">
+              {n}배
+            </SegmentedItem>
+          ))}
+        </Segmented>
       </div>
     </div>
   )
@@ -513,14 +570,12 @@ function imageDims(base64: string): Promise<{ width: number; height: number }> {
 /** i2i·인페인트 진입 카드 (메인 페이지로 이동) */
 function SendToMainCard({
   icon: Icon,
-  color,
   label,
   desc,
   disabled,
   onRun
 }: {
   icon: LucideIcon
-  color: string
   label: string
   desc: string
   disabled: boolean
@@ -532,21 +587,36 @@ function SendToMainCard({
       aria-disabled={disabled}
       onClick={() => !disabled && onRun()}
       className={cn(
-        'group flex items-center gap-2.5 rounded-xl bg-paper p-3 transition-colors',
+        'group flex items-center gap-2.5 rounded-lg bg-paper p-3 transition-colors',
         disabled ? 'opacity-60' : 'cursor-pointer hover:bg-surface-2'
       )}
     >
-      <Icon size={18} className={color} />
+      <ToolIcon icon={Icon} />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium text-ink">{label}</p>
         <p className="truncate text-[11px] text-faint">{desc}</p>
       </div>
-      <ChevronRight size={16} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+      <ChevronRight
+        size={16}
+        className="shrink-0 text-faint transition-colors group-hover:text-accent"
+      />
     </div>
   )
 }
 
-function DefryRow({ value, onChange }: { value: number; onChange: (v: number) => void }): React.JSX.Element {
+function GroupLabel({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <p className="px-1 pb-0.5 pt-2 text-[12px] font-semibold text-muted first:pt-0">{children}</p>
+  )
+}
+
+function DefryRow({
+  value,
+  onChange
+}: {
+  value: number
+  onChange: (v: number) => void
+}): React.JSX.Element {
   return (
     <div className="flex items-center gap-2 px-0.5">
       <span className="w-16 shrink-0 text-[11px] text-muted">약화 {value}</span>

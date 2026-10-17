@@ -188,12 +188,14 @@ export function PromptEditor({
     }
     setTokenStart(start)
     debounceRef.current = setTimeout(() => {
-      void window.nais.invoke('tags:search', { query: token.trim(), limit: 8 }).then(({ items }) => {
-        if (searchSeqRef.current !== seq) return // 스테일 — 그 사이 입력이 바뀜
-        setSuggestions(items.map((t) => ({ kind: 'tag' as const, ...t })))
-        setSelected(0)
-        if (items.length > 0) placePopup(items.length)
-      })
+      void window.nais
+        .invoke('tags:search', { query: token.trim(), limit: 8 })
+        .then(({ items }) => {
+          if (searchSeqRef.current !== seq) return // 스테일 — 그 사이 입력이 바뀜
+          setSuggestions(items.map((t) => ({ kind: 'tag' as const, ...t })))
+          setSelected(0)
+          if (items.length > 0) placePopup(items.length)
+        })
     }, 90)
   }
 
@@ -225,7 +227,10 @@ export function PromptEditor({
       <div
         ref={mirrorRef}
         aria-hidden
-        className={cn(TYPO, 'pointer-events-none absolute inset-0 overflow-hidden text-transparent')}
+        className={cn(
+          TYPO,
+          'pointer-events-none absolute inset-0 overflow-hidden text-transparent'
+        )}
       >
         {ranges.map((r) =>
           r.bg ? (
@@ -282,7 +287,10 @@ export function PromptEditor({
       <div
         ref={commentRef}
         aria-hidden
-        className={cn(TYPO, 'pointer-events-none absolute inset-0 overflow-hidden text-transparent')}
+        className={cn(
+          TYPO,
+          'pointer-events-none absolute inset-0 overflow-hidden text-transparent'
+        )}
       >
         {commentSegments.map((s, i) =>
           s.comment ? (
@@ -299,12 +307,12 @@ export function PromptEditor({
       {tokens !== null && (
         <span
           className={cn(
-            'pointer-events-none absolute bottom-1 right-1.5 rounded bg-paper/85 px-1 font-mono text-[10.5px] backdrop-blur-sm',
+            'pointer-events-none absolute bottom-1 right-1.5 rounded bg-paper/85 px-1 font-mono text-[11px] backdrop-blur-sm',
             tokens > tokenLimit ? 'text-danger' : 'text-faint'
           )}
           title={
             tokens > tokenLimit
-              ? `한도 초과 — ${tokens}/${tokenLimit} 토큰. 초과분은 잘려서 반영되지 않습니다`
+              ? `한도 초과 — ${tokens}/${tokenLimit} 토큰. 넘친 부분은 잘려서 반영되지 않아요`
               : `${tokens}/${tokenLimit} 토큰`
           }
         >
@@ -335,8 +343,10 @@ export function PromptEditor({
                   <span className="truncate text-[#5cbe7d]">{`<${s.path}>`}</span>
                 ) : (
                   <>
-                    <span className={cn('min-w-0 flex-1 truncate', TYPE_COLORS[s.type])}>{s.tag}</span>
-                    <span className="shrink-0 text-[10.5px] text-faint">
+                    <span className={cn('min-w-0 flex-1 truncate', TYPE_COLORS[s.type])}>
+                      {s.tag}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-faint">
                       {s.nai ? 'V5' : formatCount(s.count)}
                     </span>
                   </>

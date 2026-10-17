@@ -33,7 +33,7 @@ export function Toaster(): React.JSX.Element {
               exit={{ opacity: 0, y: 8, scale: 0.96 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
               className={cn(
-                'pointer-events-auto flex max-w-[420px] items-center gap-2.5 rounded-lg border bg-surface/95 py-2 pl-3 pr-2 text-[12.5px] shadow-xl backdrop-blur',
+                'pointer-events-auto flex max-w-[420px] items-center gap-2.5 rounded-lg border bg-surface/95 py-2 pl-3 pr-2 text-[13px] shadow-xl backdrop-blur',
                 TONE[t.type]
               )}
             >

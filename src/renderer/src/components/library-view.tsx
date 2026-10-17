@@ -37,6 +37,7 @@ import { toast } from '../stores/toast-store'
 import { ImageContextMenu } from './image-context-menu'
 import { Lightbox } from './lightbox'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
+import { Segmented, SegmentedItem } from './ui/segmented'
 
 const PAGE = 60
 type Fit = 'square' | 'natural'
@@ -202,7 +203,7 @@ export function LibraryView(): React.JSX.Element {
   const onDelete = async (id: number): Promise<void> => {
     if (historyDeleteFile) {
       const ok = await askConfirm('파일까지 영구 삭제', {
-        message: '라이브러리 기록과 저장된 이미지 파일을 함께 삭제합니다.',
+        message: '라이브러리 기록과 저장한 이미지 파일을 함께 삭제해요.',
         confirmLabel: '영구 삭제',
         danger: true
       })
@@ -227,7 +228,7 @@ export function LibraryView(): React.JSX.Element {
 
   const openStorageFolder = async (): Promise<void> => {
     const { ok } = await window.nais.invoke('library:openStorageFolder', undefined)
-    if (!ok) toast('이미지 저장 폴더를 열 수 없습니다', 'error')
+    if (!ok) toast('이미지 저장 폴더를 열지 못했어요', 'error')
   }
 
   const visibleStacks = useMemo(() => {
@@ -238,13 +239,10 @@ export function LibraryView(): React.JSX.Element {
   }, [mode, selectedDate, selectedFolder, stacks])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-surface">
-      <div className="drag flex h-16 shrink-0 items-center gap-2.5 px-5">
-        <HeaderIconButton tip="실제 이미지 저장 폴더 열기" onClick={() => void openStorageFolder()}>
-          <FolderOpen size={16} className="text-amber-400" />
-        </HeaderIconButton>
-        <span className="text-[22px] font-bold tracking-tight">라이브러리</span>
-        <span className="text-[13px] tabular-nums text-faint">{total.toLocaleString()}장</span>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
+      <div className="drag flex h-[60px] shrink-0 items-center gap-2.5 px-5">
+        <h1 className="text-[20px] font-bold tracking-tight">라이브러리</h1>
+        <span className="text-[13px] tabular-nums text-muted">{total.toLocaleString()}장</span>
         {selectedDate && (
           <span className="no-drag rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
             {selectedDate}
@@ -260,37 +258,34 @@ export function LibraryView(): React.JSX.Element {
 
         <div className="flex-1" />
 
-        <div className="no-drag flex items-center gap-0.5 rounded-lg bg-paper p-0.5">
-          <SegIcon
-            active={fit === 'square'}
-            tip="정사각 크롭"
-            onClick={() => setFitPersist('square')}
-          >
+        <Segmented
+          className="no-drag"
+          value={fit}
+          onValueChange={(v) => v && setFitPersist(v as typeof fit)}
+          aria-label="그림 비율"
+        >
+          <SegmentedItem value="square" title="정사각 크롭" className="w-8 px-0">
             <LayoutGrid size={15} />
-          </SegIcon>
-          <SegIcon
-            active={fit === 'natural'}
-            tip="원본 비율"
-            onClick={() => setFitPersist('natural')}
-          >
+          </SegmentedItem>
+          <SegmentedItem value="natural" title="원본 비율" className="w-8 px-0">
             <GalleryVertical size={15} />
-          </SegIcon>
-        </div>
-
-        <div className="no-drag flex items-center gap-0.5 rounded-lg bg-paper p-0.5">
+          </SegmentedItem>
+        </Segmented>
+        <Segmented
+          className="no-drag"
+          value={String(cols)}
+          onValueChange={(v) => v && setColsPersist(Number(v))}
+          aria-label="열 개수"
+        >
           {[2, 3, 4, 5, 6].map((value) => (
-            <button
-              key={value}
-              onClick={() => setColsPersist(value)}
-              className={cn(
-                'grid h-8 w-8 place-items-center rounded-md text-[12px] font-semibold transition-colors',
-                cols === value ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-ink'
-              )}
-            >
+            <SegmentedItem key={value} value={String(value)} className="w-8 px-0">
               {value}
-            </button>
+            </SegmentedItem>
           ))}
-        </div>
+        </Segmented>
+        <HeaderIconButton tip="실제 이미지 저장 폴더 열기" onClick={() => void openStorageFolder()}>
+          <FolderOpen size={16} />
+        </HeaderIconButton>
         <HeaderIconButton
           tip={panelOpen ? '탐색 패널 닫기' : '탐색 패널 열기'}
           active={panelOpen}
@@ -320,7 +315,7 @@ export function LibraryView(): React.JSX.Element {
         <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-5">
           {visibleStacks.length > 0 && (
             <div className="mb-3">
-              <div className="mb-2 flex items-center gap-1.5 text-[11.5px] font-medium text-muted">
+              <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted">
                 <Layers3 size={13} /> 스택 {visibleStacks.length}
               </div>
               <div
@@ -338,7 +333,7 @@ export function LibraryView(): React.JSX.Element {
           {items.length === 0 && visibleStacks.length === 0 && !loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-faint">
               <Images size={40} strokeWidth={1.3} className="opacity-40" />
-              <p className="text-[13px]">이 분류에는 이미지가 없습니다</p>
+              <p className="text-[13px]">이 분류에는 이미지가 없어요</p>
             </div>
           ) : fit === 'natural' ? (
             <div style={{ columnCount: cols, columnGap: '8px' }}>
@@ -435,7 +430,7 @@ function LibrarySidebar({
   }
   const deleteFolder = async (folder: LibraryVirtualFolder): Promise<void> => {
     const ok = await askConfirm('가상 폴더 삭제', {
-      message: `"${folder.name}" 폴더를 삭제합니다. 이미지·스택과 하위 폴더는 상위 폴더로 안전하게 이동합니다.`,
+      message: `"${folder.name}" 폴더를 삭제해요. 이미지·스택과 하위 폴더는 상위 폴더로 옮겨요.`,
       confirmLabel: '폴더 삭제',
       danger: true
     })
@@ -453,7 +448,7 @@ function LibrarySidebar({
   }
   const moveFolder = async (id: number, parentId: number | null): Promise<void> => {
     const { moved } = await window.nais.invoke('library:folderMove', { id, parentId })
-    if (!moved) toast('폴더를 자기 하위로 이동할 수 없습니다', 'error')
+    if (!moved) toast('폴더를 자기 하위로 옮길 수 없어요', 'error')
     await onReload()
   }
 
@@ -694,7 +689,7 @@ function StackCard({ stack }: { stack: LibraryStackSummary }): React.JSX.Element
       )}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-6 text-white">
         <p className="truncate text-[12px] font-medium">{stack.name}</p>
-        <p className="text-[10.5px] text-white/70">{stack.imageCount}장</p>
+        <p className="text-[11px] text-white/70">{stack.imageCount}장</p>
       </div>
     </div>
   )
@@ -712,7 +707,11 @@ function ImageCardSquare({
   deleteFile: boolean
 }): React.JSX.Element {
   const revision = useGenerationStore((s) => s.imageRevisions[item.filePath])
-  const src = revision ? imageUrl(item.filePath, revision) : item.thumbnail ? `data:image/webp;base64,${item.thumbnail}` : null
+  const src = revision
+    ? imageUrl(item.filePath, revision)
+    : item.thumbnail
+      ? `data:image/webp;base64,${item.thumbnail}`
+      : null
   return (
     <ImageContextMenu
       filePath={item.filePath}
@@ -756,7 +755,11 @@ function ImageCardNatural({
   deleteFile: boolean
 }): React.JSX.Element {
   const revision = useGenerationStore((s) => s.imageRevisions[item.filePath])
-  const src = revision ? imageUrl(item.filePath, revision) : item.thumbnail ? `data:image/webp;base64,${item.thumbnail}` : null
+  const src = revision
+    ? imageUrl(item.filePath, revision)
+    : item.thumbnail
+      ? `data:image/webp;base64,${item.thumbnail}`
+      : null
   return (
     <ImageContextMenu
       filePath={item.filePath}
@@ -838,12 +841,16 @@ function SideRow({
       onClick={onClick}
       className={cn(
         'flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] font-medium transition-colors',
-        active ? 'bg-accent-soft font-semibold text-accent' : 'text-muted hover:bg-paper hover:text-ink'
+        active
+          ? 'bg-accent-soft font-semibold text-accent'
+          : 'text-muted hover:bg-paper hover:text-ink'
       )}
     >
       {children}
       {count != null && (
-        <span className="ml-auto text-[11px] tabular-nums text-faint">{count.toLocaleString()}</span>
+        <span className="ml-auto text-[11px] tabular-nums text-faint">
+          {count.toLocaleString()}
+        </span>
       )}
     </button>
   )
@@ -897,35 +904,6 @@ function HeaderIconButton({
             active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-2 hover:text-ink'
           )}
           onClick={onClick}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{tip}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function SegIcon({
-  active,
-  tip,
-  onClick,
-  children
-}: {
-  active: boolean
-  tip: string
-  onClick: () => void
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          onClick={onClick}
-          className={cn(
-            'grid size-8 place-items-center rounded-md transition-colors',
-            active ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-ink'
-          )}
         >
           {children}
         </button>

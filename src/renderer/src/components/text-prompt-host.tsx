@@ -39,7 +39,7 @@ function TextPrompt(): React.JSX.Element {
         />
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => resolve(null)}>
-            취소
+            닫기
           </Button>
           <Button variant="accent" disabled={!value.trim()} onClick={() => resolve(value.trim())}>
             확인
@@ -59,13 +59,19 @@ function ConfirmPrompt(): React.JSX.Element {
       <DialogContent className="max-w-[400px] p-5">
         <DialogTitle className="mb-2">{req?.title}</DialogTitle>
         {req?.message && (
-          <p className="whitespace-pre-line text-[13px] leading-relaxed text-muted">{req.message}</p>
+          <p className="whitespace-pre-line text-[13px] leading-relaxed text-muted">
+            {req.message}
+          </p>
         )}
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => resolve(false)}>
-            아니오
+            닫기
           </Button>
-          <Button variant={req?.danger ? 'danger' : 'accent'} autoFocus onClick={() => resolve(true)}>
+          <Button
+            variant={req?.danger ? 'danger-fill' : 'accent'}
+            autoFocus
+            onClick={() => resolve(true)}
+          >
             {req?.confirmLabel}
           </Button>
         </div>

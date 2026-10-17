@@ -296,7 +296,7 @@ export function PromptPanel(): React.JSX.Element {
   }
 
   return (
-    <aside className="relative flex h-full w-full flex-col gap-3 rounded-2xl bg-surface p-4">
+    <aside className="relative flex h-full w-full flex-col gap-3 rounded-xl bg-surface p-4">
       {/* 상단 여백을 창 드래그 영역으로 (프롬프트 영역 위) */}
       <div className="drag absolute inset-x-0 top-0 h-3" />
       {/* 오버레이는 프롬프트 영역만 덮는다 — 하단 버튼들은 항상 접근 가능 (NAIS2 2.0.7 교훈)
@@ -342,7 +342,7 @@ export function PromptPanel(): React.JSX.Element {
         {/* 생성 모델 — 왼쪽 패널 상단에서 V4.5 Full / V5 Full 전환 */}
         <label
           className="flex h-9 shrink-0 cursor-pointer items-center justify-between rounded-xl bg-paper px-3"
-          title={`현재 NAI Diffusion ${v5Enabled ? 'V5 Full' : 'V4.5 Full'} 모델을 사용합니다`}
+          title={`현재 NAI Diffusion ${v5Enabled ? 'V5 Full' : 'V4.5 Full'} 모델을 써요`}
         >
           <span className="text-[11px] font-medium text-muted">생성 모델</span>
           <span className="flex items-center gap-2">
@@ -490,7 +490,7 @@ export function PromptPanel(): React.JSX.Element {
                   className={cn('min-h-0 flex-1', medium && 'opacity-45')}
                   value={request.negativePrompt}
                   tokensOverride={tokenTotals.neg}
-                  placeholder="UC 프리셋 뒤에 이어 붙습니다"
+                  placeholder="UC 프리셋 뒤에 이어 붙어요"
                   onValueChange={(v) => patch({ negativePrompt: v })}
                 />
               </>
@@ -554,7 +554,9 @@ export function PromptPanel(): React.JSX.Element {
         <button
           className={cn(
             'shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums',
-            summary.free ? 'bg-[#1fa56a]/12 text-[#1fa56a]' : 'bg-danger/12 text-danger'
+            summary.free
+              ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+              : 'bg-danger/12 text-danger'
           )}
           title={summary.tip}
           onClick={() => setParamsOpen(true)}
@@ -590,7 +592,7 @@ export function PromptPanel(): React.JSX.Element {
             </label>
             <label
               className="flex cursor-pointer items-center gap-1.5"
-              title="ON: 기존처럼 유료 생성 허용. OFF: 메인·씬 생성 전 무료 여부 확인, 1% 미만/확인 실패 계정 대기. 이미 전송한 요청은 소급 적용하지 않으며 다른 앱과 같은 계정을 동시에 쓰면 과금 방지를 보장할 수 없습니다."
+              title="ON: 기존처럼 유료 생성 허용. OFF: 메인·씬 생성 전 무료 여부 확인, 1% 미만/확인 실패 계정 대기. 이미 전송한 요청은 소급 적용하지 않으며 다른 앱과 같은 계정을 동시에 쓰면 과금 방지를 보장할 수 없어요."
             >
               Anlas 소모
               <Switch
@@ -609,8 +611,8 @@ export function PromptPanel(): React.JSX.Element {
           className="flex cursor-pointer items-center gap-1.5"
           title={
             stripExif
-              ? '켜짐: 저장 이미지에서 EXIF와 프롬프트 메타데이터를 제거합니다'
-              : '꺼짐: 저장 이미지에 EXIF와 프롬프트 메타데이터를 유지합니다'
+              ? '켜짐: 저장하는 이미지에서 EXIF와 프롬프트 메타데이터를 지워요'
+              : '꺼짐: 저장하는 이미지에 EXIF와 프롬프트 메타데이터를 남겨요'
           }
         >
           EXIF 제거
@@ -624,7 +626,7 @@ export function PromptPanel(): React.JSX.Element {
 
       {/* 생성 행: 배치 / 생성 */}
       <div className="flex shrink-0 items-center gap-2">
-        <div className="flex h-11 items-center rounded-lg bg-paper">
+        <div className="flex h-10 items-center rounded-lg bg-paper">
           <Button
             size="icon"
             variant="ghost"
@@ -651,24 +653,28 @@ export function PromptPanel(): React.JSX.Element {
         </div>
         {generating && (
           <Button
-            variant="danger"
+            variant="danger-fill"
             size="lg"
-            className={isScene ? 'h-11 flex-1 rounded-xl' : 'h-11 shrink-0 rounded-xl px-3'}
+            className="h-10 shrink-0 px-3"
             onClick={() => void cancelAll()}
+            title="대기 중인 생성을 모두 멈춰요"
           >
             <Square size={14} /> 취소 ({queueCount})
           </Button>
         )}
-        {!generating && isScene ? (
+        {isScene ? (
           <Button
             variant="accent"
             size="lg"
-            className="h-11 flex-1 gap-2 rounded-xl text-[15px]"
-            disabled={sceneReserved === 0}
+            className="h-10 flex-1 gap-2"
+            disabled={!generating && sceneReserved === 0}
+            loading={generating}
             title={
-              sceneReserved === 0
-                ? '씬에 예약(+)을 걸어야 생성할 수 있습니다'
-                : `모든 프리셋의 예약 ${sceneReserved}장 생성 (프리셋 순서대로)`
+              generating
+                ? `생성 중 · 남은 ${queueCount}장`
+                : sceneReserved === 0
+                  ? '씬에 예약(+)을 걸어야 생성할 수 있어요'
+                  : `모든 프리셋의 예약 ${sceneReserved}장 생성 (프리셋 순서대로)`
             }
             onClick={() => void generateReserved()}
           >
@@ -678,17 +684,17 @@ export function PromptPanel(): React.JSX.Element {
               <span className="text-[12px] opacity-75">{sceneReserved}장</span>
             )}
           </Button>
-        ) : !isScene ? (
+        ) : (
           <Button
             variant="accent"
             size="lg"
-            className="h-11 flex-1 gap-2 rounded-xl text-[15px]"
+            className="h-10 flex-1 gap-2"
             title={anlasTooltip(anlas, batchCount)}
             onClick={() => void generate()}
           >
             생성
           </Button>
-        ) : null}
+        )}
       </div>
 
       <ParamsDialog open={paramsOpen} onOpenChange={setParamsOpen} />
@@ -735,12 +741,12 @@ function TokenBadge({
   return (
     <span
       className={
-        'rounded bg-paper px-1.5 py-0.5 font-mono text-[10.5px] ' +
+        'rounded bg-paper px-1.5 py-0.5 font-mono text-[11px] ' +
         (over ? 'text-danger' : 'text-faint')
       }
       title={
         over
-          ? `한도 초과 — ${tokens}/${limit} 토큰. 초과분은 잘려서 반영되지 않습니다`
+          ? `한도 초과 — ${tokens}/${limit} 토큰. 넘친 부분은 잘려서 반영되지 않아요`
           : `최종 프롬프트 ${tokens}/${limit} 토큰`
       }
     >
@@ -998,7 +1004,7 @@ function ToolButton({
       {inUse && (
         <span
           className={cn(
-            'grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold tabular-nums',
+            'grid h-4 min-w-4 place-items-center rounded-full px-1 text-[11px] font-bold tabular-nums',
             active
               ? 'bg-white/25 text-white dark:text-paper'
               : 'bg-accent text-white dark:text-paper'

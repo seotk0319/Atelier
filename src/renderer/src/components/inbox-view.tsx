@@ -24,6 +24,8 @@ import type {
   InboxReplyTarget
 } from '@shared/inbox'
 import { cn } from '../lib/utils'
+import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
+import { Switch } from './ui/switch'
 import { useAiReplyStore } from '../stores/ai-reply-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { useTranslateStore } from '../stores/translate-store'
@@ -162,7 +164,7 @@ function people(items: InboxItem[]): string {
   return rest > 0 ? `${shown} 외 ${rest}명` : shown
 }
 const button =
-  'inline-flex items-center justify-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40'
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-surface-2 px-3 text-[12px] font-medium text-ink transition-colors hover:brightness-[0.97] disabled:opacity-40 dark:hover:brightness-110'
 const intervalLabel = (minutes: number): string =>
   minutes % 60 === 0 ? `${minutes / 60}시간` : `${minutes}분`
 
@@ -181,6 +183,7 @@ export function InboxView(): React.JSX.Element {
   const [event, setEvent] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [unrepliedOnly, setUnrepliedOnly] = useState(false)
+  const [brokenDetail, setBrokenDetail] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<InboxItem | null>(null)
@@ -461,7 +464,7 @@ export function InboxView(): React.JSX.Element {
             )}
             <span
               className={cn(
-                'truncate text-[13.5px] leading-snug',
+                'truncate text-[13px] leading-snug',
                 unread ? 'font-semibold text-ink' : 'text-ink/85'
               )}
             >
@@ -494,7 +497,7 @@ export function InboxView(): React.JSX.Element {
           </span>
         </span>
         <span className="flex max-w-[34%] shrink-0 flex-col items-end gap-0.5 pt-px text-right">
-          <span className="text-[11.5px] tabular-nums text-muted">{ago(item.at, now)}</span>
+          <span className="text-[12px] tabular-nums text-muted">{ago(item.at, now)}</span>
           {work && <span className="max-w-full truncate text-[11px] text-faint">{work}</span>}
         </span>
       </button>
@@ -525,7 +528,7 @@ export function InboxView(): React.JSX.Element {
               )}
               <span
                 className={cn(
-                  'truncate text-[13.5px] leading-snug',
+                  'truncate text-[13px] leading-snug',
                   unread ? 'font-semibold text-ink' : 'text-ink/85'
                 )}
               >
@@ -546,7 +549,7 @@ export function InboxView(): React.JSX.Element {
             </span>
           </span>
           <span className="flex max-w-[34%] shrink-0 items-center gap-2 pt-px text-right">
-            <span className="text-[11.5px] tabular-nums text-muted">{ago(lead.at, now)}</span>
+            <span className="text-[12px] tabular-nums text-muted">{ago(lead.at, now)}</span>
             <ChevronDown
               size={14}
               aria-hidden
@@ -563,7 +566,7 @@ export function InboxView(): React.JSX.Element {
 
   return (
     <section
-      className="flex min-w-0 flex-1 overflow-hidden rounded-2xl bg-surface"
+      className="flex min-w-0 flex-1 overflow-hidden rounded-xl bg-surface"
       aria-label="알림 모아보기"
     >
       <aside className="flex w-48 shrink-0 flex-col border-r border-line bg-paper/50 p-3 xl:w-56">
@@ -604,19 +607,19 @@ export function InboxView(): React.JSX.Element {
                   <span className="min-w-0 flex-1">
                     <span
                       className={cn(
-                        'block truncate text-[12.5px] font-medium',
+                        'block truncate text-[13px] font-medium',
                         platform === p.id ? 'text-accent' : 'text-ink'
                       )}
                     >
                       {p.label}
                     </span>
                     {trouble && (
-                      <span className="mt-0.5 block truncate text-[10.5px] font-medium text-danger">
+                      <span className="mt-0.5 block truncate text-[11px] font-medium text-danger">
                         {statusLabels[p.status] || p.status}
                       </span>
                     )}
                     {!trouble && soon && (
-                      <span className="mt-0.5 block truncate text-[10.5px] text-faint">
+                      <span className="mt-0.5 block truncate text-[11px] text-faint">
                         {p.canRenew ? '곧 자동 갱신' : '인증 곧 만료'}
                       </span>
                     )}
@@ -637,7 +640,13 @@ export function InboxView(): React.JSX.Element {
 
       <main className="flex min-w-0 flex-1 flex-col gap-3 p-5">
         <header className="flex flex-wrap items-center gap-3">
-          <h1 className="mr-auto text-[21px] font-semibold tracking-tight">알림 모아보기</h1>
+          <h1 className="text-[20px] font-bold tracking-tight">알림</h1>
+          {data && (
+            <span className="mr-auto text-[13px] tabular-nums text-muted">
+              {data.filtered.toLocaleString()}건
+              {data.unread ? ` · 안 읽음 ${data.unread.toLocaleString()}` : ''}
+            </span>
+          )}
           {ai && (ai.config.mode !== 'off' || ai.backlog?.running) && (
             <div className="flex items-center overflow-hidden rounded-lg border border-line bg-paper text-[12px]">
               <button
@@ -672,7 +681,7 @@ export function InboxView(): React.JSX.Element {
               </button>
             </div>
           )}
-          <div className="flex w-64 items-center gap-2 rounded-lg border border-line bg-paper px-3">
+          <div className="flex h-8 w-56 items-center gap-2 rounded-md bg-paper px-2.5">
             <Search size={15} className="shrink-0 text-faint" />
             <input
               value={search}
@@ -682,7 +691,7 @@ export function InboxView(): React.JSX.Element {
               }}
               placeholder="작품, 작성자, 내용 검색"
               aria-label="알림 검색"
-              className="min-w-0 flex-1 bg-transparent py-2 text-[13px] outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
             />
             {search && (
               <button aria-label="검색어 지우기" onClick={() => reset(() => setSearch(''))}>
@@ -697,7 +706,7 @@ export function InboxView(): React.JSX.Element {
               value={data?.intervalMinutes ?? 60}
               disabled={!data?.available || busy}
               onChange={(e) => void setIntervalMinutes(Number(e.target.value))}
-              className="rounded-lg border border-line bg-paper px-2 py-2 text-ink disabled:opacity-40"
+              className="h-8 rounded-md bg-paper px-2 text-[12px] text-ink disabled:opacity-40"
             >
               {[5, 15, 30, 60, 120, 360, 1440].map((minutes) => (
                 <option key={minutes} value={minutes}>
@@ -722,24 +731,42 @@ export function InboxView(): React.JSX.Element {
         {!!broken.length && (
           <div
             role="status"
-            className="flex items-center gap-3 rounded-lg border border-danger/25 bg-danger/[0.07] px-4 py-3"
+            className="flex flex-wrap items-center gap-3 rounded-lg bg-danger/[0.08] px-4 py-3"
           >
             <TriangleAlert size={17} className="shrink-0 text-danger" />
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-semibold text-ink">
-                {broken.map((p) => p.label).join(', ')} 계정 인증이 풀려서 새 알림을 못 받고 있어요
+                {broken.map((p) => p.label).join(', ')} 로그인이 풀려서 새 알림을 못 받고 있어요
               </p>
-              <p className="mt-0.5 truncate text-[11.5px] text-muted">
-                이미 저장한 {preserved.toLocaleString()}건은 그대로 볼 수 있어요
-                {broken[0].detail ? ` · ${broken[0].detail}` : ''}
+              <p className="mt-0.5 text-[12px] text-muted">
+                이미 받은 {preserved.toLocaleString()}건은 그대로 볼 수 있어요.
               </p>
             </div>
-            <button
-              onClick={() => setSettings(true)}
-              className="shrink-0 rounded-lg bg-accent px-3 py-2 text-[12px] font-semibold text-paper"
-            >
-              연결 관리
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                onClick={() => setSettings(true)}
+                className={cn(button, 'bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.08)]')}
+              >
+                다시 연결
+              </button>
+              {broken.some((p) => p.detail) && (
+                <button
+                  onClick={() => setBrokenDetail((v) => !v)}
+                  className="inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-[12px] text-muted hover:bg-surface-2 hover:text-ink"
+                >
+                  자세히{' '}
+                  <ChevronDown
+                    size={13}
+                    className={cn('transition-transform', brokenDetail && 'rotate-180')}
+                  />
+                </button>
+              )}
+            </div>
+            {brokenDetail && (
+              <pre className="basis-full whitespace-pre-wrap pl-7 font-mono text-[11px] leading-relaxed text-muted">
+                {broken.map((p) => `${p.id} · ${p.detail}`).join('\n')}
+              </pre>
+            )}
           </div>
         )}
         {settings && (
@@ -847,63 +874,45 @@ export function InboxView(): React.JSX.Element {
         )}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div
-            role="tablist"
+          <Segmented
             aria-label="알림 종류"
-            className="inline-flex rounded-lg border border-line bg-surface-2/60 p-0.5"
+            value={view}
+            onValueChange={(v) =>
+              v &&
+              reset(() => {
+                setView(v as typeof view)
+                setEvent('')
+              })
+            }
           >
             {views.map((v) => (
-              <button
-                key={v.id}
-                role="tab"
-                aria-selected={view === v.id}
-                onClick={() =>
-                  reset(() => {
-                    setView(v.id)
-                    setEvent('')
-                  })
-                }
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-[12.5px] transition-colors',
-                  view === v.id
-                    ? 'bg-paper font-semibold text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
-                    : 'text-muted hover:text-ink'
-                )}
-              >
+              <SegmentedItem key={v.id} value={v.id} className="px-3 text-[13px]">
                 {v.label}
-                <span className="ml-1.5 tabular-nums text-faint">
-                  {tally(v.id).toLocaleString()}
-                </span>
-              </button>
+                <SegmentedCount>{tally(v.id).toLocaleString()}</SegmentedCount>
+              </SegmentedItem>
             ))}
-          </div>
+          </Segmented>
           {subEvents.length > 1 && (
-            <div className="flex items-center gap-0.5">
+            <Segmented
+              value={event || 'any'}
+              onValueChange={(v) =>
+                v && reset(() => setEvent(v === 'any' ? '' : (v as typeof event)))
+              }
+            >
               {[
                 ['', '모두'] as const,
                 ...subEvents.map((id) => [id, INBOX_EVENTS[id]] as const)
               ].map(([id, label]) => (
-                <button
-                  key={id || 'any'}
-                  onClick={() => reset(() => setEvent(id))}
-                  className={cn(
-                    'rounded-md px-2 py-1 text-[12px] transition-colors',
-                    event === id
-                      ? 'bg-surface-2 font-semibold text-ink'
-                      : 'text-muted hover:text-ink'
-                  )}
-                >
+                <SegmentedItem key={id || 'any'} value={id || 'any'}>
                   {label}
                   {id && data ? (
-                    <span className="ml-1 tabular-nums text-faint">
-                      {data.events[id].toLocaleString()}
-                    </span>
+                    <SegmentedCount>{data.events[id].toLocaleString()}</SegmentedCount>
                   ) : null}
-                </button>
+                </SegmentedItem>
               ))}
-            </div>
+            </Segmented>
           )}
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-2">
             {(
               [
                 ...(view === 'reaction'
@@ -912,22 +921,17 @@ export function InboxView(): React.JSX.Element {
                 ['안 읽은 것만', unreadOnly, setUnreadOnly] as const
               ] as const
             ).map(([label, on, setOn]) => (
-              <button
+              <label
                 key={label}
-                role="switch"
-                aria-checked={on}
-                onClick={() => reset(() => setOn((v) => !v))}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors',
-                  on ? 'bg-accent-soft font-semibold text-accent' : 'text-muted hover:text-ink'
-                )}
+                className="inline-flex cursor-pointer select-none items-center gap-2 px-2 py-1 text-[12px] text-muted"
               >
-                <span
-                  aria-hidden
-                  className={cn('size-1.5 rounded-full', on ? 'bg-accent' : 'bg-faint')}
+                <Switch
+                  checked={on}
+                  onCheckedChange={() => reset(() => setOn((v) => !v))}
+                  aria-label={label}
                 />
                 {label}
-              </button>
+              </label>
             ))}
           </div>
         </div>
@@ -1042,7 +1046,7 @@ export function InboxView(): React.JSX.Element {
               <p className="truncate text-[14px] font-semibold">
                 {workNameOf(selected) || selected.title}
               </p>
-              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted">
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
                 <span className="shrink-0 font-medium" style={{ color: tone(selected.platform) }}>
                   {INBOX_PLATFORMS[selected.platform]}
                 </span>
@@ -1085,7 +1089,7 @@ export function InboxView(): React.JSX.Element {
             )}
             {selected.canReply &&
               (replyTarget === undefined || replyTarget === 'loading' ? (
-                <p className="text-[11.5px] text-faint">원래 댓글을 찾고 있어요…</p>
+                <p className="text-[12px] text-faint">원래 댓글을 찾고 있어요…</p>
               ) : !replyTarget.ok ? (
                 <p className="rounded-xl bg-danger/10 px-3 py-2.5 text-[12px] text-danger">
                   {replyTarget.message}
@@ -1122,7 +1126,7 @@ export function InboxView(): React.JSX.Element {
                       {mine.at ? ago(mine.at, now) : '방금'}
                     </span>
                   </p>
-                  <p className="mt-1.5 select-text whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent-soft px-3.5 py-2.5 text-left text-[13.5px] leading-relaxed">
+                  <p className="mt-1.5 select-text whitespace-pre-wrap break-words rounded-xl rounded-br-md bg-accent-soft px-3.5 py-2.5 text-left text-[13px] leading-relaxed">
                     {mine.content}
                   </p>
                 </div>

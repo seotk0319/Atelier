@@ -72,22 +72,24 @@ export function parseWeights(text: string): WeightSegment[] {
       }
     }
   }
-  if (text.length > segStart) segments.push({ start: segStart, end: text.length, weight: segWeight })
+  if (text.length > segStart)
+    segments.push({ start: segStart, end: text.length, weight: segWeight })
   return segments
 }
 
 /**
  * 가중치 → 하이라이트 배경. 1.0은 투명(null).
- * 강조(>1) = 붉은색, 약화(<1)·음수 = 청록색(인디고 강조색과 구분). 강도는 1.05 스텝 수 비례.
+ * 강조(>1) = 강조색(인디고) 연하게, 약화(<1)·음수 = 회색 연하게. 강도는 1.05 스텝 수 비례.
+ * 빨강은 오류·삭제에만 쓰기로 해서 여기서는 쓰지 않는다. 테마가 바뀌어도 따라가도록 CSS 변수를 섞는다.
  */
 export function weightBackground(weight: number): string | null {
   if (weight === 1) return null
-  if (weight <= 0) return 'rgba(22, 168, 196, 0.42)'
+  if (weight <= 0) return 'color-mix(in srgb, var(--muted) 42%, transparent)'
   const steps = Math.abs(Math.log(weight) / Math.log(STEP))
-  const alpha = Math.min(0.1 + steps * 0.09, 0.48)
+  const pct = Math.round(Math.min(12 + steps * 9, 48))
   return weight > 1
-    ? `rgba(233, 94, 80, ${alpha.toFixed(3)})`
-    : `rgba(22, 168, 196, ${alpha.toFixed(3)})`
+    ? `color-mix(in srgb, var(--accent) ${pct}%, transparent)`
+    : `color-mix(in srgb, var(--muted) ${pct}%, transparent)`
 }
 
 /** 조각 구문 <...> 하이라이트 (NAIS2의 녹색 계승) */
@@ -118,12 +120,10 @@ export function highlightRanges(text: string): HighlightRange[] {
     start: m.index,
     end: m.index + m[0].length
   }))
-  const inFragment = (pos: number): boolean =>
-    fragments.some((f) => f.start <= pos && pos < f.end)
+  const inFragment = (pos: number): boolean => fragments.some((f) => f.start <= pos && pos < f.end)
 
   const comments = commentSpans(text)
-  const inComment = (pos: number): boolean =>
-    comments.some((c) => c.start <= pos && pos < c.end)
+  const inComment = (pos: number): boolean => comments.some((c) => c.start <= pos && pos < c.end)
 
   // 경계점: 가중치 세그먼트 + 조각 + 주석 경계
   const bounds = new Set<number>([0, text.length])

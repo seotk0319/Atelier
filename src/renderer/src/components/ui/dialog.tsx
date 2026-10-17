@@ -11,18 +11,18 @@ export const DialogClose = DialogPrimitive.Close
 function hasOpenNestedPopup(): boolean {
   return Boolean(
     hasActiveSelectPopup() ||
-      document.querySelector('[data-radix-popper-content-wrapper]') ||
-      document.querySelector('[data-radix-select-content]') ||
-      document.querySelector('[role="listbox"][data-state="open"]')
+    document.querySelector('[data-radix-popper-content-wrapper]') ||
+    document.querySelector('[data-radix-select-content]') ||
+    document.querySelector('[role="listbox"][data-state="open"]')
   )
 }
 
 function isNestedPopupInteraction(target: HTMLElement | null): boolean {
   return Boolean(
     hasOpenNestedPopup() ||
-      target?.closest('[data-radix-popper-content-wrapper]') ||
-      target?.closest('[data-radix-select-content]') ||
-      target?.closest('[role="listbox"][data-state="open"]')
+    target?.closest('[data-radix-popper-content-wrapper]') ||
+    target?.closest('[data-radix-select-content]') ||
+    target?.closest('[role="listbox"][data-state="open"]')
   )
 }
 
@@ -36,7 +36,7 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[460px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-line bg-surface text-ink shadow-2xl outline-none',
+          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[460px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-line bg-surface text-ink shadow-2xl outline-none',
           className
         )}
         {...props}
@@ -79,12 +79,12 @@ export function DialogContent({
   )
 }
 
-export function DialogTitle({
-  className,
-  ...props
-}: ComponentProps<typeof DialogPrimitive.Title>) {
+export function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {
   return (
-    <DialogPrimitive.Title className={cn('text-[15px] font-semibold text-ink', className)} {...props} />
+    <DialogPrimitive.Title
+      className={cn('text-[15px] font-semibold text-ink', className)}
+      {...props}
+    />
   )
 }
 

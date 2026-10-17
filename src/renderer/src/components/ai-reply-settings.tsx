@@ -165,7 +165,7 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
               style={{ width: `${run.total ? (run.done / run.total) * 100 : 0}%` }}
             />
           </div>
-          <p className="mt-2 text-[11.5px] tabular-nums text-muted">{tally}</p>
+          <p className="mt-2 text-[12px] tabular-nums text-muted">{tally}</p>
           <Button variant="ghost" className="mt-2 w-full gap-1.5" onClick={() => void stop()}>
             <CirclePause size={14} /> 멈추기
           </Button>
@@ -173,7 +173,7 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-1 text-[11.5px] text-muted">
+            <label className="flex flex-col gap-1 text-[12px] text-muted">
               범위
               <select
                 aria-label="지난 댓글 범위"
@@ -188,7 +188,7 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[11.5px] text-muted">
+            <label className="flex flex-col gap-1 text-[12px] text-muted">
               한 번에
               <select
                 aria-label="한 번에 다룰 개수"
@@ -236,7 +236,7 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
             </div>
           )}
           {unchecked.length > 0 && (
-            <p className="flex items-start gap-1.5 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
+            <p className="flex items-start gap-1.5 text-[12px] leading-relaxed text-amber-700 dark:text-amber-300">
               <TriangleAlert size={13} className="mt-0.5 shrink-0" />
               <span>
                 {unchecked.map((id) => INBOX_PLATFORMS[id]).join(', ')}은 사이트에서 이미 단 답글을
@@ -279,14 +279,14 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
               {mode === 'send' ? '보내기 시작' : '초안 만들기'}
             </Button>
           </div>
-          <p className="text-[11.5px] leading-relaxed text-muted">
+          <p className="text-[12px] leading-relaxed text-muted">
             이번에 {count.toLocaleString()}개 · {duration(seconds)} · 약 {dollars(cost)}
             {mode === 'send' && (preview?.drafted || 0) > 0 && (
               <span className="text-faint"> · 초안이 있는 댓글은 그 초안으로 보내요</span>
             )}
           </p>
           {run && (
-            <p className={cn('text-[11.5px]', run.stopped ? 'text-danger' : 'text-muted')}>
+            <p className={cn('text-[12px]', run.stopped ? 'text-danger' : 'text-muted')}>
               지난 실행: {run.done} / {run.total} · {tally}
               {run.stopped
                 ? ` · ${run.stopped}`
@@ -376,8 +376,8 @@ export function AiReplySection(): React.JSX.Element {
                 <Sparkles size={17} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[13.5px] font-semibold text-ink">Claude 연결됨</p>
-                <p className="mt-0.5 text-[11.5px] text-faint">Haiku 5.5 · 키 끝 {status?.tail}</p>
+                <p className="text-[13px] font-semibold text-ink">Claude 연결됨</p>
+                <p className="mt-0.5 text-[12px] text-faint">Haiku 5.5 · 키 끝 {status?.tail}</p>
               </div>
             </div>
             <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[12px]">
@@ -445,7 +445,7 @@ export function AiReplySection(): React.JSX.Element {
                 </Button>
               )}
             </div>
-            <p className="text-[11.5px] leading-relaxed text-faint">
+            <p className="text-[12px] leading-relaxed text-faint">
               키는{' '}
               <button
                 className="font-medium text-accent hover:underline"
@@ -491,7 +491,7 @@ export function AiReplySection(): React.JSX.Element {
             ))}
           </div>
         </div>
-        <p className="text-[11.5px] leading-relaxed text-muted">
+        <p className="text-[12px] leading-relaxed text-muted">
           {mode.hint}
           {config?.since && (
             <span className="text-faint"> 켠 뒤({clock(config.since)})에 온 댓글만 다뤄요.</span>

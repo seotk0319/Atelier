@@ -265,7 +265,7 @@ export function CharacterOverlay(): React.JSX.Element {
   const bulkDelete = async (): Promise<void> => {
     if (
       !(await askConfirm('선택 삭제', {
-        message: `선택한 캐릭터 ${selected.size}개를 삭제합니다.`,
+        message: `선택한 캐릭터 ${selected.size}개를 삭제해요.`,
         confirmLabel: '삭제',
         danger: true
       }))
@@ -296,9 +296,11 @@ export function CharacterOverlay(): React.JSX.Element {
       return () => clearTimeout(timer)
     }
     const timer = setTimeout(() => {
-      void window.nais.invoke('tokens:count', { texts: positiveTexts, model }).then(({ counts }) => {
-        setCharTokens(counts.reduce((a, b) => a + b, 0))
-      })
+      void window.nais
+        .invoke('tokens:count', { texts: positiveTexts, model })
+        .then(({ counts }) => {
+          setCharTokens(counts.reduce((a, b) => a + b, 0))
+        })
     }, 300)
     return () => clearTimeout(timer)
   }, [positiveTexts, model])
@@ -317,7 +319,7 @@ export function CharacterOverlay(): React.JSX.Element {
             checked ? 'border-accent bg-accent text-white' : 'border-line'
           )}
         >
-          {checked && <span className="text-[9px] leading-none">✓</span>}
+          {checked && <span className="text-[11px] leading-none">✓</span>}
         </span>
         {char.thumbnail ? (
           <img
@@ -400,7 +402,7 @@ export function CharacterOverlay(): React.JSX.Element {
     <div className="flex flex-col gap-1.5 px-2 pb-2">
       <div className="flex gap-1.5">
         <Input
-          className="h-8 flex-1 bg-surface-2 text-[12.5px]"
+          className="h-8 flex-1 bg-surface-2 text-[13px]"
           value={char.name}
           placeholder="이름"
           onChange={(e) => updateCard(char.id, { name: e.target.value })}
@@ -469,7 +471,7 @@ export function CharacterOverlay(): React.JSX.Element {
         {enabledCount > 0 && (
           <span
             className={cn(
-              'rounded-full px-1.5 font-mono text-[10.5px]',
+              'rounded-full px-1.5 font-mono text-[11px]',
               enabledCount >= maxChars ? 'bg-danger/15 text-danger' : 'bg-accent-soft text-accent'
             )}
             title={`활성 캐릭터 ${enabledCount}/${maxChars} (V4.5는 6명, V5는 32명까지)`}
@@ -491,7 +493,7 @@ export function CharacterOverlay(): React.JSX.Element {
         {charTokens !== null && (
           <span
             className={cn(
-              'font-mono text-[10.5px]',
+              'font-mono text-[11px]',
               charTokens > tokenLimit ? 'text-danger' : 'text-faint'
             )}
             title={`기본 프롬프트 + 캐릭터 프롬프트 합산 (${tokenLimit} 토큰 공유)`}
@@ -501,7 +503,7 @@ export function CharacterOverlay(): React.JSX.Element {
         )}
         <div className="flex-1" />
         <label
-          className="flex items-center gap-1.5 text-[11.5px] text-muted"
+          className="flex items-center gap-1.5 text-[12px] text-muted"
           title="끄면 AI's Choice (NAI가 위치 결정)"
         >
           위치 지정
@@ -703,11 +705,11 @@ function BulkPromptDialog({
       <DialogContent className="max-w-md p-4">
         <DialogTitle className="mb-1">프롬프트 일괄 주입</DialogTitle>
         <p className="mb-3 text-[12px] text-muted">
-          선택한 캐릭터 {count}개의 프롬프트 하단(새 줄)에 이어붙입니다. 빈 칸은 건너뜁니다.
+          선택한 캐릭터 {count}개의 프롬프트 아래(새 줄)에 이어 붙여요. 빈 칸은 건너뛰어요.
         </p>
         <div className="flex flex-col gap-2">
           <div>
-            <p className="mb-1 text-[11.5px] text-muted">포지티브에 추가</p>
+            <p className="mb-1 text-[12px] text-muted">포지티브에 추가</p>
             <PromptEditor
               className="h-24 min-h-16 resize-y bg-surface-2"
               value={positive}
@@ -717,7 +719,7 @@ function BulkPromptDialog({
             />
           </div>
           <div>
-            <p className="mb-1 text-[11.5px] text-muted">네거티브에 추가</p>
+            <p className="mb-1 text-[12px] text-muted">네거티브에 추가</p>
             <PromptEditor
               className="h-20 min-h-16 resize-y bg-surface-2"
               value={negative}
@@ -729,7 +731,7 @@ function BulkPromptDialog({
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            취소
+            닫기
           </Button>
           <Button
             variant="accent"

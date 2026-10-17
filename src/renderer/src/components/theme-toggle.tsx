@@ -1,7 +1,6 @@
 import { Monitor, Moon, Sun } from 'lucide-react'
-import { cn } from '../lib/utils'
 import { useThemeStore, type Theme } from '../stores/theme-store'
-import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group'
+import { Segmented, SegmentedItem } from './ui/segmented'
 
 const MODES: { mode: Theme; Icon: typeof Sun; label: string }[] = [
   { mode: 'light', Icon: Sun, label: '라이트' },
@@ -14,28 +13,19 @@ export function ThemeToggle(): React.JSX.Element {
   const setTheme = useThemeStore((s) => s.setTheme)
 
   return (
-    <ToggleGroup
-      type="single"
+    <Segmented
+      size="sm"
       value={theme}
       onValueChange={(v) => {
         if (v) setTheme(v as Theme)
       }}
-      className="inline-flex rounded-md bg-surface-2 p-0.5"
       aria-label="색상 모드"
     >
       {MODES.map(({ mode, Icon, label }) => (
-        <ToggleGroupItem
-          key={mode}
-          value={mode}
-          title={label}
-          className={cn(
-            'grid h-6 w-[26px] place-items-center rounded-[5px] text-muted transition-colors hover:text-ink',
-            theme === mode && 'bg-paper text-ink shadow-[0_1px_2px_rgba(0,0,0,0.12)]'
-          )}
-        >
+        <SegmentedItem key={mode} value={mode} title={label} className="w-7 px-0">
           <Icon size={14} />
-        </ToggleGroupItem>
+        </SegmentedItem>
       ))}
-    </ToggleGroup>
+    </Segmented>
   )
 }

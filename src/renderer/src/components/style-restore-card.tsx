@@ -44,21 +44,21 @@ export function StyleRestoreCard(): React.JSX.Element {
   async function handleFiles(fileList: FileList | File[]): Promise<void> {
     const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'))
     if (files.length === 0) {
-      toast('이미지 파일이 없습니다', 'error')
+      toast('이미지 파일이 없어요', 'error')
       return
     }
     if (reading) {
-      toast('처리 중입니다', 'error')
+      toast('처리하는 중이에요', 'error')
       return
     }
     const parsed = parseStrength(strength)
     if (parsed === null) {
-      toast('변화 강도는 0부터 1 사이 숫자여야 합니다', 'error')
+      toast('변화 강도는 0부터 1 사이 숫자여야 해요', 'error')
       return
     }
     const { hasToken } = await window.nais.invoke('nai:tokenStatus', undefined)
     if (!hasToken) {
-      toast('설정에서 NAI 토큰을 먼저 입력하세요', 'error')
+      toast('설정에서 NAI 토큰을 먼저 넣어 주세요', 'error')
       return
     }
 
@@ -75,7 +75,7 @@ export function StyleRestoreCard(): React.JSX.Element {
           const res = await window.nais.invoke('images:readMetadata', { base64 })
           if ('error' in res) throw new Error(res.error)
           const meta = res.meta
-          if (!meta.prompt.trim()) throw new Error('프롬프트를 찾을 수 없습니다')
+          if (!meta.prompt.trim()) throw new Error('프롬프트를 찾지 못했어요')
 
           const dims = await imageDimensions(base64)
           const request = requestFromMetadata({
@@ -117,7 +117,7 @@ export function StyleRestoreCard(): React.JSX.Element {
     }
     const queued = next.filter((n) => n.queueId).length
     if (queued > 0) toast(`그림체 복구 ${queued}장 예약됨`, 'success')
-    else toast('처리할 이미지가 없습니다', 'error')
+    else toast('처리할 이미지가 없어요', 'error')
   }
 
   function statusOf(item: RestoreItem): { label: string; cls: string } {
@@ -221,7 +221,7 @@ export function StyleRestoreCard(): React.JSX.Element {
                 key={item.key}
                 className="flex items-center justify-between gap-2 rounded-md bg-paper/50 px-2 py-1"
               >
-                <span className="min-w-0 flex-1 truncate text-[11.5px]">{item.fileName}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px]">{item.fileName}</span>
                 <span className={cn('shrink-0 text-[11px]', s.cls)}>{s.label}</span>
               </div>
             )

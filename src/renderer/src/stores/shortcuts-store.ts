@@ -150,7 +150,7 @@ function runAction(action: ShortcutAction): void {
       void useFragmentsStore
         .getState()
         .resetSequential()
-        .then(() => toast('조각 순차 카운터를 리셋했습니다', 'success'))
+        .then(() => toast('조각 순차 카운터를 처음으로 되돌렸어요', 'success'))
       break
     case 'curationFavorite':
       window.dispatchEvent(new CustomEvent('nais:curation-favorite'))

@@ -27,7 +27,7 @@ import { cn } from '../lib/utils'
 import { THEME_PRESETS } from '../lib/theme-presets'
 import { useGenerationStore } from '../stores/generation-store'
 import { useLayoutStore, type CenterMode } from '../stores/layout-store'
-import { useThemeStore } from '../stores/theme-store'
+import { useThemeStore, type Theme } from '../stores/theme-store'
 import { useStorageSettingsStore } from '../stores/storage-settings-store'
 import { useCharactersStore } from '../stores/characters-store'
 import { useFragmentsStore } from '../stores/fragments-store'
@@ -45,7 +45,7 @@ import {
   useShortcutsStore,
   type ShortcutAction
 } from '../stores/shortcuts-store'
-import { ThemeToggle } from './theme-toggle'
+import { Segmented, SegmentedItem } from './ui/segmented'
 import { TranslateSection } from './translate-settings'
 import { AiReplySection } from './ai-reply-settings'
 import { Button } from './ui/button'
@@ -93,7 +93,7 @@ function Row({
     <div className="flex items-center justify-between gap-6 py-2.5">
       <div className="min-w-0">
         <p className="text-[13px] text-ink">{label}</p>
-        {hint && <p className="mt-0.5 text-[11.5px] text-faint">{hint}</p>}
+        {hint && <p className="mt-0.5 text-[12px] text-faint">{hint}</p>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -124,7 +124,7 @@ function PrivacySection(): React.JSX.Element {
         <div className={cn('py-2.5', !enabled && 'pointer-events-none opacity-45')}>
           <div className="flex items-baseline justify-between">
             <p className="text-[13px] text-ink">잠그기까지</p>
-            <p className="text-[11.5px] text-faint">이 창에서 마우스·키보드 움직임 기준</p>
+            <p className="text-[12px] text-faint">이 창에서 마우스·키보드 움직임 기준</p>
           </div>
           <div className="mt-2 flex gap-1.5">
             {PRIVACY_MINUTES.map((m) => (
@@ -187,7 +187,7 @@ function AppearanceSection(): React.JSX.Element {
   return (
     <div className="divide-y divide-line">
       <Row label="색상 모드">
-        <ThemeToggle />
+        <ThemeModePicker />
       </Row>
       <Row label="테마 프리셋">
         <Select value={presetId} onValueChange={setPreset}>
@@ -231,10 +231,30 @@ function AppearanceSection(): React.JSX.Element {
           onValueChange={([v]) => setPromptSize(v)}
         />
       </Row>
-      <Row label="표시할 탭" hint="끈 탭은 상단에서 숨김 (메인은 항상 표시)">
+      <div className="py-2.5">
+        <p className="text-[13px] text-ink">위쪽에 보일 탭</p>
+        <p className="mt-0.5 text-[12px] text-faint">
+          끈 탭은 위쪽 줄에서 숨겨요. 메인은 늘 보여요.
+        </p>
         <PageToggles />
-      </Row>
+      </div>
     </div>
+  )
+}
+
+function ThemeModePicker(): React.JSX.Element {
+  const theme = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
+  return (
+    <Segmented
+      value={theme}
+      onValueChange={(v) => v && setTheme(v as Theme)}
+      aria-label="색상 모드"
+    >
+      <SegmentedItem value="light">라이트</SegmentedItem>
+      <SegmentedItem value="dark">다크</SegmentedItem>
+      <SegmentedItem value="system">시스템</SegmentedItem>
+    </Segmented>
   )
 }
 
@@ -249,22 +269,17 @@ function PageToggles(): React.JSX.Element {
   const hiddenPages = useLayoutStore((s) => s.hiddenPages)
   const setPageHidden = useLayoutStore((s) => s.setPageHidden)
   return (
-    <div className="flex gap-1">
+    <div className="mt-2 divide-y divide-line rounded-lg bg-paper px-3">
       {TOGGLABLE_PAGES.map((p) => {
         const on = !hiddenPages.includes(p.id)
         return (
-          <button
+          <label
             key={p.id}
-            onClick={() => setPageHidden(p.id, on)}
-            className={cn(
-              'rounded-full border px-2.5 py-1 text-[12px] transition-colors',
-              on
-                ? 'border-accent bg-accent/10 text-accent'
-                : 'border-line text-faint hover:text-ink'
-            )}
+            className="flex h-10 cursor-pointer items-center justify-between text-[13px] text-ink"
           >
             {p.label}
-          </button>
+            <Switch checked={on} onCheckedChange={(v) => setPageHidden(p.id, !v)} />
+          </label>
         )
       })}
     </div>
@@ -365,7 +380,7 @@ function SaveDirRow({
     <div className="flex flex-col gap-1.5">
       <div>
         <p className="text-[13px] text-ink">{label}</p>
-        <p className="text-[11.5px] text-faint">{hint}</p>
+        <p className="text-[12px] text-faint">{hint}</p>
       </div>
       <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden">
         <div
@@ -513,7 +528,7 @@ function StorageSection(): React.JSX.Element {
 
       <div className="mt-1 border-t border-line pt-3">
         <p className="text-[13px] text-ink">데이터 백업</p>
-        <p className="mt-0.5 text-[11.5px] text-faint">라이브러리 전체 JSON (NAIS2 백업 호환)</p>
+        <p className="mt-0.5 text-[12px] text-faint">라이브러리 전체 JSON (NAIS2 백업 호환)</p>
         <BackupButtons />
       </div>
     </div>
@@ -538,7 +553,7 @@ function BackupButtons(): React.JSX.Element {
         className="gap-1.5"
         onClick={async () => {
           const ok = await askConfirm('데이터 불러오기', {
-            message: '데이터 불러오기로 기존 데이터가 유실될 수 있습니다. 계속할까요?',
+            message: '데이터를 불러오면 기존 데이터가 사라질 수 있어요. 계속할까요?',
             confirmLabel: '불러오기',
             danger: true
           })
@@ -593,7 +608,7 @@ function ShortcutsSection(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1">
       <div className="mb-1 flex items-center justify-between">
-        <p className="text-[11.5px] text-faint">항목을 클릭하고 새 키 조합을 누르세요.</p>
+        <p className="text-[12px] text-faint">항목을 클릭하고 새 키 조합을 누르세요.</p>
         <Button size="sm" variant="ghost" className="gap-1" onClick={resetDefaults}>
           <RotateCcw size={12} /> 기본값
         </Button>
@@ -755,10 +770,10 @@ function AccountSection(): React.JSX.Element {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[13px] text-ink">NAI API 계정</p>
-          <p className="text-[11.5px] text-faint">
+          <p className="text-[12px] text-faint">
             {accelerationAvailable
-              ? `등록된 계정은 OS 키체인으로 암호화되며, 가속 모드에서는 체크한 계정이 각각 한 장씩 생성합니다${accelerationEnabled ? '' : ' (지금은 가속 모드가 꺼져 있어 계정 1만 써요)'}.`
-              : '등록된 계정은 OS 키체인으로 암호화됩니다.'}
+              ? `등록한 계정은 OS 키체인으로 암호화해요. 가속 모드에서는 체크한 계정이 각각 한 장씩 생성해요${accelerationEnabled ? '' : ' (지금은 가속 모드가 꺼져 있어 계정 1만 써요)'}.`
+              : '등록한 계정은 OS 키체인으로 암호화해요.'}
           </p>
         </div>
         <Button
@@ -774,7 +789,7 @@ function AccountSection(): React.JSX.Element {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-[10.5px] text-faint">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-faint">
         <span>
           {usageDate} ·{' '}
           {usageError ? '조회 실패 · 이전 표시값' : updatedAt ? `${updatedAt} 조회` : '조회 중…'}
@@ -801,14 +816,14 @@ function AccountSection(): React.JSX.Element {
           return (
             <div key={account.id} className="rounded-lg border border-line bg-surface-2/40 p-2.5">
               <div className="mb-1.5 flex items-center gap-2">
-                <p className="text-[11.5px] font-medium text-muted">{account.name}</p>
+                <p className="text-[12px] font-medium text-muted">{account.name}</p>
                 {metrics?.tier && (
-                  <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[9.5px] uppercase text-faint">
+                  <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[11px] uppercase text-faint">
                     {metrics.tier}
                   </span>
                 )}
                 {usageLoading && !metrics && (
-                  <span className="text-[10.5px] text-faint">사용량 조회 중…</span>
+                  <span className="text-[11px] text-faint">사용량 조회 중…</span>
                 )}
                 {accelerationAvailable && (
                   <label
@@ -861,44 +876,44 @@ function AccountSection(): React.JSX.Element {
               </div>
               <div className="mt-2 grid grid-cols-5 gap-1.5 border-t border-line/70 pt-2 text-center">
                 <div>
-                  <p className="font-mono text-[12.5px] text-ink">
+                  <p className="font-mono text-[13px] text-ink">
                     {metrics?.anlas != null ? metrics.anlas.toLocaleString() : '—'}
                   </p>
-                  <p className="text-[9.5px] text-faint">Anlas 잔액</p>
+                  <p className="text-[11px] text-faint">Anlas 잔액</p>
                 </div>
                 <div>
-                  <p className="font-mono text-[12.5px] text-ink">{v5Text}</p>
+                  <p className="font-mono text-[13px] text-ink">{v5Text}</p>
                   {metrics?.v5Usage && (
-                    <p className="text-[10.5px] text-muted" title={V5_ESTIMATE_BASIS}>
+                    <p className="text-[11px] text-muted" title={V5_ESTIMATE_BASIS}>
                       약 {estimateV5Images(metrics.v5Usage).toLocaleString()}장*
                     </p>
                   )}
-                  <p className="text-[9.5px] text-faint">V5 잔량</p>
+                  <p className="text-[11px] text-faint">V5 잔량</p>
                 </div>
                 <div>
-                  <p className="font-mono text-[11.5px] text-ink">
+                  <p className="font-mono text-[12px] text-ink">
                     {metrics?.v5Usage
                       ? formatUsageDuration(metrics.v5Usage.timeUntilNextPercent)
                       : '—'}
                   </p>
                   <p
-                    className="text-[9.5px] text-faint"
-                    title="서버가 제공하는 현재 1%당 충전 시간입니다. 다음 충전 시각이나 고정 주기를 뜻하지 않습니다."
+                    className="text-[11px] text-faint"
+                    title="서버가 알려 주는 지금 1%당 충전 시간이에요. 다음 충전 시각이나 고정 주기는 아니에요."
                   >
                     1%당 충전
                   </p>
                 </div>
                 <div>
-                  <p className="font-mono text-[12.5px] text-ink">
+                  <p className="font-mono text-[13px] text-ink">
                     {metrics ? `${metrics.today.v45}장` : '—'}
                   </p>
-                  <p className="text-[9.5px] text-faint">오늘 V4.5</p>
+                  <p className="text-[11px] text-faint">오늘 V4.5</p>
                 </div>
                 <div>
-                  <p className="font-mono text-[12.5px] text-ink">
+                  <p className="font-mono text-[13px] text-ink">
                     {metrics ? `${metrics.today.v5}장` : '—'}
                   </p>
-                  <p className="text-[9.5px] text-faint">오늘 V5</p>
+                  <p className="text-[11px] text-faint">오늘 V5</p>
                 </div>
               </div>
             </div>
@@ -907,9 +922,7 @@ function AccountSection(): React.JSX.Element {
 
         {adding && (
           <div className="rounded-lg border border-accent/40 bg-surface-2/40 p-2.5">
-            <p className="mb-1.5 text-[11.5px] font-medium text-muted">
-              계정 {accounts.length + 1}
-            </p>
+            <p className="mb-1.5 text-[12px] font-medium text-muted">계정 {accounts.length + 1}</p>
             <div className="flex gap-1.5">
               <Input
                 className="font-mono"
@@ -952,10 +965,9 @@ function AccountSection(): React.JSX.Element {
         {status === 'fail' && <span className="text-[12px] text-danger">{message}</span>}
       </div>
 
-      <div className="flex items-center gap-1.5 text-[10.5px] text-faint">
+      <div className="flex items-center gap-1.5 text-[11px] text-faint">
         <Coins size={11} className="text-[#c9a34f]" /> 오늘 장수는 PC 시각 00:00부터 성공 저장된
-        이미지만 집계합니다. 이번 업데이트 적용 이후 Custom 1 생성분이며, 삭제해도 장수는
-        유지됩니다.
+        이미지만 세요. 이번 업데이트 적용 이후 Custom 1 생성분이며, 삭제해도 장수는 유지돼요.
       </div>
     </div>
   )
@@ -979,11 +991,11 @@ function AboutSection(): React.JSX.Element {
   }, [])
 
   return (
-    <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
+    <div className="flex flex-col gap-1.5 text-[13px] text-muted">
       {/* 로고(흰색)라 라이트 모드에선 invert로 어둡게 */}
       <img src={nais3Logo} className="h-9 w-auto self-start dark:invert-0 invert" alt="NAIS3" />
       <p className="mt-1">NovelAI Image Studio 3</p>
-      <p className="font-mono text-[11.5px] text-faint">버전 {version || '…'}</p>
+      <p className="font-mono text-[12px] text-faint">버전 {version || '…'}</p>
 
       {/* 업데이트: 이 저장소 GitHub 릴리스 기준 */}
       <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1111,7 +1123,7 @@ export function SettingsDialog({
                   key={id}
                   value={id}
                   className={cn(
-                    'flex items-center justify-start gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] text-muted transition-colors hover:text-ink',
+                    'flex items-center justify-start gap-2 rounded-md px-2.5 py-1.5 text-[13px] text-muted transition-colors hover:text-ink',
                     'data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-none'
                   )}
                 >

@@ -416,7 +416,7 @@ export function bindGenerationEvents(): () => void {
     // 전이성 오류로 자동 재시도 중이면 배치당 한 번만 안내 (에러 토스트 대신)
     if (queue.items.some((i) => i.retrying) && !retryNoticeShown) {
       retryNoticeShown = true
-      toast('요청이 몰려 잠시 후 자동으로 재시도합니다', 'info')
+      toast('요청이 몰려서 잠시 뒤 다시 시도해요', 'info')
     }
     // 방금 완료된 항목이 있으면 히스토리 갱신 + 중앙에 표시 (고정 보기 중엔 보기 유지)
     const prevDone = new Set(prev?.items.filter((i) => i.state === 'done').map((i) => i.id))

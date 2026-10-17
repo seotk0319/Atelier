@@ -49,7 +49,7 @@ export function ResolutionPicker({
       if (item.width !== nw || item.height !== nh)
         toast(`64 배수로 스냅됨 → ${item.width}×${item.height}`, 'info')
     } else {
-      toast('이미 있는 해상도입니다', 'info')
+      toast('이미 있는 해상도예요', 'info')
     }
   }
 
@@ -132,7 +132,9 @@ export function ResolutionPicker({
             className="h-7 w-0 flex-1 rounded border border-line bg-paper px-1.5 text-center text-[12px] outline-none focus:border-accent/50"
           />
           <button
-            title={w && h ? `추가 (64 배수 스냅: ${snapDim(Number(w))}×${snapDim(Number(h))})` : '추가'}
+            title={
+              w && h ? `추가 (64 배수 스냅: ${snapDim(Number(w))}×${snapDim(Number(h))})` : '추가'
+            }
             onClick={doAdd}
             className="grid size-7 shrink-0 place-items-center rounded bg-accent text-paper hover:opacity-90"
           >

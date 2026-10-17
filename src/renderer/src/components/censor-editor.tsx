@@ -1,4 +1,13 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, History, Loader2, Redo2, RotateCcw, Undo2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Loader2,
+  Redo2,
+  RotateCcw,
+  Undo2
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useCensorStore } from '../stores/censor-store'
@@ -31,11 +40,11 @@ function canvasPng(canvas: HTMLCanvasElement): Promise<string> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error('편집 이미지를 만들 수 없습니다'))
+        reject(new Error('편집 이미지를 만들지 못했어요'))
         return
       }
       const reader = new FileReader()
-      reader.onerror = () => reject(new Error('편집 이미지를 읽을 수 없습니다'))
+      reader.onerror = () => reject(new Error('편집 이미지를 읽지 못했어요'))
       reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]+,/, ''))
       reader.readAsDataURL(blob)
     }, 'image/png')
@@ -156,26 +165,29 @@ export function CensorEditor(): React.JSX.Element | null {
     [runSave]
   )
 
-  const flushThen = useCallback((action: () => void): void => {
-    if (afterSaveRef.current) return
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-      afterSaveRef.current = action
-      void runSave()
-      return
-    }
-    if (savePromiseRef.current) {
-      afterSaveRef.current = action
-      return
-    }
-    if (dirtyRef.current) {
-      afterSaveRef.current = action
-      void runSave()
-      return
-    }
-    action()
-  }, [runSave])
+  const flushThen = useCallback(
+    (action: () => void): void => {
+      if (afterSaveRef.current) return
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+        afterSaveRef.current = action
+        void runSave()
+        return
+      }
+      if (savePromiseRef.current) {
+        afterSaveRef.current = action
+        return
+      }
+      if (dirtyRef.current) {
+        afterSaveRef.current = action
+        void runSave()
+        return
+      }
+      action()
+    },
+    [runSave]
+  )
 
   const requestClose = useCallback((): void => flushThen(close), [close, flushThen])
 
@@ -413,13 +425,31 @@ export function CensorEditor(): React.JSX.Element | null {
                   ? '저장 실패'
                   : '휠로 브러시 크기 조절'}
           </span>
-          <Button size="icon" variant="ghost" disabled={undoCount === 0} onClick={undo} title="되돌리기">
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={undoCount === 0}
+            onClick={undo}
+            title="되돌리기"
+          >
             <Undo2 size={16} />
           </Button>
-          <Button size="icon" variant="ghost" disabled={redoCount === 0} onClick={redo} title="다시 실행">
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={redoCount === 0}
+            onClick={redo}
+            title="다시 실행"
+          >
             <Redo2 size={16} />
           </Button>
-          <Button size="icon" variant="ghost" disabled={undoCount === 0} onClick={reset} title="이번 편집 초기화">
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={undoCount === 0}
+            onClick={reset}
+            title="이번 편집 초기화"
+          >
             <RotateCcw size={16} />
           </Button>
           <Button
@@ -461,7 +491,10 @@ export function CensorEditor(): React.JSX.Element | null {
               event.preventDefault()
               const next = Math.min(
                 MAX_BRUSH,
-                Math.max(MIN_BRUSH, brushSizeRef.current + (event.deltaY < 0 ? BRUSH_STEP : -BRUSH_STEP))
+                Math.max(
+                  MIN_BRUSH,
+                  brushSizeRef.current + (event.deltaY < 0 ? BRUSH_STEP : -BRUSH_STEP)
+                )
               )
               brushSizeRef.current = next
               setBrushSize(next)

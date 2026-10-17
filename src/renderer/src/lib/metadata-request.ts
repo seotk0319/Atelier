@@ -49,7 +49,7 @@ export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]+,/, ''))
-    reader.onerror = () => reject(new Error('파일을 읽을 수 없습니다'))
+    reader.onerror = () => reject(new Error('파일을 읽지 못했어요'))
     reader.readAsDataURL(file)
   })
 }

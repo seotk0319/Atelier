@@ -20,7 +20,7 @@ export function MaskEditor({
   onConfirm,
   onCancel,
   showStrength = false,
-  title = '인페인트 마스크 — 재생성할 영역을 칠하세요',
+  title = '인페인트 마스크 — 다시 그릴 곳을 칠해 주세요',
   confirmLabel
 }: {
   imageBase64: string
@@ -258,7 +258,7 @@ export function MaskEditor({
             </Button>
             <div className="flex-1" />
             <Button variant="ghost" onClick={onCancel}>
-              취소
+              닫기
             </Button>
             <Button variant="accent" onClick={confirm}>
               {confirmLabel ?? '적용'}

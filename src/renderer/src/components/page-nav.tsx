@@ -69,7 +69,7 @@ export function PageNav(): React.JSX.Element {
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute left-0 top-[3px] h-[34px] rounded-[9px] bg-surface shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_1px_rgba(0,0,0,0.04)] motion-reduce:transition-none',
+            'pointer-events-none absolute left-0 top-[3px] h-[34px] rounded-lg bg-surface shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_1px_rgba(0,0,0,0.04)] motion-reduce:transition-none',
             animate &&
               'transition-[transform,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]'
           )}
@@ -84,7 +84,7 @@ export function PageNav(): React.JSX.Element {
             data-page={page.id}
             onClick={() => setCenterMode(page.id)}
             className={cn(
-              'relative h-[34px] whitespace-nowrap rounded-[9px] px-4 text-[13px] font-semibold transition-colors',
+              'relative h-[34px] whitespace-nowrap rounded-lg px-4 text-[13px] font-semibold transition-colors',
               active ? 'text-ink' : 'text-muted hover:text-ink'
             )}
           >

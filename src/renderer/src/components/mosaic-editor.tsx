@@ -155,7 +155,7 @@ export function MosaicEditor({
   return (
     <Dialog open onOpenChange={(o) => !o && onCancel()}>
       <DialogContent className="max-w-[680px] p-4">
-        <DialogTitle className="mb-3">모자이크 — 가릴 영역을 칠하세요</DialogTitle>
+        <DialogTitle className="mb-3">모자이크 — 가릴 곳을 칠해 주세요</DialogTitle>
         <div className="flex flex-col items-center gap-3">
           <div
             className="relative overflow-hidden rounded-md border border-line bg-paper"
@@ -223,7 +223,7 @@ export function MosaicEditor({
             </Button>
             <div className="flex-1" />
             <Button variant="ghost" onClick={onCancel}>
-              취소
+              닫기
             </Button>
             <Button
               variant="accent"

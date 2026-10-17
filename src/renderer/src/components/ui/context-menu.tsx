@@ -36,7 +36,7 @@ export function ContextMenuItem({
   return (
     <ContextMenuPrimitive.Item
       className={cn(
-        'relative flex cursor-default select-none items-center gap-2 rounded-sm px-3 py-1.5 text-[12.5px] outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-2',
+        'relative flex cursor-default select-none items-center gap-2 rounded-sm px-3 py-1.5 text-[13px] outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-2',
         inset && 'pl-8',
         danger ? 'text-[#c0564e] data-[highlighted]:text-[#c0564e]' : 'text-ink',
         className
@@ -55,7 +55,7 @@ export function ContextMenuCheckboxItem({
   return (
     <ContextMenuPrimitive.CheckboxItem
       className={cn(
-        'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-[12.5px] text-ink outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-2',
+        'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-[13px] text-ink outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-2',
         className
       )}
       checked={checked}
@@ -79,7 +79,7 @@ export function ContextMenuRadioItem({
   return (
     <ContextMenuPrimitive.RadioItem
       className={cn(
-        'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-[12.5px] text-ink outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-2',
+        'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-[13px] text-ink outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-2',
         className
       )}
       {...props}
@@ -103,7 +103,7 @@ export function ContextMenuSubTrigger({
   return (
     <ContextMenuPrimitive.SubTrigger
       className={cn(
-        'flex cursor-default select-none items-center rounded-sm px-3 py-1.5 text-[12.5px] text-ink outline-none transition-colors data-[highlighted]:bg-surface-2',
+        'flex cursor-default select-none items-center rounded-sm px-3 py-1.5 text-[13px] text-ink outline-none transition-colors data-[highlighted]:bg-surface-2',
         inset && 'pl-8',
         className
       )}
@@ -134,5 +134,7 @@ export function ContextMenuSeparator({
   className,
   ...props
 }: ComponentProps<typeof ContextMenuPrimitive.Separator>) {
-  return <ContextMenuPrimitive.Separator className={cn('my-1 h-px bg-line', className)} {...props} />
+  return (
+    <ContextMenuPrimitive.Separator className={cn('my-1 h-px bg-line', className)} {...props} />
+  )
 }

@@ -18,6 +18,7 @@ import type { HistoryItem } from '@shared/types'
 import { thumbnailUrl } from '../../lib/constants'
 import { droppedImagePaths, hasImageDrop, setImagePathDrag } from '../../lib/image-drag'
 import { cn } from '../../lib/utils'
+import { Segmented, SegmentedItem } from '../ui/segmented'
 import { bindGptEvents, fileToRef, pathToRef, useGptStore } from '../../stores/gpt-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { toast } from '../../stores/toast-store'
@@ -45,9 +46,9 @@ export function GptView(): React.JSX.Element {
       .then(({ jobs }) => useGptStore.setState({ jobs }))
   }, [visible])
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-surface">
-      <div className="drag flex h-16 shrink-0 items-center gap-3 px-5">
-        <h1 className="shrink-0 text-[22px] font-bold tracking-tight text-ink">GPT 이미지</h1>
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
+      <div className="drag flex h-[60px] shrink-0 items-center gap-3 px-5">
+        <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">GPT 이미지</h1>
         <div className="flex-1" />
         <LoginChip />
       </div>
@@ -67,7 +68,7 @@ function LoginChip(): React.JSX.Element | null {
     <button
       onClick={() => void check()}
       title={status.ready ? 'ChatGPT 로그인 확인됨 · 눌러서 다시 확인' : status.reason}
-      className="no-drag flex h-9 items-center gap-2 rounded-xl bg-paper px-3 text-[12.5px] font-semibold text-muted hover:text-ink"
+      className="no-drag flex h-8 items-center gap-2 rounded-full bg-paper px-3 text-[12px] font-semibold text-muted hover:text-ink"
     >
       <i className={cn('size-2 rounded-full', status.ready ? 'bg-emerald-500' : 'bg-danger')} />
       {status.ready
@@ -105,10 +106,10 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
   }
 
   return (
-    <aside className="flex w-[400px] shrink-0 flex-col rounded-2xl bg-paper" onPaste={onPaste}>
+    <aside className="flex w-[340px] shrink-0 flex-col rounded-xl bg-paper" onPaste={onPaste}>
       <div className="min-h-0 flex-1 overflow-y-auto p-4 no-scrollbar">
         {status && !status.ready && (
-          <div className="mb-4 rounded-2xl bg-danger/10 px-4 py-3 text-[12.5px] leading-relaxed text-danger">
+          <div className="mb-4 rounded-xl bg-danger/10 px-4 py-3 text-[13px] leading-relaxed text-danger">
             <div className="flex items-center gap-1.5 font-bold">
               <AlertTriangle size={14} /> ChatGPT 로그인이 필요해요
             </div>
@@ -138,7 +139,7 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
               ? '예) 머리색만 은색으로 바꿔 줘 / 표지판 글자를 "좋은 하루"로'
               : '예) 창가 카페에서 코코아를 든 소녀, 부드러운 아침 햇살, 애니메이션 일러스트 — 말풍선 글자도 그대로 써져요'
           }
-          className="mt-2 w-full resize-none rounded-2xl bg-surface px-4 py-3 text-[14px] leading-relaxed text-ink outline-none placeholder:text-faint focus:ring-2 focus:ring-accent/30"
+          className="mt-2 w-full resize-none rounded-xl bg-surface px-4 py-3 text-[14px] leading-relaxed text-ink outline-none placeholder:text-faint focus:ring-2 focus:ring-accent/30"
         />
         <Presets />
 
@@ -162,7 +163,7 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
             else void addFiles(Array.from(e.dataTransfer.files))
           }}
           className={cn(
-            'rounded-2xl border-[1.5px] border-dashed p-2.5 transition',
+            'rounded-xl border-[1.5px] border-dashed p-2.5 transition',
             over ? 'border-accent bg-accent-soft' : 'border-line bg-surface'
           )}
         >
@@ -200,7 +201,7 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
           )}
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl text-[12.5px] font-semibold text-muted hover:bg-paper hover:text-ink"
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold text-muted hover:bg-paper hover:text-ink"
           >
             <ImagePlus size={15} /> {s.refs.length ? '더 넣기' : '이미지 넣기'}
           </button>
@@ -217,55 +218,62 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
           />
         </div>
 
-        <Label title="크기" />
-        <Seg value={s.size} options={GPT_SIZES} onChange={(v) => s.setForm({ size: v })} />
-        <Label title="품질" />
-        <Seg
-          value={s.quality}
-          options={GPT_QUALITIES}
-          onChange={(v) => s.setForm({ quality: v })}
-        />
-        <Label
-          title="프롬프트"
-          hint={s.mode === 'direct' ? '적은 그대로 그려요' : '모델이 알아서 다듬어요'}
-        />
-        <Seg
-          value={s.mode}
-          options={[
-            { value: 'direct', label: '그대로' },
-            { value: 'auto', label: '알아서 다듬기' }
-          ]}
-          onChange={(v) => s.setForm({ mode: v })}
-        />
-        <Label title="모델" />
-        <Select value={s.model} onValueChange={(v) => s.setForm({ model: v as typeof s.model })}>
-          <SelectTrigger className="h-10 w-full rounded-xl border-transparent bg-surface px-3 text-[13px] font-semibold">
-            {s.model}
-          </SelectTrigger>
-          <SelectContent>
-            {GPT_MODELS.map((m) => (
-              <SelectItem key={m} value={m}>
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* 설정은 한 상자에 줄지어: 이름표 왼쪽, 선택 칸 오른쪽 (낮은 창에서도 모델까지 보이게) */}
+        <div className="mt-5 rounded-lg bg-surface px-3">
+          <OptionRow label="크기">
+            <Seg value={s.size} options={GPT_SIZES} onChange={(v) => s.setForm({ size: v })} />
+          </OptionRow>
+          <OptionRow label="품질">
+            <Seg
+              value={s.quality}
+              options={GPT_QUALITIES}
+              onChange={(v) => s.setForm({ quality: v })}
+            />
+          </OptionRow>
+          <OptionRow label="프롬프트">
+            <Seg
+              value={s.mode}
+              options={[
+                { value: 'direct', label: '그대로' },
+                { value: 'auto', label: '알아서 다듬기' }
+              ]}
+              onChange={(v) => s.setForm({ mode: v })}
+            />
+          </OptionRow>
+          <OptionRow label="모델">
+            <Select
+              value={s.model}
+              onValueChange={(v) => s.setForm({ model: v as typeof s.model })}
+            >
+              <SelectTrigger className="h-8 w-full rounded-md border-transparent bg-surface-2 px-2.5 text-[13px] font-medium">
+                {s.model}
+              </SelectTrigger>
+              <SelectContent>
+                {GPT_MODELS.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </OptionRow>
+        </div>
       </div>
 
       <div className="border-t border-line p-4">
-        <div className="mb-3 flex items-center justify-between text-[12.5px] text-muted">
+        <div className="mb-2.5 flex items-center justify-between text-[12px] text-muted">
           <span>ChatGPT 요금제 한도를 써요 · Anlas 없음</span>
           {running > 0 && <span className="font-semibold text-accent">생성 중 {running}장</span>}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex h-12 items-center rounded-xl bg-surface">
+          <div className="flex h-10 items-center rounded-lg bg-surface">
             <button
               className="grid h-full w-9 place-items-center text-muted"
               onClick={() => s.setForm({ count: Math.max(1, s.count - 1) })}
             >
               <Minus size={14} />
             </button>
-            <b className="w-7 text-center text-[15px] tabular-nums text-ink">{s.count}</b>
+            <b className="w-7 text-center text-[14px] tabular-nums text-ink">{s.count}</b>
             <button
               className="grid h-full w-9 place-items-center text-muted"
               onClick={() => s.setForm({ count: s.count + 1 })}
@@ -276,7 +284,7 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
           <button
             disabled={disabled}
             onClick={() => void s.generate()}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-bold text-white transition hover:opacity-90 disabled:opacity-50 dark:text-paper"
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50 dark:text-paper"
           >
             {s.edit ? <PencilLine size={16} /> : <Sparkles size={16} />}
             {s.edit ? '고치기' : '생성'} · {s.count}장
@@ -297,7 +305,7 @@ function EditCard(): React.JSX.Element | null {
   const src = 'data:' + edit.mime + ';base64,' + edit.b64
   const maskUrl = edit.maskB64 ? 'url(data:image/png;base64,' + edit.maskB64 + ')' : undefined
   return (
-    <div className="mb-4 rounded-2xl bg-surface p-3">
+    <div className="mb-4 rounded-xl bg-surface p-3">
       <div className="mb-2 flex items-center gap-2">
         <span className="text-[13px] font-bold text-ink">고칠 그림</span>
         <span className="text-[12px] text-faint">
@@ -333,7 +341,7 @@ function EditCard(): React.JSX.Element | null {
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <button
             onClick={() => setPainting(true)}
-            className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-paper text-[12.5px] font-semibold text-ink hover:bg-accent-soft hover:text-accent"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-paper text-[13px] font-semibold text-ink hover:bg-accent-soft hover:text-accent"
           >
             <Paintbrush size={14} /> {edit.maskB64 ? '칠한 곳 다시 칠하기' : '고칠 곳만 칠하기'}
           </button>
@@ -352,7 +360,7 @@ function EditCard(): React.JSX.Element | null {
           imageBase64={edit.b64}
           width={edit.width}
           height={edit.height}
-          title="고칠 곳만 칠하세요 — 칠하지 않은 곳은 그대로 둬요"
+          title="고칠 곳만 칠해 주세요 — 칠하지 않은 곳은 그대로 둬요"
           confirmLabel="이 부분만 고치기"
           onCancel={() => setPainting(false)}
           onConfirm={(mask) => {
@@ -438,21 +446,37 @@ function Seg<T extends string>(props: {
   onChange: (v: T) => void
 }): React.JSX.Element {
   return (
-    <div className="flex rounded-xl bg-surface p-1">
+    <Segmented
+      className="flex w-full"
+      value={props.value}
+      onValueChange={(v) => v && props.onChange(v as T)}
+    >
       {props.options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => props.onChange(o.value)}
-          className={cn(
-            'h-8 flex-1 rounded-lg text-[12.5px] font-semibold transition',
-            props.value === o.value
-              ? 'bg-accent text-white shadow-sm dark:text-paper'
-              : 'text-muted hover:text-ink'
-          )}
-        >
+        <SegmentedItem key={o.value} value={o.value} className="flex-1 px-1.5">
           {o.label}
-        </button>
+        </SegmentedItem>
       ))}
+    </Segmented>
+  )
+}
+
+/** 설정 한 줄: 왼쪽 이름표, 오른쪽 선택 칸 */
+function OptionRow({
+  label,
+  hint,
+  children
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="flex min-h-11 items-center gap-3 border-t border-line py-1.5 first:border-t-0">
+      <div className="w-14 shrink-0">
+        <div className="text-[12px] font-semibold text-muted">{label}</div>
+        {hint && <div className="text-[11px] text-faint">{hint}</div>}
+      </div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
@@ -469,7 +493,7 @@ function Results(): React.JSX.Element {
   const live = jobs.filter((j) => j.state !== 'done' && j.state !== 'cancelled')
   const hasFinished = jobs.some((j) => j.state === 'failed')
   return (
-    <section className="flex min-w-0 flex-1 flex-col rounded-2xl bg-paper/60">
+    <section className="flex min-w-0 flex-1 flex-col rounded-xl bg-paper/60">
       <div className="flex items-center gap-3 px-5 pb-2 pt-4">
         <h2 className="text-[18px] font-bold tracking-tight text-ink">결과</h2>
         <span className="text-[13px] text-faint">{total.toLocaleString()}장</span>
@@ -477,7 +501,7 @@ function Results(): React.JSX.Element {
         {hasFinished && (
           <button
             onClick={clearFinished}
-            className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-muted hover:bg-surface hover:text-ink"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold text-muted hover:bg-surface hover:text-ink"
           >
             <Trash2 size={13} /> 실패한 작업 지우기
           </button>
@@ -537,7 +561,7 @@ function JobCard({ job }: { job: GptJob }): React.JSX.Element {
   return (
     <div
       className={cn(
-        'relative flex aspect-square flex-col overflow-hidden rounded-2xl p-3',
+        'relative flex aspect-square flex-col overflow-hidden rounded-xl p-3',
         failed ? 'bg-danger/10' : 'bg-surface'
       )}
     >
@@ -576,9 +600,9 @@ function JobCard({ job }: { job: GptJob }): React.JSX.Element {
           </button>
         )}
       </div>
-      <div className="mt-2 line-clamp-4 text-[12.5px] leading-relaxed text-muted">{job.prompt}</div>
+      <div className="mt-2 line-clamp-4 text-[13px] leading-relaxed text-muted">{job.prompt}</div>
       {(failed || job.state === 'retrying') && job.error && (
-        <div className="mt-auto line-clamp-3 text-[11.5px] leading-relaxed text-danger">
+        <div className="mt-auto line-clamp-3 text-[12px] leading-relaxed text-danger">
           {job.error}
         </div>
       )}
@@ -629,7 +653,7 @@ function ResultCard({
         </ContextMenuItem>
       }
     >
-      <div className="group relative aspect-square overflow-hidden rounded-2xl bg-surface">
+      <div className="group relative aspect-square overflow-hidden rounded-xl bg-surface">
         <button
           onClick={onOpen}
           draggable

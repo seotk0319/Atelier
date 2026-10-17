@@ -58,7 +58,7 @@ export function ArtistTagsDialog(): React.JSX.Element {
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted">
             <Loader2 size={18} className="animate-spin" />
-            <p className="text-[13px]">스타일 분석 중… (수 초 걸릴 수 있습니다)</p>
+            <p className="text-[13px]">스타일 분석 중… (몇 초 걸릴 수 있어요)</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center gap-3 py-14 text-danger">
@@ -92,7 +92,7 @@ export function ArtistTagsDialog(): React.JSX.Element {
                       onClick={() => toggle(t.label)}
                       title={off ? '클릭해서 포함' : '클릭해서 제외'}
                       className={cn(
-                        'flex w-full shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11.5px] transition-colors',
+                        'flex w-full shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] transition-colors',
                         off
                           ? 'border-line text-faint opacity-55 hover:opacity-80'
                           : 'border-accent/50 bg-accent/10 text-ink'
@@ -103,7 +103,7 @@ export function ArtistTagsDialog(): React.JSX.Element {
                         className={cn('shrink-0', off ? 'text-faint' : 'text-accent')}
                       />
                       <span className="min-w-0 flex-1 truncate text-left">{t.label}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-faint">
+                      <span className="shrink-0 font-mono text-[11px] text-faint">
                         {formatScore(t.score)}
                       </span>
                     </button>
@@ -133,7 +133,7 @@ export function ArtistTagsDialog(): React.JSX.Element {
             disabled={!selectedText}
             onClick={() => {
               void navigator.clipboard.writeText(selectedText)
-              toast('작가 태그가 복사되었습니다', 'success')
+              toast('작가 태그를 복사했어요', 'success')
             }}
           >
             <Copy size={13} /> 복사

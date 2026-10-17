@@ -86,8 +86,8 @@ export function TranslateSection(): React.JSX.Element {
               <Languages size={17} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-semibold text-ink">DeepL 연결됨</p>
-              <p className="mt-0.5 text-[11.5px] text-faint">
+              <p className="text-[13px] font-semibold text-ink">DeepL 연결됨</p>
+              <p className="mt-0.5 text-[12px] text-faint">
                 {status?.free ? '무료 API' : 'Pro API'} · 키 끝 {status?.tail}
               </p>
             </div>
@@ -109,9 +109,7 @@ export function TranslateSection(): React.JSX.Element {
                 style={{ width: `${percent ?? 0}%` }}
               />
             </div>
-            {usage && !usage.ok && (
-              <p className="mt-2 text-[11.5px] text-danger">{usage.message}</p>
-            )}
+            {usage && !usage.ok && <p className="mt-2 text-[12px] text-danger">{usage.message}</p>}
           </div>
           <div className="mt-4 flex gap-2">
             <Button className="flex-1" onClick={() => setEditing(true)}>
@@ -164,7 +162,7 @@ export function TranslateSection(): React.JSX.Element {
               </Button>
             )}
           </div>
-          <p className="text-[11.5px] leading-relaxed text-faint">
+          <p className="text-[12px] leading-relaxed text-faint">
             무료 키는 끝이 :fx예요. 무료로 한 달에 50만 자까지 쓸 수 있어요. 키가 없다면{' '}
             <button
               className="font-medium text-accent hover:underline"

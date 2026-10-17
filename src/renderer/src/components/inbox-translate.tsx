@@ -79,14 +79,14 @@ export function TranslatableText({
         className={cn(
           'select-text whitespace-pre-wrap break-words',
           variant === 'bubble'
-            ? 'mt-1.5 w-fit max-w-[92%] rounded-2xl rounded-bl-md bg-surface-2 px-3.5 py-2.5 text-[13.5px] leading-relaxed'
+            ? 'mt-1.5 w-fit max-w-[92%] rounded-xl rounded-bl-md bg-surface-2 px-3.5 py-2.5 text-[13px] leading-relaxed'
             : 'mt-1 text-[12px] text-muted'
         )}
       >
         {shown || '내용 없음'}
       </p>
       {foreign && (
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11.5px]">
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[12px]">
           {state.kind === 'idle' && (
             <button
               onClick={() => void translate()}
@@ -259,9 +259,9 @@ export function ReplyComposer({
   return (
     // 패널이 좁으면(창을 줄였을 때) 글자 수를 숨겨 언어 버튼과 보내기가 한 줄에 남게 한다.
     <div className="@container shrink-0 px-3.5 pb-2">
-      <div className="rounded-2xl border border-line bg-surface transition-colors focus-within:border-accent/55">
+      <div className="rounded-xl border border-line bg-surface transition-colors focus-within:border-accent/55">
         {ai.kind !== 'idle' && (
-          <div className="border-b border-line px-3 pb-2 pt-2.5 text-[11.5px]">
+          <div className="border-b border-line px-3 pb-2 pt-2.5 text-[12px]">
             {ai.kind === 'loading' && (
               <p className="flex items-center gap-1.5 text-faint">
                 <Sparkles size={12} className="shrink-0 text-accent" /> AI가 초안을 쓰는 중…
@@ -311,7 +311,7 @@ export function ReplyComposer({
                       key={reply}
                       onClick={() => onChange(reply)}
                       className={cn(
-                        'line-clamp-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] leading-snug text-ink transition-colors hover:bg-surface-2',
+                        'line-clamp-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] leading-snug text-ink transition-colors hover:bg-surface-2',
                         value === reply && 'bg-accent-soft hover:bg-accent-soft'
                       )}
                     >
@@ -335,10 +335,10 @@ export function ReplyComposer({
           maxLength={REPLY_MAX}
           placeholder={placeholder}
           aria-label="답글"
-          className="block max-h-[260px] min-h-[116px] w-full resize-none bg-transparent px-4 pb-1.5 pt-3.5 text-[13.5px] leading-relaxed text-ink outline-none [field-sizing:content] placeholder:text-faint"
+          className="block max-h-[260px] min-h-[116px] w-full resize-none bg-transparent px-4 pb-1.5 pt-3.5 text-[13px] leading-relaxed text-ink outline-none [field-sizing:content] placeholder:text-faint"
         />
         {fresh && last && (
-          <p className="flex items-center gap-1.5 px-4 pb-1.5 text-[11.5px] text-muted">
+          <p className="flex items-center gap-1.5 px-4 pb-1.5 text-[12px] text-muted">
             <Check size={12} className="shrink-0 text-accent" />
             <span className="min-w-0 flex-1 truncate">
               {languageLabel(last.from)} → {targetName(last.to)}로 바꿨어요
@@ -358,11 +358,11 @@ export function ReplyComposer({
           </p>
         )}
         {error === 'NO_KEY' ? (
-          <p className="flex px-4 pb-1.5 text-[11.5px]">
+          <p className="flex px-4 pb-1.5 text-[12px]">
             <NoKey />
           </p>
         ) : (
-          error && <p className="px-4 pb-1.5 text-[11.5px] text-danger">{error}</p>
+          error && <p className="px-4 pb-1.5 text-[12px] text-danger">{error}</p>
         )}
         <div className="flex items-center gap-2 py-2 pl-2.5 pr-2">
           <button
@@ -388,7 +388,7 @@ export function ReplyComposer({
                   t.name + '로 바꾸기' + (suggested === t.id ? ' · 댓글이 ' + t.name + '예요' : '')
                 }
                 className={cn(
-                  'h-7 whitespace-nowrap rounded-md px-2 text-[11.5px] font-semibold transition-colors enabled:hover:bg-surface enabled:hover:text-ink disabled:opacity-45 @min-[380px]:px-2.5',
+                  'h-7 whitespace-nowrap rounded-md px-2 text-[12px] font-semibold transition-colors enabled:hover:bg-surface enabled:hover:text-ink disabled:opacity-45 @min-[380px]:px-2.5',
                   suggested === t.id ? 'text-accent' : 'text-muted'
                 )}
               >
@@ -409,7 +409,7 @@ export function ReplyComposer({
           <button
             disabled={!canSend}
             onClick={onSend}
-            className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-accent px-3.5 text-[12.5px] font-bold text-white transition-colors disabled:bg-surface-2 disabled:text-faint dark:text-paper @min-[400px]:ml-0"
+            className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-accent px-3.5 text-[13px] font-bold text-white transition-colors disabled:bg-surface-2 disabled:text-faint dark:text-paper @min-[400px]:ml-0"
           >
             <Send size={14} /> {sending ? '보내는 중…' : '보내기'}
           </button>

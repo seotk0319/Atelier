@@ -65,7 +65,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
     const paths = droppedImagePaths(e)
     const count = await addPaths(paths, null)
     if (count > 0) toast(`레퍼런스 ${count}장 추가됨`, 'success')
-    else toast('추가할 수 있는 이미지가 없습니다', 'info')
+    else toast('추가할 수 있는 이미지가 없어요', 'info')
   }
 
   // 편집 모드 — 다중 선택 (일반 클릭=교체, Ctrl=토글, Shift=구간, Ctrl+A=전체)
@@ -109,7 +109,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
   const bulkDelete = async (): Promise<void> => {
     if (
       !(await askConfirm('선택 삭제', {
-        message: `선택한 ${selected.size}개를 삭제합니다.`,
+        message: `선택한 ${selected.size}개를 삭제해요.`,
         confirmLabel: '삭제',
         danger: true
       }))
@@ -152,7 +152,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
               checked ? 'border-accent bg-accent text-white' : 'border-line'
             )}
           >
-            {checked && <span className="text-[9px] leading-none">✓</span>}
+            {checked && <span className="text-[11px] leading-none">✓</span>}
           </span>
           {item.thumbnail ? (
             <img
@@ -169,7 +169,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
           <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
             {item.name || <span className="text-faint">이름 없음</span>}
           </span>
-          <span className="shrink-0 font-mono text-[10px] text-faint">
+          <span className="shrink-0 font-mono text-[11px] text-faint">
             {kind === 'vibe'
               ? `s${(item as VibeItem).strength.toFixed(2)}`
               : (item as CharRefItem).refType === 'character&style'
@@ -216,7 +216,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
             }
           />
         )}
-        <span className="shrink-0 font-mono text-[10px] text-faint">
+        <span className="shrink-0 font-mono text-[11px] text-faint">
           {kind === 'vibe'
             ? `s${(item as VibeItem).strength.toFixed(2)}`
             : (item as CharRefItem).refType === 'character&style'
@@ -291,7 +291,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
     >
       {dropOver && (
         <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center rounded-lg bg-accent/10 backdrop-blur-[1px]">
-          <div className="rounded-lg border border-accent bg-paper/95 px-4 py-2 text-[12.5px] font-medium text-accent shadow-lg">
+          <div className="rounded-lg border border-accent bg-paper/95 px-4 py-2 text-[13px] font-medium text-accent shadow-lg">
             놓아서 레퍼런스에 추가
           </div>
         </div>
@@ -310,7 +310,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
           {kind === 'vibe' ? '바이브 트랜스퍼' : '캐릭터 레퍼런스'}
         </span>
         {enabledCount > 0 && (
-          <span className="rounded-full bg-accent-soft px-1.5 font-mono text-[10.5px] text-accent">
+          <span className="rounded-full bg-accent-soft px-1.5 font-mono text-[11px] text-accent">
             {enabledCount}
           </span>
         )}
@@ -484,7 +484,7 @@ function BulkParamsDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm p-4">
         <DialogTitle className="mb-1">파라미터 일괄 적용</DialogTitle>
-        <p className="mb-3 text-[12px] text-muted">선택한 {count}개에 아래 값을 적용합니다.</p>
+        <p className="mb-3 text-[12px] text-muted">선택한 {count}개에 아래 값을 적용해요.</p>
         <div className="flex flex-col gap-2.5">
           {kind === 'charref' && (
             <ParamRow label="타입">
@@ -535,7 +535,7 @@ function BulkParamsDialog({
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            취소
+            닫기
           </Button>
           <Button
             variant="accent"
@@ -564,7 +564,7 @@ function ParamRow({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-[11.5px] text-muted">{label}</span>
+      <span className="w-16 shrink-0 text-[12px] text-muted">{label}</span>
       {children}
     </div>
   )
@@ -598,7 +598,7 @@ function VibeParams({
         />
       </ParamRow>
       {!item.encodedReady && (
-        <p className="text-[10.5px] text-faint">생성 시 인코딩 (2 Anlas, 이후 캐시)</p>
+        <p className="text-[11px] text-faint">생성 시 인코딩 (2 Anlas, 이후 캐시)</p>
       )}
     </div>
   )

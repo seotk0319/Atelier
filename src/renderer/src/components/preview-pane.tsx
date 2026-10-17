@@ -49,11 +49,10 @@ export function PreviewPane(): React.JSX.Element {
     setInfo(null)
     if (!viewingFilePath) return
     let alive = true
-    void window.nais
-      .invoke('images:readMetadata', { filePath: viewingFilePath })
-      .then((r) => {
-        if (alive && 'meta' in r) setInfo({ width: r.meta.width, height: r.meta.height, seed: r.meta.seed })
-      })
+    void window.nais.invoke('images:readMetadata', { filePath: viewingFilePath }).then((r) => {
+      if (alive && 'meta' in r)
+        setInfo({ width: r.meta.width, height: r.meta.height, seed: r.meta.seed })
+    })
     return () => {
       alive = false
     }
@@ -67,7 +66,7 @@ export function PreviewPane(): React.JSX.Element {
   return (
     <div
       className={cn(
-        'relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border bg-surface p-2 transition-colors',
+        'relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-xl border bg-surface p-2 transition-colors',
         dragOver ? 'border-accent' : 'border-transparent'
       )}
       onDragOver={(e) => {
@@ -120,7 +119,12 @@ export function PreviewPane(): React.JSX.Element {
             />
           </ImageContextMenu>
         ) : (
-          <img src={src} className="h-full w-full rounded-md object-contain" draggable={false} alt="" />
+          <img
+            src={src}
+            className="h-full w-full rounded-md object-contain"
+            draggable={false}
+            alt=""
+          />
         )
       ) : generating ? (
         <div className="flex flex-col items-center gap-3 text-muted">
@@ -130,7 +134,7 @@ export function PreviewPane(): React.JSX.Element {
       ) : (
         <div className="flex flex-col items-center gap-2 text-faint">
           <ImageIcon size={40} strokeWidth={1.2} />
-          <span className="text-[13px]">생성된 이미지가 여기 표시됩니다</span>
+          <span className="text-[13px]">생성한 그림이 여기에 보여요</span>
         </div>
       )}
 
@@ -140,7 +144,10 @@ export function PreviewPane(): React.JSX.Element {
             <Loader2 size={14} className="animate-spin text-accent" />
           ) : (
             <div className="h-1.5 w-36 overflow-hidden rounded-full bg-surface-2">
-              <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+              <div
+                className="h-full rounded-full bg-accent transition-all"
+                style={{ width: `${pct}%` }}
+              />
             </div>
           )}
           <span className="font-mono text-[11px] text-muted">
@@ -178,7 +185,11 @@ export function PreviewPane(): React.JSX.Element {
                 }
               }}
             >
-              {seedLocked && requestSeed === info.seed ? <Lock size={11} /> : <LockOpen size={11} />}
+              {seedLocked && requestSeed === info.seed ? (
+                <Lock size={11} />
+              ) : (
+                <LockOpen size={11} />
+              )}
               {info.seed}
             </button>
           )}
@@ -196,7 +207,13 @@ export function PreviewPane(): React.JSX.Element {
 }
 
 /** 이전 기록 기반 남은 시간 표시 (매초 갱신) */
-function Eta({ startAt, avgMs }: { startAt: number | null; avgMs: number | null }): React.JSX.Element | null {
+function Eta({
+  startAt,
+  avgMs
+}: {
+  startAt: number | null
+  avgMs: number | null
+}): React.JSX.Element | null {
   const [, tick] = useState(0)
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 500)

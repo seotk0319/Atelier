@@ -1,4 +1,17 @@
-import { Copy, Download, FileDown, FileUp, FolderPlus, Pencil, Plus, Puzzle, RotateCcw, Search, Trash2, X } from 'lucide-react'
+import {
+  Copy,
+  Download,
+  FileDown,
+  FileUp,
+  FolderPlus,
+  Pencil,
+  Plus,
+  Puzzle,
+  RotateCcw,
+  Search,
+  Trash2,
+  X
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Fragment } from '@shared/types'
 import { cn } from '../lib/utils'
@@ -14,9 +27,8 @@ import { PromptEditor } from './prompt-editor'
 
 function lineCount(content: string): number {
   // #로 시작하는 줄만 주석 (main의 contentToLines와 동일 규칙)
-  return content
-    .split('\n')
-    .filter((l) => l.trim().length > 0 && !l.trimStart().startsWith('#')).length
+  return content.split('\n').filter((l) => l.trim().length > 0 && !l.trimStart().startsWith('#'))
+    .length
 }
 
 export function FragmentOverlay(): React.JSX.Element {
@@ -121,7 +133,7 @@ export function FragmentOverlay(): React.JSX.Element {
         placeholder={'한 줄 = 한 옵션 (여러 줄이면 생성마다 랜덤 선택)\n#로 시작하는 줄은 주석'}
         onValueChange={(v) => update(fragment.id, { content: v })}
       />
-      <p className="text-[10.5px] text-faint">
+      <p className="text-[11px] text-faint">
         {'<'}
         {pathOf(fragment)}
         {'>'} 로 사용 · {'<*'}
@@ -134,11 +146,17 @@ export function FragmentOverlay(): React.JSX.Element {
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Button size="icon" variant="ghost" className="h-7 w-7" title="닫기" onClick={() => setOverlayOpen(false)}>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          title="닫기"
+          onClick={() => setOverlayOpen(false)}
+        >
           <X size={15} />
         </Button>
         <span className="text-[13px] font-medium">조각 프롬프트</span>
-        <span className="font-mono text-[10.5px] text-faint">{items.length}</span>
+        <span className="font-mono text-[11px] text-faint">{items.length}</span>
         <Button
           size="icon"
           variant="ghost"
@@ -146,7 +164,7 @@ export function FragmentOverlay(): React.JSX.Element {
           title="순차 선택 카운터 리셋 (<*이름>을 다시 첫 줄부터)"
           onClick={async () => {
             await resetSequential()
-            toast('순차 카운터를 리셋했습니다', 'success')
+            toast('순차 카운터를 처음으로 되돌렸어요', 'success')
           }}
         >
           <RotateCcw size={14} />
@@ -155,7 +173,7 @@ export function FragmentOverlay(): React.JSX.Element {
         <Button
           size="sm"
           variant="ghost"
-          className="gap-1 text-[11.5px]"
+          className="gap-1 text-[12px]"
           title="조각 불러오기 (TXT / ZIP · 와일드카드 호환)"
           onClick={() => void importTxt()}
         >
@@ -164,7 +182,7 @@ export function FragmentOverlay(): React.JSX.Element {
         <Button
           size="sm"
           variant="ghost"
-          className="gap-1 text-[11.5px]"
+          className="gap-1 text-[12px]"
           title="조각 전체 내보내기 (ZIP · 공유/백업)"
           onClick={async () => {
             const n = await exportAll()
@@ -178,9 +196,19 @@ export function FragmentOverlay(): React.JSX.Element {
       <div className="flex items-center gap-1.5">
         <div className="relative flex-1">
           <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-faint" />
-          <Input className="pl-7" value={search} placeholder="검색" onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            className="pl-7"
+            value={search}
+            placeholder="검색"
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
-        <Button size="sm" variant="ghost" title="폴더 추가" onClick={() => void createFolder('새 폴더')}>
+        <Button
+          size="sm"
+          variant="ghost"
+          title="폴더 추가"
+          onClick={() => void createFolder('새 폴더')}
+        >
           <FolderPlus size={14} />
         </Button>
         <Button
