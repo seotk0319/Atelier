@@ -683,6 +683,13 @@ function SceneGrid(): React.JSX.Element {
             <Button className="h-9 shrink-0 px-3" onClick={importJson}>
               <FileDown size={15} /> 불러오기
             </Button>
+            <Button
+              className="h-9 shrink-0 px-3"
+              onClick={() => void openPresetFolder()}
+              title="이 프리셋의 이미지 폴더 열기"
+            >
+              <FolderOpen size={15} /> 폴더 열기
+            </Button>
             <IconBtn
               icon={<Pencil size={16} />}
               tip="편집 모드 (여러 씬 선택)"
@@ -699,11 +706,6 @@ function SceneGrid(): React.JSX.Element {
                 </button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-60 p-1">
-                <MenuItem
-                  icon={<FolderOpen size={13} />}
-                  label="폴더 열기"
-                  onClick={() => void openPresetFolder()}
-                />
                 <MenuItem
                   icon={<FileUp size={13} />}
                   label="씬 JSON 내보내기"
