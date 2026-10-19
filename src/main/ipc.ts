@@ -27,6 +27,8 @@ import {
   translateText,
   translateUsage
 } from './translate/service'
+import { openRouterStatus, removeOpenRouterKey, saveOpenRouterKey } from './llm/service'
+import { tagFromImage, tagFromText } from './tag-helper/service'
 import {
   aiEntry,
   aiLog,
@@ -235,6 +237,11 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   const censorFolderFiles = new Set<string>()
   const censorPathKey = (filePath: string): string => resolve(filePath).toLowerCase()
   handle('db:status', () => ({ version: ctx.dbVersion, path: getDbPath() }))
+  handle('openrouter:status', () => openRouterStatus())
+  handle('openrouter:setKey', ({ key }) => saveOpenRouterKey(String(key || '')))
+  handle('openrouter:deleteKey', () => removeOpenRouterKey())
+  handle('tagHelper:fromText', (req) => tagFromText(req))
+  handle('tagHelper:fromImage', (req) => tagFromImage(req))
   handle('app:version', () => ({ version: app.getVersion() }))
   handle('app:profile', () => ({ profile: PROFILE, title: APP_TITLE }))
 

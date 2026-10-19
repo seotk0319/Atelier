@@ -140,6 +140,19 @@ export function deleteClaudeKey(): void {
   getDb().prepare('DELETE FROM settings WHERE key = ?').run(CLAUDE_KEY)
 }
 
+// OpenRouter API 키 (DeepSeek 번역 · AI 태그 도우미 공용). 다른 키와 같은 방식으로 암호화한다.
+const OPENROUTER_KEY = 'openrouter_key_encrypted'
+export function getOpenRouterKey(): string | null {
+  const stored = getSetting(OPENROUTER_KEY)
+  return stored ? decryptValue(stored) : null
+}
+export function setOpenRouterKey(key: string): void {
+  setSetting(OPENROUTER_KEY, encryptValue(key.trim()))
+}
+export function deleteOpenRouterKey(): void {
+  getDb().prepare('DELETE FROM settings WHERE key = ?').run(OPENROUTER_KEY)
+}
+
 /** 마스킹 표시용 메타 (WHIMS 프로바이더 키 UI 패턴) */
 export function getNaiTokenInfo(): { hasToken: boolean; prefix: string; length: number } {
   const token = getNaiToken()

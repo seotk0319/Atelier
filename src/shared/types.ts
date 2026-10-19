@@ -9,6 +9,8 @@ import type {
 } from './inbox'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
 import type { TranslateResult, TranslateStatus, TranslateTarget, TranslateUsage } from './translate'
+import type { OpenRouterKeyResult, OpenRouterStatus } from './llm'
+import type { TagHelperImageRequest, TagHelperResult, TagHelperTextRequest } from './tag-helper'
 import type {
   AiBacklogPreview,
   AiBacklogRequest,
@@ -436,6 +438,13 @@ export interface IpcInvokeMap {
   }
   'translate:deleteKey': { req: void; res: { ok: true } }
   'translate:run': { req: { text: string; target: TranslateTarget }; res: TranslateResult }
+  /** OpenRouter 키 (DeepSeek 번역 · AI 태그 도우미 공용, 모든 프로필) */
+  'openrouter:status': { req: void; res: OpenRouterStatus }
+  'openrouter:setKey': { req: { key: string }; res: OpenRouterKeyResult }
+  'openrouter:deleteKey': { req: void; res: { ok: true } }
+  /** AI 태그 도우미: 한글 설명 / 그림 → NAI 태그 한 줄 (모든 프로필) */
+  'tagHelper:fromText': { req: TagHelperTextRequest; res: TagHelperResult }
+  'tagHelper:fromImage': { req: TagHelperImageRequest; res: TagHelperResult }
   /** AI 답글 (Custom 1만) */
   'aiReply:status': { req: void; res: AiReplyStatus }
   'aiReply:setKey': { req: { key: string }; res: { ok: boolean; message: string } }
