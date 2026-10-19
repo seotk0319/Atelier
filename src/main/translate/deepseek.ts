@@ -22,6 +22,7 @@ function systemPrompt(target: string, source?: string | null): string {
     'You are a professional translator for character-chat platform comments.',
     `Translate the user's message into ${language}.`,
     'Keep the tone, slang, emoji, line breaks, character names and @mentions.',
+    'Convert Korean internet laughter and jamo shorthand (ㅎㅎ, ㅋㅋ, ㅠㅠ) into the natural target-language equivalent (Japanese: 笑 or w, Chinese: 哈哈 or QQ, English: haha or lol, Korean: keep as is).',
     'Match how a native speaker writes on a fan community; keep it natural, not literal.',
     'Output ONLY the translation in the text field. Do not add quotes, notes or explanations.',
     hint,
