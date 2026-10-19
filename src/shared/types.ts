@@ -8,7 +8,13 @@ import type {
   InboxResult
 } from './inbox'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
-import type { TranslateResult, TranslateStatus, TranslateTarget, TranslateUsage } from './translate'
+import type {
+  TranslateEngine,
+  TranslateResult,
+  TranslateStatus,
+  TranslateTarget,
+  TranslateUsage
+} from './translate'
 import type { OpenRouterKeyResult, OpenRouterStatus } from './llm'
 import type { TagHelperImageRequest, TagHelperResult, TagHelperTextRequest } from './tag-helper'
 import type {
@@ -437,6 +443,7 @@ export interface IpcInvokeMap {
     res: { ok: boolean; message: string; usage?: TranslateUsage }
   }
   'translate:deleteKey': { req: void; res: { ok: true } }
+  'translate:setEngine': { req: { engine: TranslateEngine }; res: TranslateStatus }
   'translate:run': { req: { text: string; target: TranslateTarget }; res: TranslateResult }
   /** OpenRouter 키 (DeepSeek 번역 · AI 태그 도우미 공용, 모든 프로필) */
   'openrouter:status': { req: void; res: OpenRouterStatus }

@@ -33,7 +33,8 @@ export function MaskEditor({
   confirmLabel?: string
 }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [brush, setBrush] = useState(40)
+  const ringRef = useRef<HTMLDivElement>(null)
+  const [brush, setBrush] = useState(20)
   const [erasing, setErasing] = useState(false)
   const [strength, setStrength] = useState(1)
   const [undoDepth, setUndoDepth] = useState(0)
@@ -102,6 +103,20 @@ export function MaskEditor({
     ctx.fill()
     ctx.globalCompositeOperation = 'source-over'
     last.current = { x, y }
+  }
+
+  /** 붓 커서 링 — 화면 좌표(px) 기준, 지름 = brush*2 */
+  function moveRing(e: React.PointerEvent): void {
+    const ring = ringRef.current
+    if (!ring) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    ring.style.transform = `translate3d(${e.clientX - rect.left}px, ${e.clientY - rect.top}px, 0) translate(-50%, -50%)`
+    ring.style.opacity = '1'
+  }
+
+  function hideRing(): void {
+    const ring = ringRef.current
+    if (ring) ring.style.opacity = '0'
   }
 
   function clear(): void {
@@ -181,16 +196,20 @@ export function MaskEditor({
               ref={canvasRef}
               width={width}
               height={height}
-              className="absolute inset-0 h-full w-full cursor-crosshair opacity-40"
+              className="absolute inset-0 h-full w-full cursor-none opacity-40"
               style={{ touchAction: 'none' }}
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId)
+                moveRing(e)
                 pushSnapshot()
                 drawing.current = true
                 last.current = null
                 paint(e)
               }}
-              onPointerMove={paint}
+              onPointerMove={(e) => {
+                moveRing(e)
+                paint(e)
+              }}
               onPointerUp={() => {
                 drawing.current = false
                 last.current = null
@@ -198,6 +217,20 @@ export function MaskEditor({
               onPointerLeave={() => {
                 drawing.current = false
                 last.current = null
+                hideRing()
+              }}
+            />
+            <div
+              ref={ringRef}
+              className="pointer-events-none absolute left-0 top-0 rounded-full"
+              style={{
+                width: brush * 2,
+                height: brush * 2,
+                opacity: 0,
+                border: erasing ? '1.5px dashed white' : `1.5px solid ${MASK_COLOR}`,
+                boxShadow: erasing
+                  ? '0 0 0 1px rgba(0, 0, 0, 0.45)'
+                  : '0 0 0 1px rgba(255, 255, 255, 0.9)'
               }}
             />
           </div>
@@ -261,7 +294,7 @@ export function MaskEditor({
               닫기
             </Button>
             <Button variant="accent" onClick={confirm}>
-              {confirmLabel ?? '적용'}
+              {confirmLabel ?? '인페인트'}
             </Button>
           </div>
         </div>

@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Sparkles,
   TextCursorInput,
   Trash2,
   UserRound,
@@ -29,6 +30,7 @@ import { buildDisplayRows } from '../lib/folder-list'
 import { useCharactersStore } from '../stores/characters-store'
 import { useGenerationStore } from '../stores/generation-store'
 import { askConfirm, askText } from '../stores/dialog-store'
+import { useTagHelperStore } from '../stores/tag-helper-store'
 import { FolderListView } from './folder-list-view'
 import { PromptEditor } from './prompt-editor'
 import { ContextMenuItem, ContextMenuSeparator } from './ui/context-menu'
@@ -436,6 +438,32 @@ export function CharacterOverlay(): React.JSX.Element {
           onClick={() => removeCard(char.id)}
         >
           <Trash2 size={14} />
+        </Button>
+      </div>
+      <div className="flex items-center justify-between pl-0.5">
+        <span className="text-[11px] text-faint">캐릭터 프롬프트</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 gap-1 px-1.5 text-[11px]"
+          title="그림이나 한글 설명으로 태그를 뽑아요"
+          onClick={() =>
+            useTagHelperStore.getState().open({
+              mode: 'character',
+              targetLabel: char.name || '캐릭터 프롬프트',
+              onApply: (tags, how) =>
+                updateCard(char.id, {
+                  prompt:
+                    how === 'replace'
+                      ? tags
+                      : char.prompt
+                        ? char.prompt.replace(/[,\s]*$/, '') + ', ' + tags
+                        : tags
+                })
+            })
+          }
+        >
+          <Sparkles size={12} /> AI 태그
         </Button>
       </div>
       {/* resize-y: 우하단 핸들로 세로 크기 조절. 초기 크기 상향 (F11) */}

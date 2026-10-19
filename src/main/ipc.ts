@@ -23,6 +23,7 @@ import {
 import {
   removeTranslateKey,
   saveTranslateKey,
+  setTranslateEngine,
   translateStatus,
   translateText,
   translateUsage
@@ -215,6 +216,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     handle('inbox:disconnect', ({ platform }) => disconnectInboxPlatform(platform))
     handle('inbox:select', ({ platform, selected }) => selectInboxPlatform(platform, selected))
     handle('translate:status', () => translateStatus())
+    handle('translate:setEngine', ({ engine }) => setTranslateEngine(engine))
     handle('translate:usage', () => translateUsage())
     handle('translate:setKey', ({ key }) => saveTranslateKey(String(key || '')))
     handle('translate:deleteKey', () => removeTranslateKey())

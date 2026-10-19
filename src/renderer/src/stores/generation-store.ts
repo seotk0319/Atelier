@@ -83,7 +83,8 @@ interface GenerationState {
   setPromptSplitEnabled: (enabled: boolean) => void
   patchPromptParts: (patch: Partial<PromptParts>) => void
   hydrate: () => Promise<void>
-  generate: () => Promise<void>
+  // 큐에 실제로 들어갔는지 돌려준다 (인페인트 확정 시 소스 정리 판단용)
+  generate: () => Promise<boolean>
   cancelAll: () => Promise<void>
   refreshHistory: () => Promise<void>
   view: (filePath: string | null) => void
@@ -244,6 +245,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     if (result.blockedReason === 'busy' || result.blockedReason === 'pending') {
       // 계정이 모두 생성 중이거나 씬 예약이 남아 있어도 메인 생성은 거절하지 않는다.
       // 누른 순서대로 바로 뽑기 줄에 넣어, 계정이 비는 대로 이어서 뽑는다 (씬 예약보다 먼저).
+      // 예약에도 들어갔는지 돌려준다 — 실패하면 호출 쪽(인페인트)이 소스를 유지한다
+      let enqueued = false
       for (let i = 0; i < batchCount; i++) {
         const seed = i === 0 ? finalRequest.seed : (finalRequest.seed + i) % 4294967296
         const quick = await window.nais.invoke('queue:enqueueQuick', {
@@ -253,8 +256,15 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
           toast(enqueueBlockedMessage(quick.blockedReason), 'info')
           break
         }
+        enqueued = true
       }
-    } else if (result.blockedReason) toast(enqueueBlockedMessage(result.blockedReason), 'info')
+      return enqueued
+    }
+    if (result.blockedReason) {
+      toast(enqueueBlockedMessage(result.blockedReason), 'info')
+      return false
+    }
+    return true
   },
 
   cancelAll: async () => {

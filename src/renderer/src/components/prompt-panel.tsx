@@ -8,6 +8,7 @@ import {
   Plus,
   Puzzle,
   SlidersHorizontal,
+  Sparkles,
   Square,
   UsersRound,
   X,
@@ -33,6 +34,7 @@ import { useLayoutStore } from '../stores/layout-store'
 import { useCharRefsStore, useVibesStore } from '../stores/refs-store'
 import { useScenesStore } from '../stores/scenes-store'
 import { useStorageSettingsStore } from '../stores/storage-settings-store'
+import { useTagHelperStore } from '../stores/tag-helper-store'
 import { PromptEditor } from './prompt-editor'
 import { PromptPresetBar } from './prompt-preset-bar'
 import { CharacterOverlay } from './character-overlay'
@@ -295,6 +297,31 @@ export function PromptPanel(): React.JSX.Element {
     else setCrefOpen(true)
   }
 
+  // AI 태그 도우미 — 결과는 메인 가변 프롬프트(분할이 꺼져 있으면 프롬프트 본문)로 넣는다.
+  const openTagHelper = (): void => {
+    const split = promptSplitEnabled
+    useTagHelperStore.getState().open({
+      mode: centerMode === 'scene' ? 'scene' : 'character',
+      targetLabel: split ? '가변 프롬프트' : '프롬프트',
+      onApply: (tags, how) => {
+        const state = useGenerationStore.getState()
+        const current = split
+          ? (
+              state.request.promptParts ?? {
+                base: state.request.prompt,
+                additional: '',
+                detail: ''
+              }
+            ).additional
+          : state.request.prompt
+        const joined =
+          how === 'replace' ? tags : current ? current.replace(/[,\s]*$/, '') + ', ' + tags : tags
+        if (split) state.patchPromptParts({ additional: joined })
+        else state.patchRequest({ prompt: joined })
+      }
+    })
+  }
+
   return (
     <aside className="relative flex h-full w-full flex-col gap-3 rounded-xl bg-surface p-4">
       {/* 상단 여백을 창 드래그 영역으로 (프롬프트 영역 위) */}
@@ -499,8 +526,8 @@ export function PromptPanel(): React.JSX.Element {
         </div>
       </div>
 
-      {/* 도구 행: 캐릭터 / 조각 / 바이브 / 레퍼런스 — 자주 쓰지 않아 얇게, 사용 중인 것만 강조 */}
-      <div className="grid shrink-0 grid-cols-4 gap-1">
+      {/* 도구 행: 캐릭터 / 조각 / 바이브 / 레퍼런스 / AI 태그 — 자주 쓰지 않아 얇게, 사용 중인 것만 강조 */}
+      <div className="grid shrink-0 grid-cols-5 gap-1">
         <ToolButton
           active={charOverlayOpen}
           icon={<UsersRound size={14} />}
@@ -528,6 +555,13 @@ export function PromptPanel(): React.JSX.Element {
           label="레퍼런스"
           badge={enabledCrefs}
           onClick={() => only('cref')}
+        />
+        <ToolButton
+          active={false}
+          icon={<Sparkles size={14} />}
+          label="AI 태그"
+          badge={0}
+          onClick={openTagHelper}
         />
       </div>
 

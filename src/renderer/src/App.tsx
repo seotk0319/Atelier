@@ -12,6 +12,7 @@ import { InpaintHost } from './components/inpaint-host'
 import { CensorEditor } from './components/censor-editor'
 import { ArtistTagsDialog } from './components/artist-tags-dialog'
 import { MetadataDialog } from './components/metadata-dialog'
+import { TagHelperDialog } from './components/tag-helper-dialog'
 import { PromptPanel } from './components/prompt-panel'
 import { SceneMode } from './components/scene-mode'
 import { Titlebar } from './components/titlebar'
@@ -208,6 +209,7 @@ export default function App(): React.JSX.Element {
         <CensorEditor />
         <MetadataDialog />
         <ArtistTagsDialog />
+        <TagHelperDialog />
         <Toaster />
         <PrivacyLock />
         <AnimatePresence>{!ready && <LoadingScreen key="loading" />}</AnimatePresence>

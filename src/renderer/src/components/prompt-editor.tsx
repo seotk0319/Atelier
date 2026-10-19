@@ -5,8 +5,12 @@ import { removeComments } from '@shared/nai-presets'
 import { cn } from '../lib/utils'
 import { caretCoords } from '../lib/caret'
 import { highlightRanges } from '../lib/prompt-weights'
+import { IMAGE_PATHS_MIME, droppedImagePaths, hasImageDrop } from '../lib/image-drag'
+import { fileToBase64 } from '../lib/metadata-request'
 import { fragmentPaths } from '../stores/fragments-store'
 import { useGenerationStore } from '../stores/generation-store'
+import { useTagHelperStore } from '../stores/tag-helper-store'
+import { toast } from '../stores/toast-store'
 
 /**
  * 프롬프트 에디터.
@@ -44,6 +48,23 @@ const TYPE_COLORS: Record<string, string> = {
   meta: 'text-[#c9a34f]'
 }
 
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+function mimeForPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase()
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
+  if (ext === 'webp') return 'image/webp'
+  return 'image/png'
+}
+
+/** 파일 드래그 중에는 아직 그림인지 몰라 item.type으로 확인한다. */
+function isImageDrag(e: React.DragEvent): boolean {
+  if (e.dataTransfer.types.includes(IMAGE_PATHS_MIME)) return true
+  return Array.from(e.dataTransfer.items).some(
+    (item) => item.kind === 'file' && (item.type === '' || IMAGE_TYPES.includes(item.type))
+  )
+}
+
 export function PromptEditor({
   value,
   onValueChange,
@@ -73,6 +94,7 @@ export function PromptEditor({
   const [selected, setSelected] = useState(0)
   const [tokenStart, setTokenStart] = useState(-1)
   const [popupPos, setPopupPos] = useState<{ left: number; top: number } | null>(null)
+  const [imageHover, setImageHover] = useState(false)
 
   const ranges = useMemo(() => highlightRanges(value), [value])
 
@@ -216,8 +238,54 @@ export function PromptEditor({
     })
   }
 
+  // 그림(파일 또는 앱 안 드래그)을 놓으면 AI 태그 도우미가 이 칸에 결과를 넣는다.
+  async function handleImageDrop(e: React.DragEvent): Promise<void> {
+    if (!hasImageDrop(e)) return
+    if (!isImageDrag(e)) return
+    const file = Array.from(e.dataTransfer.files).find((f) => IMAGE_TYPES.includes(f.type))
+    const paths = droppedImagePaths(e)
+    e.preventDefault()
+    e.stopPropagation()
+    setImageHover(false)
+    if (!file && paths.length === 0) {
+      toast('PNG, JPEG, WEBP 그림만 넣을 수 있어요.', 'info')
+      return
+    }
+    let image: { base64: string; mime: string }
+    if (file) image = { base64: await fileToBase64(file), mime: file.type }
+    else {
+      const res = await window.nais.invoke('images:readForSource', { filePath: paths[0] })
+      if ('error' in res) {
+        toast(res.error, 'error')
+        return
+      }
+      image = { base64: res.base64, mime: mimeForPath(paths[0]) }
+    }
+    useTagHelperStore.getState().open({
+      image,
+      mode: 'character',
+      targetLabel: '프롬프트',
+      onApply: (tags, how) =>
+        onValueChange(
+          how === 'replace' ? tags : value ? value.replace(/[,\s]*$/, '') + ', ' + tags : tags
+        )
+    })
+  }
+
   return (
     <div
+      onDragOver={(e) => {
+        if (!hasImageDrop(e) || !isImageDrag(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setImageHover(true)
+      }}
+      onDragLeave={(e) => {
+        const next = e.relatedTarget as Node | null
+        if (next && e.currentTarget.contains(next)) return
+        setImageHover(false)
+      }}
+      onDrop={(e) => void handleImageDrop(e)}
       className={cn(
         'relative overflow-hidden rounded-xl border border-transparent bg-paper transition-colors focus-within:border-accent/40',
         negative && 'focus-within:border-danger/40',
@@ -356,6 +424,12 @@ export function PromptEditor({
           </div>,
           document.body
         )}
+
+      {imageHover && (
+        <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl border border-dashed border-accent bg-surface/90 px-3 text-center text-[12px] font-medium text-accent">
+          놓으면 AI 태그 도우미로 태그를 뽑아요
+        </div>
+      )}
     </div>
   )
 }

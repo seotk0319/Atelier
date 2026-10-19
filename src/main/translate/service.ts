@@ -2,12 +2,22 @@
 // 번역한 글과 결과는 어디에도 남기지 않는다.
 import { HANGUL, TRANSLATE_MAX } from '../../shared/translate'
 import type {
+  TranslateEngine,
   TranslateResult,
   TranslateStatus,
   TranslateTarget,
   TranslateUsage
 } from '../../shared/translate'
-import { deleteDeeplKey, getDeeplKey, setDeeplKey } from '../db/settings'
+import {
+  deleteDeeplKey,
+  getDeeplKey,
+  getOpenRouterKey,
+  getSetting,
+  setDeeplKey,
+  setSetting
+} from '../db/settings'
+import { OPENROUTER_MESSAGES, openRouterMessage } from '../llm/openrouter'
+import { deepseekTranslate } from './deepseek'
 import { DeepLError, deeplTranslate, deeplUsage, isFreeKey } from './deepl'
 
 export const TRANSLATE_MESSAGES: Record<string, string> = {
@@ -28,14 +38,40 @@ export const translateMessage = (error: unknown): string =>
 
 const TARGETS: TranslateTarget[] = ['KO', 'EN-US', 'ZH-HANT', 'JA']
 
+const ENGINE_KEY = 'translate_engine'
+
+/** 저장된 엔진. 처음이면 DeepL 키가 있을 때 DeepL, 없으면 DeepSeek. */
+export function getTranslateEngine(): TranslateEngine {
+  const stored = getSetting(ENGINE_KEY)
+  if (stored === 'deepl' || stored === 'deepseek') return stored
+  return getDeeplKey() ? 'deepl' : 'deepseek'
+}
+
 export function translateStatus(): TranslateStatus {
-  const key = getDeeplKey()
-  return key
-    ? { hasKey: true, tail: key.slice(-6), free: isFreeKey(key) }
-    : { hasKey: false, tail: '', free: false }
+  const engine = getTranslateEngine()
+  const deeplKey = getDeeplKey()
+  const deepseekKey = getOpenRouterKey()
+  const deeplReady = !!deeplKey
+  const deepseekReady = !!deepseekKey?.trim()
+  return {
+    engine,
+    deeplReady,
+    deepseekReady,
+    hasKey: engine === 'deepl' ? deeplReady : deepseekReady,
+    tail: deeplKey ? deeplKey.slice(-6) : '',
+    free: deeplKey ? isFreeKey(deeplKey) : false
+  }
+}
+
+export function setTranslateEngine(engine: TranslateEngine): TranslateStatus {
+  const next: TranslateEngine = engine === 'deepseek' ? 'deepseek' : 'deepl'
+  setSetting(ENGINE_KEY, next)
+  return translateStatus()
 }
 
 export async function translateUsage(): Promise<TranslateUsage> {
+  // DeepSeek(OpenRouter)은 글자 수 한도를 알려주지 않는다.
+  if (getTranslateEngine() === 'deepseek') return { ok: true, used: null, limit: null, message: '' }
   const key = getDeeplKey()
   if (!key) return { ok: false, used: null, limit: null, message: TRANSLATE_MESSAGES.NO_KEY }
   try {
@@ -69,7 +105,7 @@ export function removeTranslateKey(): { ok: true } {
   return { ok: true }
 }
 
-/** 읽기(KO)는 원문 언어를 DeepL이 알아내고, 쓰기는 한글이 있으면 한국어에서 옮긴다. */
+/** 읽기(KO)는 원문 언어를 엔진이 알아내고, 쓰기는 한글이 있으면 한국어에서 옮긴다. */
 export async function translateText(
   text: string,
   target: TranslateTarget
@@ -84,10 +120,21 @@ export async function translateText(
   if (!TARGETS.includes(target)) return fail(TRANSLATE_MESSAGES.BAD_REQUEST)
   if (!body) return fail('번역할 글이 없어요.')
   if (body.length > TRANSLATE_MAX) return fail(TRANSLATE_MESSAGES.TOO_LONG)
+  const engine = getTranslateEngine()
+  const source = target !== 'KO' && HANGUL.test(body) ? 'KO' : null
+  if (engine === 'deepseek') {
+    const key = getOpenRouterKey()
+    if (!key?.trim()) return fail(OPENROUTER_MESSAGES.NO_KEY)
+    try {
+      const result = await deepseekTranslate(key, { text: body, target, source })
+      return { ok: true, text: result.text, detected: result.detected, message: '' }
+    } catch (error) {
+      return fail(openRouterMessage(error))
+    }
+  }
   const key = getDeeplKey()
   if (!key) return fail(TRANSLATE_MESSAGES.NO_KEY)
   try {
-    const source = target !== 'KO' && HANGUL.test(body) ? 'KO' : null
     const result = await deeplTranslate(key, { text: body, target, source })
     return { ok: true, text: result.text, detected: result.detected, message: '' }
   } catch (error) {

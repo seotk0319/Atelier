@@ -36,7 +36,13 @@ const NAI_V5_TAGS: TagEntry[] = [
     count: 900000,
     type: 'general'
   })),
-  { tag: 'attractive male', count: 900000, type: 'general' }
+  { tag: 'attractive male', count: 900000, type: 'general' },
+  // NAI V5 캐릭터 앵커 (ZK-514 1·11·31번 슬롯) — 단부루에는 1girl 등으로만 있다
+  ...['girl', 'boy', 'adult woman', 'adult man', 'highly detailed'].map((tag) => ({
+    tag,
+    count: 900000,
+    type: 'general'
+  }))
 ].map((t) => ({ ...t, nai: true }))
 
 function load(): TagEntry[] {
@@ -89,4 +95,24 @@ export function isArtistTag(name: string): boolean {
 export function artistNameList(): string[] {
   isArtistTag('')
   return [...(artistNames ?? [])]
+}
+
+let knownTagSet: Set<string> | null = null
+
+/** 가중치 문법을 벗긴 실제 태그 이름. 예: "1.2::smile ::" -> "smile" */
+function bareTagName(tag: string): string {
+  const value = tag.trim()
+  const match = value.match(/^\s*[0-9]*\.?[0-9]+\s*::\s*(.*?)\s*::\s*$/)
+  return (match ? match[1] : value).toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** 로컬 단부루 DB(resources/tags.json)나 NAI V5 태그에 있는지. AI 태그 도우미의 검증 표시용. */
+export function isKnownTag(tag: string): boolean {
+  const name = bareTagName(tag)
+  if (!name) return false
+  if (name.startsWith('artist:')) return isArtistTag(name.slice('artist:'.length))
+  if (!knownTagSet) {
+    knownTagSet = new Set(load().map((t) => t.tag.toLowerCase().replace(/_/g, ' ')))
+  }
+  return knownTagSet.has(name)
 }

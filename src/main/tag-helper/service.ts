@@ -1,21 +1,24 @@
-// AI 태그 도우미 본체 (워커 D가 채운다). 지금은 IPC 약속만 맞춘 자리표시.
+// AI 태그 도우미 본체. 한글 설명이나 그림을 NAI(단부루) 태그 한 줄로 바꾼다.
 import type {
   TagHelperImageRequest,
   TagHelperResult,
   TagHelperTextRequest
 } from '../../shared/tag-helper'
+import { getOpenRouterKey } from '../db/settings'
+import { isKnownTag } from '../tags'
+import { runTagHelper, type TagHelperDeps } from './run'
 
-const notReady = (): TagHelperResult => ({
-  ok: false,
-  tags: '',
-  items: [],
-  message: '아직 준비 중이에요.'
-})
-
-export async function tagFromText(_req: TagHelperTextRequest): Promise<TagHelperResult> {
-  return notReady()
+const deps: TagHelperDeps = {
+  getKey: () => getOpenRouterKey(),
+  isKnown: isKnownTag
 }
 
-export async function tagFromImage(_req: TagHelperImageRequest): Promise<TagHelperResult> {
-  return notReady()
+/** 한글 설명 -> 태그 한 줄 */
+export async function tagFromText(req: TagHelperTextRequest): Promise<TagHelperResult> {
+  return runTagHelper(req, deps)
+}
+
+/** 그림 -> 태그 한 줄 */
+export async function tagFromImage(req: TagHelperImageRequest): Promise<TagHelperResult> {
+  return runTagHelper(req, deps)
 }

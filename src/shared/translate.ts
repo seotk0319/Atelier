@@ -2,6 +2,8 @@
 
 /** 읽을 때는 한국어로, 답글을 쓸 때는 이 셋 중 하나로 바꾼다. */
 export type TranslateTarget = 'KO' | 'EN-US' | 'ZH-HANT' | 'JA'
+/** 댓글 번역 엔진. DeepL 또는 OpenRouter의 DeepSeek. */
+export type TranslateEngine = 'deepl' | 'deepseek'
 export const WRITE_TARGETS: { id: Exclude<TranslateTarget, 'KO'>; label: string; name: string }[] =
   [
     { id: 'EN-US', label: 'English', name: '영어' },
@@ -11,7 +13,14 @@ export const WRITE_TARGETS: { id: Exclude<TranslateTarget, 'KO'>; label: string;
 export const TRANSLATE_MAX = 5000
 
 export interface TranslateStatus {
+  /** 지금 고른 엔진의 키가 준비됐는지 (기존 화면 호환용) */
   hasKey: boolean
+  /** 고른 엔진 */
+  engine: TranslateEngine
+  /** DeepL 키가 있는지 */
+  deeplReady: boolean
+  /** OpenRouter 키가 있는지 (DeepSeek 준비) */
+  deepseekReady: boolean
   /** 키 끝 6자리 (나머지는 화면에 보내지 않는다) */
   tail: string
   /** 무료 API 키(:fx)인지 */
@@ -26,7 +35,7 @@ export interface TranslateUsage {
 export interface TranslateResult {
   ok: boolean
   text: string
-  /** DeepL이 알아낸 원문 언어 (예: JA, EN) */
+  /** 번역 엔진이 알아낸 원문 언어 (예: JA, EN) */
   detected: string | null
   message: string
 }

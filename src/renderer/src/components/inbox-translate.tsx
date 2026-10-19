@@ -20,7 +20,7 @@ const REPLY_MAX = 1000
 const SHORT: Record<string, string> = { 'EN-US': 'EN', 'ZH-HANT': '繁中', JA: '日本' }
 
 function NoKey({
-  label = 'DeepL 키를 넣으면 쓸 수 있어요',
+  label = '번역 키를 넣으면 쓸 수 있어요',
   section = 'translate'
 }: {
   label?: string
@@ -60,6 +60,7 @@ export function TranslatableText({
   variant: 'bubble' | 'plain'
 }): React.JSX.Element {
   const hasKey = useTranslateStore((s) => s.status?.hasKey)
+  const engine = useTranslateStore((s) => s.status?.engine)
   const [state, setState] = useState<ReadState>({ kind: 'idle' })
   const foreign = looksForeign(text)
   const shown = state.kind === 'done' && !state.original ? state.text : text
@@ -111,7 +112,11 @@ export function TranslatableText({
           {state.kind === 'done' && (
             <>
               <span className="min-w-0 truncate text-faint">
-                {state.original ? '원문' : languageLabel(state.detected) + ' → 한국어 · DeepL'}
+                {state.original
+                  ? '원문'
+                  : languageLabel(state.detected) +
+                    ' → 한국어 · ' +
+                    (engine === 'deepseek' ? 'DeepSeek' : 'DeepL')}
               </span>
               <button
                 className="shrink-0 font-semibold text-accent hover:opacity-80"

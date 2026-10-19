@@ -93,7 +93,8 @@ interface ScenesState {
   /** 프리셋 캐릭터 바인드 (null = 해제) */
   setPresetCharacters: (id: number, characterIds: number[] | null) => Promise<void>
   /** 이 씬 1장 바로 생성 (예약 없이 — NAIS2식 즉석 생성) */
-  generateOne: (sceneId: number) => Promise<void>
+  // 큐에 실제로 들어갔는지 돌려준다 (인페인트 확정 시 소스 정리 판단용)
+  generateOne: (sceneId: number) => Promise<boolean>
 }
 
 /** 씬 프롬프트를 기본 프롬프트 뒤에 이어붙임 (콤마 정리) */
@@ -240,7 +241,13 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     set({ scenes: items })
   },
   select: (selectedId) => {
-    if (selectedId !== get().selectedId) recordNav() // 마우스 뒤로/앞으로용 히스토리
+    if (selectedId !== get().selectedId) {
+      recordNav() // 마우스 뒤로/앞으로용 히스토리
+      // 씬을 옮기면 남아 있던 인페인트 마스크 소스는 지운다 (다음 씬에 번지지 않게)
+      if (useGenerationStore.getState().source?.maskBase64) {
+        useGenerationStore.getState().setSource(null)
+      }
+    }
     set({ selectedId, images: [], imagesTotal: 0, favoritesOnly: false })
     if (selectedId != null) void get().loadImages(selectedId, true)
   },
@@ -551,7 +558,7 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
 
   generateOne: async (sceneId) => {
     const scene = get().scenes.find((s) => s.id === sceneId)
-    if (!scene) return
+    if (!scene) return false
     const preset = get().presets.find((p) => p.id === get().activePresetId)
     // 바로 뽑기: 예약이 남아 있어도 받고, 예약보다 먼저 누른 순서대로 나간다.
     // 시드 고정이면 이 씬에 이미 걸린 장수만큼 밀어 같은 그림이 반복되지 않게 한다.
@@ -562,10 +569,15 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
           (i) =>
             i.request.sceneId === sceneId && (i.state === 'pending' || i.state === 'generating')
         ).length ?? 0
+    // 소스는 이 호출의 인자 평가 시점(첫 await 전)에 이미 요청에 담긴다
     const result = await window.nais.invoke('queue:enqueueQuick', {
       request: { ...buildSceneRequest(scene, preset?.characterIds ?? null), seed: sceneSeed(live) }
     })
-    if (result.blockedReason) toast(enqueueBlockedMessage(result.blockedReason), 'info')
+    if (result.blockedReason) {
+      toast(enqueueBlockedMessage(result.blockedReason), 'info')
+      return false
+    }
+    return true
   }
 }))
 

@@ -16,7 +16,8 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
-  Upload
+  Upload,
+  Wand2
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NaiAccountInfo, NaiAccountUsage } from '@shared/types'
@@ -47,6 +48,7 @@ import {
 } from '../stores/shortcuts-store'
 import { Segmented, SegmentedItem } from './ui/segmented'
 import { TranslateSection } from './translate-settings'
+import { OpenRouterSection } from './openrouter-settings'
 import { AiReplySection } from './ai-reply-settings'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
@@ -62,6 +64,7 @@ type SectionId =
   | 'storage'
   | 'privacy'
   | 'translate'
+  | 'ai-helper'
   | 'ai'
   | 'shortcuts'
   | 'account'
@@ -74,6 +77,8 @@ const NAV: { id: SectionId; label: string; icon: typeof Info }[] = [
   { id: 'privacy', label: '프라이버시', icon: Lock },
   // 알림 모아보기(댓글 답글)에서만 쓰므로 알림 탭이 있는 Custom 1에만 보인다.
   { id: 'translate', label: '번역', icon: Languages },
+  // OpenRouter 키 — 댓글 번역과 태그 도우미가 같이 쓰므로 모든 프로필에 보인다
+  { id: 'ai-helper', label: 'AI 도우미', icon: Wand2 },
   { id: 'ai', label: 'AI 답글', icon: Sparkles },
   { id: 'shortcuts', label: '단축키', icon: Keyboard },
   { id: 'account', label: 'NAI 계정', icon: KeyRound },
@@ -1155,6 +1160,9 @@ export function SettingsDialog({
               </TabsContent>
               <TabsContent value="translate" className="m-0">
                 <TranslateSection />
+              </TabsContent>
+              <TabsContent value="ai-helper" className="m-0">
+                <OpenRouterSection />
               </TabsContent>
               <TabsContent value="ai" className="m-0">
                 <AiReplySection />
