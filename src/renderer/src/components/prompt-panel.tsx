@@ -301,7 +301,7 @@ export function PromptPanel(): React.JSX.Element {
   const openTagHelper = (): void => {
     const split = promptSplitEnabled
     useTagHelperStore.getState().open({
-      mode: centerMode === 'scene' ? 'scene' : 'character',
+      parts: centerMode === 'scene' ? ['pose', 'scene'] : ['look', 'outfit'],
       targetLabel: split ? '가변 프롬프트' : '프롬프트',
       onApply: (tags, how) => {
         const state = useGenerationStore.getState()

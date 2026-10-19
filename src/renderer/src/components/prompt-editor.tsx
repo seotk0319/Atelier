@@ -263,7 +263,7 @@ export function PromptEditor({
     }
     useTagHelperStore.getState().open({
       image,
-      mode: 'character',
+      parts: ['look', 'outfit'],
       targetLabel: '프롬프트',
       onApply: (tags, how) =>
         onValueChange(

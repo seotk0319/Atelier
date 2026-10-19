@@ -2,7 +2,7 @@
 import type {
   TagHelperImageRequest,
   TagHelperItem,
-  TagHelperMode,
+  TagHelperPart,
   TagHelperResult,
   TagHelperTextRequest
 } from '../../shared/tag-helper'
@@ -14,8 +14,8 @@ import {
   openrouterChat,
   type ChatOptions
 } from '../llm/openrouter'
-import { buildTagMessages } from './prompt'
-import { joinTags, parseTags, toItems } from './parse'
+import { buildTagMessages, normalizeParts } from './prompt'
+import { fixAnchors, joinTags, parseTags, toItems } from './parse'
 
 export type TagFetcher = typeof fetch
 
@@ -36,15 +36,13 @@ const fail = (message: string): TagHelperResult => ({ ok: false, tags: '', items
 
 type Validated =
   | { error: string }
-  | { text: string; imageDataUrl?: undefined }
-  | { imageDataUrl: string; text?: undefined }
+  | { text: string; imageDataUrl?: undefined; parts?: undefined }
+  | { imageDataUrl: string; parts: TagHelperPart[]; text?: undefined }
 
 function validate(req: TagHelperTextRequest | TagHelperImageRequest): Validated {
-  const mode: TagHelperMode | undefined = req.mode
-  if (mode !== 'character' && mode !== 'outfit' && mode !== 'scene') {
-    return { error: '태그 종류를 알 수 없어요. 캐릭터, 의상, 씬 중에서 골라주세요.' }
-  }
   if ('imageBase64' in req) {
+    const parts = normalizeParts(req.parts)
+    if (!parts.length) return { error: '뽑을 것을 하나 이상 골라주세요.' }
     const mime = String(req.mime || '')
       .trim()
       .toLowerCase()
@@ -56,7 +54,7 @@ function validate(req: TagHelperTextRequest | TagHelperImageRequest): Validated 
     if (base64.length > TAG_HELPER_IMAGE_MAX) {
       return { error: '그림이 너무 커요. 조금 줄여서 다시 올려주세요.' }
     }
-    return { imageDataUrl: 'data:' + mime + ';base64,' + base64 }
+    return { imageDataUrl: 'data:' + mime + ';base64,' + base64, parts }
   }
   const text = String(req.text ?? '').trim()
   if (!text) return { error: '설명이 비어 있어요. 태그로 바꿀 한글 설명을 적어주세요.' }
@@ -84,9 +82,9 @@ export async function runTagHelper(
     if (!key) return fail(OPENROUTER_MESSAGES.NO_KEY)
 
     const messages = buildTagMessages({
-      mode: req.mode,
       text: input.text,
       imageDataUrl: input.imageDataUrl,
+      parts: input.parts,
       note: req.note
     })
     const chat = deps.chat ?? openrouterChat
@@ -102,7 +100,7 @@ export async function runTagHelper(
       deps.fetcher
     )
 
-    const tags = parseTags(raw)
+    const tags = fixAnchors(parseTags(raw), input.parts ? input.parts.includes('look') : null)
     if (!tags.length) {
       return fail('태그를 찾지 못했어요. 설명을 조금 더 구체적으로 적어주세요.')
     }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { TagHelperMode } from '@shared/tag-helper'
+import type { TagHelperPart } from '@shared/tag-helper'
 
 export interface TagHelperImage {
   /** data: 접두사 없는 base64 */
@@ -8,8 +8,8 @@ export interface TagHelperImage {
 }
 
 export interface TagHelperOpenOptions {
-  /** 기본값 character */
-  mode?: TagHelperMode
+  /** 그림에서 뽑을 것의 기본값. 연 곳에 맞춰 준다 (기본 외형+의상) */
+  parts?: TagHelperPart[]
   image?: TagHelperImage
   text?: string
   /** 결과를 받을 곳. 없으면 복사만 할 수 있다. */
@@ -22,7 +22,7 @@ interface TagHelperState {
   isOpen: boolean
   /** 열 때마다 1씩 — 같은 옵션으로 다시 열어도 안쪽 입력 상태를 새로 시작한다 */
   seq: number
-  mode: TagHelperMode
+  parts: TagHelperPart[]
   image: TagHelperImage | null
   text: string
   onApply: TagHelperOpenOptions['onApply']
@@ -31,10 +31,12 @@ interface TagHelperState {
   close: () => void
 }
 
+const DEFAULT_PARTS: TagHelperPart[] = ['look', 'outfit']
+
 export const useTagHelperStore = create<TagHelperState>((set) => ({
   isOpen: false,
   seq: 0,
-  mode: 'character',
+  parts: DEFAULT_PARTS,
   image: null,
   text: '',
   onApply: undefined,
@@ -43,7 +45,7 @@ export const useTagHelperStore = create<TagHelperState>((set) => ({
     set((state) => ({
       isOpen: true,
       seq: state.seq + 1,
-      mode: options?.mode ?? 'character',
+      parts: options?.parts?.length ? options.parts : DEFAULT_PARTS,
       image: options?.image ?? null,
       text: options?.text ?? '',
       onApply: options?.onApply,

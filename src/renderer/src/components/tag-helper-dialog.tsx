@@ -1,13 +1,13 @@
-import { Copy, ImagePlus, Sparkles, X } from 'lucide-react'
+import { Check, Copy, ImagePlus, Sparkles, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type {
   TagHelperImageRequest,
   TagHelperItem,
-  TagHelperMode,
+  TagHelperPart,
   TagHelperResult,
   TagHelperTextRequest
 } from '@shared/tag-helper'
-import { TAG_HELPER_IMAGE_MAX, TAG_HELPER_TEXT_MAX } from '@shared/tag-helper'
+import { TAG_HELPER_IMAGE_MAX, TAG_HELPER_PARTS, TAG_HELPER_TEXT_MAX } from '@shared/tag-helper'
 import { cn } from '../lib/utils'
 import { IMAGE_PATHS_MIME, droppedImagePaths, hasImageDrop } from '../lib/image-drag'
 import { fileToBase64 } from '../lib/metadata-request'
@@ -20,11 +20,6 @@ import { Input } from './ui/input'
 import { Segmented, SegmentedItem } from './ui/segmented'
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
-const MODES: { value: TagHelperMode; label: string }[] = [
-  { value: 'character', label: '캐릭터 전체' },
-  { value: 'outfit', label: '의상만' },
-  { value: 'scene', label: '자세·구도' }
-]
 
 function mimeForPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase()
@@ -79,7 +74,7 @@ function TagHelperBody(): React.JSX.Element {
   const close = useTagHelperStore((s) => s.close)
   const openSettingsAt = useLayoutStore((s) => s.openSettingsAt)
   const [tab, setTab] = useState<'image' | 'text'>(initial.image ? 'image' : 'text')
-  const [mode, setMode] = useState<TagHelperMode>(initial.mode)
+  const [parts, setParts] = useState<TagHelperPart[]>(initial.parts)
   const [image, setImage] = useState<TagHelperImage | null>(initial.image)
   const [text, setText] = useState(initial.text)
   const [note, setNote] = useState('')
@@ -174,7 +169,7 @@ function TagHelperBody(): React.JSX.Element {
         const request: TagHelperImageRequest = {
           imageBase64: image.base64,
           mime: image.mime,
-          mode,
+          parts,
           ...(trimmedNote ? { note: trimmedNote } : {})
         }
         res = await window.nais.invoke('tagHelper:fromImage', request)
@@ -185,7 +180,6 @@ function TagHelperBody(): React.JSX.Element {
         }
         const request: TagHelperTextRequest = {
           text: text.trim(),
-          mode,
           ...(trimmedNote ? { note: trimmedNote } : {})
         }
         res = await window.nais.invoke('tagHelper:fromText', request)
@@ -249,19 +243,10 @@ function TagHelperBody(): React.JSX.Element {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 no-scrollbar">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Segmented value={tab} onValueChange={(v) => v && setTab(v as 'image' | 'text')}>
-            <SegmentedItem value="image">그림에서 뽑기</SegmentedItem>
-            <SegmentedItem value="text">한글로 쓰기</SegmentedItem>
-          </Segmented>
-          <Segmented value={mode} onValueChange={(v) => v && setMode(v as TagHelperMode)}>
-            {MODES.map((m) => (
-              <SegmentedItem key={m.value} value={m.value}>
-                {m.label}
-              </SegmentedItem>
-            ))}
-          </Segmented>
-        </div>
+        <Segmented value={tab} onValueChange={(v) => v && setTab(v as 'image' | 'text')}>
+          <SegmentedItem value="image">그림에서 뽑기</SegmentedItem>
+          <SegmentedItem value="text">한글로 쓰기</SegmentedItem>
+        </Segmented>
 
         {hasKey === false && (
           <div className="mt-3 flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-3 py-2">
@@ -282,56 +267,93 @@ function TagHelperBody(): React.JSX.Element {
         )}
 
         {tab === 'image' ? (
-          <div
-            className={cn(
-              'mt-3 flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors',
-              dragOver ? 'border-accent bg-accent-soft/40' : 'border-line bg-paper'
-            )}
-            onDragOver={(e) => {
-              if (!hasImageDrop(e) || !isImageDrag(e)) return
-              e.preventDefault()
-              setDragOver(true)
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => void handleDrop(e)}
-          >
-            {image ? (
-              <>
-                <img
-                  src={`data:${image.mime};base64,${image.base64}`}
-                  alt="넣은 그림"
-                  className="h-28 max-w-full rounded-md border border-line object-contain"
-                />
-                <div className="flex gap-1.5">
-                  <Button size="sm" variant="ghost" onClick={() => setImage(null)}>
-                    <X size={13} /> 빼기
+          <>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[12px] font-semibold text-muted">뽑을 것</span>
+              {TAG_HELPER_PARTS.map((part) => {
+                const on = parts.includes(part.id)
+                return (
+                  <button
+                    key={part.id}
+                    aria-pressed={on}
+                    onClick={() =>
+                      setParts((current) =>
+                        on
+                          ? current.length > 1
+                            ? current.filter((p) => p !== part.id)
+                            : current
+                          : TAG_HELPER_PARTS.map((p) => p.id).filter(
+                              (id) => id === part.id || current.includes(id)
+                            )
+                      )
+                    }
+                    className={cn(
+                      'inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[12px] font-medium transition-colors',
+                      on ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-muted hover:text-ink'
+                    )}
+                  >
+                    {on && <Check size={12} />}
+                    {part.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div
+              className={cn(
+                'mt-2 flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center transition-colors',
+                dragOver ? 'border-accent bg-accent-soft/40' : 'border-line bg-paper'
+              )}
+              onDragOver={(e) => {
+                if (!hasImageDrop(e) || !isImageDrag(e)) return
+                e.preventDefault()
+                setDragOver(true)
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => void handleDrop(e)}
+            >
+              {image ? (
+                <>
+                  <img
+                    src={`data:${image.mime};base64,${image.base64}`}
+                    alt="넣은 그림"
+                    className="h-28 max-w-full rounded-md border border-line object-contain"
+                  />
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="ghost" onClick={() => setImage(null)}>
+                      <X size={13} /> 빼기
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+                      <ImagePlus size={13} /> 다른 그림
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <ImagePlus size={20} className="text-faint" />
+                  <p className="text-[13px] text-muted">그림을 끌어다 놓거나 Ctrl+V로 붙여넣어요</p>
+                  <p className="text-[11px] text-faint">PNG · JPEG · WEBP</p>
+                  <Button variant="outline" onClick={() => fileRef.current?.click()}>
+                    파일 고르기
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
-                    <ImagePlus size={13} /> 다른 그림
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <ImagePlus size={20} className="text-faint" />
-                <p className="text-[13px] text-muted">그림을 끌어다 놓거나 Ctrl+V로 붙여넣어요</p>
-                <p className="text-[11px] text-faint">PNG · JPEG · WEBP</p>
-                <Button variant="outline" onClick={() => fileRef.current?.click()}>
-                  파일 고르기
-                </Button>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          </>
         ) : (
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            maxLength={TAG_HELPER_TEXT_MAX}
-            rows={5}
-            placeholder="예) 검은 머리 로우번, 흰 마스크, 회색 밀착 민소매 롱원피스에 볼레로 가디건"
-            aria-label="태그로 바꿀 설명"
-            className="mt-3 block w-full resize-none rounded-lg border border-line bg-paper p-3 text-[13px] leading-relaxed text-ink outline-none placeholder:text-faint focus:border-accent/40"
-          />
+          <>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              maxLength={TAG_HELPER_TEXT_MAX}
+              rows={5}
+              placeholder="예) 검은 머리 로우번, 흰 마스크, 회색 밀착 민소매 롱원피스에 볼레로 가디건"
+              aria-label="태그로 바꿀 설명"
+              className="mt-3 block w-full resize-none rounded-lg border border-line bg-paper p-3 text-[13px] leading-relaxed text-ink outline-none placeholder:text-faint focus:border-accent/40"
+            />
+            <p className="mt-1.5 text-[11px] text-faint">
+              적은 것만 태그로 바꿔요. 옷만 적으면 옷 태그만, 자세만 적으면 자세 태그만 나와요.
+            </p>
+          </>
         )}
 
         <Input

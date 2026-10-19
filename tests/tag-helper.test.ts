@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { joinTags, parseTags, stripWeight, toItems } from '../src/main/tag-helper/parse'
-import { buildTagMessages, tagHelperSystemPrompt } from '../src/main/tag-helper/prompt'
+import { fixAnchors, joinTags, parseTags, stripWeight, toItems } from '../src/main/tag-helper/parse'
+import {
+  buildTagMessages,
+  normalizeParts,
+  tagHelperSystemPrompt
+} from '../src/main/tag-helper/prompt'
 import { runTagHelper, type TagHelperDeps } from '../src/main/tag-helper/run'
 import { OPENROUTER_MESSAGES, OpenRouterError, type ChatOptions } from '../src/main/llm/openrouter'
 import { DEEPSEEK_MODEL } from '../src/shared/llm'
@@ -49,28 +53,45 @@ describe('tag parsing', () => {
 })
 
 describe('prompt building', () => {
-  it('puts the 31 slots and adult anchors into character mode', () => {
-    const system = tagHelperSystemPrompt('character')
-    expect(system).toContain('31 highly detailed')
-    expect(system).toContain('10 hair')
-    expect(system).toContain('adult woman')
-    expect(system).toContain('Never output child')
-    expect(system).toContain('lowercase')
+  it('keeps the 31-slot order and adult anchors in every prompt', () => {
+    for (const system of [
+      tagHelperSystemPrompt({ image: false }),
+      tagHelperSystemPrompt({ image: true, parts: ['look'] })
+    ]) {
+      expect(system).toContain('31 highly detailed')
+      expect(system).toContain('10 hair')
+      expect(system).toContain('adult woman')
+      expect(system).toContain('Never output child')
+      expect(system).toContain('lowercase')
+    }
   })
 
-  it('limits outfit mode to clothing and scene mode to staging', () => {
-    const outfit = tagHelperSystemPrompt('outfit')
-    expect(outfit).toContain('slots 14-29')
-    expect(outfit).not.toContain('31 highly detailed')
-    const scene = tagHelperSystemPrompt('scene')
-    expect(scene).toContain('camera and framing')
-    expect(scene).toContain('lighting')
-    expect(scene).toContain('Do not output character appearance')
+  it('text requests convert only what is written', () => {
+    const system = tagHelperSystemPrompt({ image: false })
+    expect(system).toContain('convert ONLY what the Korean description states')
+    expect(system).toContain('Do not fill slots the description does not mention')
+    expect(system).not.toContain('output tags ONLY for these parts')
+  })
+
+  it('image requests list chosen parts and forbid the rest', () => {
+    const system = tagHelperSystemPrompt({ image: true, parts: ['scene', 'outfit'] })
+    const task = system.slice(system.indexOf('Task:'), system.indexOf('Tag order'))
+    const allowed = task.slice(0, task.indexOf('Do NOT'))
+    const banned = task.slice(task.indexOf('Do NOT'))
+    expect(allowed).toContain('outfit: slots 14-30')
+    expect(allowed).toContain('composition and background')
+    expect(allowed.indexOf('outfit:')).toBeLessThan(allowed.indexOf('composition'))
+    expect(banned).toContain('appearance:')
+    expect(banned).toContain('pose and expression:')
+  })
+
+  it('normalizes parts to a known, ordered list', () => {
+    expect(normalizeParts(['scene', 'look', 'nope', 'look'])).toEqual(['look', 'scene'])
+    expect(normalizeParts(undefined)).toEqual([])
   })
 
   it('builds a text message with the description and the extra note', () => {
     const messages = buildTagMessages({
-      mode: 'character',
       text: '검은 긴 머리 여성',
       note: '마스크는 빼고'
     })
@@ -82,7 +103,10 @@ describe('prompt building', () => {
   })
 
   it('builds an image message with a data url part', () => {
-    const messages = buildTagMessages({ mode: 'scene', imageDataUrl: 'data:image/png;base64,AAAA' })
+    const messages = buildTagMessages({
+      parts: ['pose'],
+      imageDataUrl: 'data:image/png;base64,AAAA'
+    })
     const parts = messages[1].content
     expect(Array.isArray(parts)).toBe(true)
     if (!Array.isArray(parts)) return
@@ -96,30 +120,27 @@ describe('prompt building', () => {
 
 describe('tag helper runner', () => {
   it('needs a key before anything else', async () => {
-    const result = await runTagHelper(
-      { mode: 'scene', text: '앉아 있는 여성' },
-      deps({ getKey: () => null })
-    )
+    const result = await runTagHelper({ text: '앉아 있는 여성' }, deps({ getKey: () => null }))
     expect(result).toEqual({ ok: false, tags: '', items: [], message: OPENROUTER_MESSAGES.NO_KEY })
   })
 
   it('rejects empty and overly long descriptions', async () => {
-    expect((await runTagHelper({ mode: 'scene', text: '  ' }, deps())).ok).toBe(false)
+    expect((await runTagHelper({ text: '  ' }, deps())).ok).toBe(false)
     const long = '가'.repeat(TAG_HELPER_TEXT_MAX + 1)
-    const result = await runTagHelper({ mode: 'scene', text: long }, deps())
+    const result = await runTagHelper({ text: long }, deps())
     expect(result.ok).toBe(false)
     expect(result.message).toContain(String(TAG_HELPER_TEXT_MAX))
   })
 
   it('rejects unsupported mime types and oversized images', async () => {
     const gif = await runTagHelper(
-      { mode: 'character', imageBase64: 'AAAA', mime: 'image/gif' },
+      { parts: ['look'], imageBase64: 'AAAA', mime: 'image/gif' },
       deps()
     )
     expect(gif.ok).toBe(false)
     expect(gif.message).toContain('PNG')
     const huge = await runTagHelper(
-      { mode: 'character', imageBase64: 'A'.repeat(TAG_HELPER_IMAGE_MAX + 1), mime: 'image/png' },
+      { parts: ['look'], imageBase64: 'A'.repeat(TAG_HELPER_IMAGE_MAX + 1), mime: 'image/png' },
       deps()
     )
     expect(huge.ok).toBe(false)
@@ -134,7 +155,7 @@ describe('tag helper runner', () => {
       seen = options
       return '\x60\x60\x60' + '\ntags: Long_Hair, smile, mysterious_hat\n' + '\x60\x60\x60'
     }
-    const result = await runTagHelper({ mode: 'character', text: '긴 머리 여성' }, deps({ chat }))
+    const result = await runTagHelper({ text: '긴 머리 여성' }, deps({ chat }))
     expect(seenKey).toBe('test-key')
     expect(seen?.model).toBe(DEEPSEEK_MODEL)
     expect(seen?.temperature).toBe(0.2)
@@ -153,25 +174,78 @@ describe('tag helper runner', () => {
     const chat = async (): Promise<string> => {
       throw new OpenRouterError('AUTH', 401)
     }
-    const result = await runTagHelper({ mode: 'outfit', text: '검은 교복' }, deps({ chat }))
+    const result = await runTagHelper({ text: '검은 교복' }, deps({ chat }))
     expect(result.ok).toBe(false)
     expect(result.message).toBe(OPENROUTER_MESSAGES.AUTH)
 
     const broken = async (): Promise<string> => {
       throw new Error('boom')
     }
-    const unknown = await runTagHelper(
-      { mode: 'outfit', text: '검은 교복' },
-      deps({ chat: broken })
-    )
+    const unknown = await runTagHelper({ text: '검은 교복' }, deps({ chat: broken }))
     expect(unknown.ok).toBe(false)
     expect(unknown.message).toBe(OPENROUTER_MESSAGES.UNKNOWN)
   })
 
   it('reports when the model returns no usable tags', async () => {
     const chat = async (): Promise<string> => '죄송해요, 태그를 만들 수 없어요.'
-    const result = await runTagHelper({ mode: 'scene', text: '밤 거리' }, deps({ chat }))
+    const result = await runTagHelper({ text: '밤 거리' }, deps({ chat }))
     expect(result.ok).toBe(false)
     expect(result.message).toContain('태그를 찾지 못했어요')
+  })
+})
+
+describe('image parts validation', () => {
+  it('asks for at least one part', async () => {
+    const result = await runTagHelper({ parts: [], imageBase64: 'AAAA', mime: 'image/png' }, deps())
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('하나 이상')
+  })
+})
+
+describe('anchor cleanup', () => {
+  it('drops girl/adult woman when no appearance tag is present', () => {
+    expect(
+      fixAnchors(['girl', 'grey dress', 'shrug (clothing)', 'hair ribbon', 'highly detailed'], null)
+    ).toEqual(['grey dress', 'shrug (clothing)', 'hair ribbon', 'highly detailed'])
+    expect(fixAnchors(['girl', 'adult woman', 'sitting', 'light smile'], null)).toEqual([
+      'sitting',
+      'light smile'
+    ])
+  })
+
+  it('adds the adult anchor before the body tags when hair or body is described', () => {
+    expect(
+      fixAnchors(
+        ['girl', 'black hair', 'hair bun', 'wide hips', 'grey dress', 'highly detailed'],
+        null
+      )
+    ).toEqual([
+      'girl',
+      'black hair',
+      'hair bun',
+      'adult woman',
+      'wide hips',
+      'grey dress',
+      'highly detailed'
+    ])
+    expect(fixAnchors(['girl', 'black hair', 'long dress'], null)).toEqual([
+      'girl',
+      'black hair',
+      'adult woman',
+      'long dress'
+    ])
+  })
+
+  it('follows the chosen image parts', () => {
+    expect(fixAnchors(['girl', 'adult woman', 'white hair', 'grey shirt'], false)).toEqual([
+      'white hair',
+      'grey shirt'
+    ])
+    expect(fixAnchors(['girl', 'white hair', 'medium breasts'], true)).toEqual([
+      'girl',
+      'white hair',
+      'adult woman',
+      'medium breasts'
+    ])
   })
 })

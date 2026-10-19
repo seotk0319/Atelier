@@ -449,7 +449,7 @@ export function CharacterOverlay(): React.JSX.Element {
           title="그림이나 한글 설명으로 태그를 뽑아요"
           onClick={() =>
             useTagHelperStore.getState().open({
-              mode: 'character',
+              parts: ['look', 'outfit'],
               targetLabel: char.name || '캐릭터 프롬프트',
               onApply: (tags, how) =>
                 updateCard(char.id, {

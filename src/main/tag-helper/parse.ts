@@ -59,3 +59,45 @@ export function toItems(tags: string[], isKnown: (tag: string) => boolean): TagH
 export function joinTags(tags: string[]): string {
   return tags.join(', ')
 }
+// ── 성별·성인 앵커 정리 ──
+// 모델에게 맡기면 옷만 적어도 girl이 붙거나, 머리·체형이 있는데 adult woman이 빠진다.
+// 외형 태그가 있을 때만 앵커를 두고, 있으면 성인 앵커까지 맞춘다 (ZK-514 1·11번 슬롯).
+const HAIR_ACCESSORY =
+  /\bhair (ribbon|ornament|clip|bow|flower|band|tie|stick|pin)s?\b|\bhair(clip|band|pin)s?\b/
+const APPEARANCE =
+  /\b(hair|bangs|sidelocks|braids?|ponytail|twintails|bun|eyes|eyebrows|eyelashes|breasts|skin|hips|waist|thighs|legs|mole|freckles|glasses|mask|ears|horns|muscular|curvy|petite)\b/
+const BODY = /\b(breasts|skin|hips|waist|thighs|legs|muscular|curvy|petite)\b/
+const PAIRS: [string, string][] = [
+  ['girl', 'adult woman'],
+  ['boy', 'adult man']
+]
+const ANCHORS = new Set(PAIRS.flat())
+
+export function isAppearanceTag(tag: string): boolean {
+  const bare = stripWeight(tag)
+  return !HAIR_ACCESSORY.test(bare) && APPEARANCE.test(bare)
+}
+
+/**
+ * hasLook: 그림 요청이면 "외형"을 골랐는지, 한글 요청이면 null(태그를 보고 판단).
+ */
+export function fixAnchors(tags: string[], hasLook: boolean | null): string[] {
+  const appearance = hasLook ?? tags.some(isAppearanceTag)
+  if (!appearance || !tags.some(isAppearanceTag)) {
+    return tags.filter((t) => !ANCHORS.has(stripWeight(t)))
+  }
+  const out = [...tags]
+  for (const [sex, adult] of PAIRS) {
+    if (!out.includes(sex) || out.includes(adult)) continue
+    const body = out.findIndex((t) => BODY.test(stripWeight(t)))
+    if (body >= 0) out.splice(body, 0, adult)
+    else {
+      let last = -1
+      out.forEach((t, i) => {
+        if (isAppearanceTag(t)) last = i
+      })
+      out.splice(last + 1, 0, adult)
+    }
+  }
+  return out
+}
