@@ -15,7 +15,9 @@ const JSON_RULE = [
   '- language: 댓글 언어 (ko, en, ja, zh-Hant, zh-Hans)',
   '- handoff: 크리에이터가 직접 봐야 하는 댓글이면 true',
   '- reason: handoff일 때 이유 (한국어 한 문장), 아니면 빈 문자열',
-  '- replies: 답글 후보 1~3개, 댓글과 같은 언어로'
+  '- replies: 답글 후보 1~3개, 댓글과 같은 언어로',
+  '',
+  '중국어 댓글: 댓글에 번체 글자(예: 純, 體, 這, 們, 謝, 歡, 愛, 個, 還, 來)가 하나라도 있으면 답글은 반드시 번체로 쓴다 (예: 謝謝喜歡). 간체 글자만 있을 때만 간체로 쓴다.'
 ].join('\n')
 
 function systemText(body: Record<string, unknown>): string {
