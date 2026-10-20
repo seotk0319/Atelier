@@ -274,7 +274,7 @@ export function ReplyComposer({
             )}
             {ai.kind === 'nokey' && (
               <p className="flex">
-                <NoKey label="Claude 키를 넣으면 AI 초안을 쓸 수 있어요" section="ai" />
+                <NoKey label="AI 키를 넣으면 초안을 쓸 수 있어요" section="ai" />
               </p>
             )}
             {ai.kind === 'error' && (
@@ -373,7 +373,7 @@ export function ReplyComposer({
           <button
             onClick={() => void draft()}
             disabled={ai.kind === 'loading'}
-            title="AI 초안 쓰기 (Claude Haiku)"
+            title="AI 초안 쓰기"
             aria-label="AI 초안 쓰기"
             className="grid size-7 shrink-0 place-items-center rounded-md text-accent transition-colors enabled:hover:bg-surface-2 disabled:opacity-45"
           >

@@ -4,7 +4,9 @@ import { app } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  DEEPSEEK_AI_PRICES,
   usageCost,
+  type AiEngine,
   type AiBacklogPreview,
   type AiBacklogRequest,
   type AiBacklogState,
@@ -15,7 +17,15 @@ import {
   type AiUsage
 } from '../../shared/ai-reply'
 import { INBOX_PLATFORMS, type InboxPlatform } from '../../shared/inbox'
-import { deleteClaudeKey, getClaudeKey, getSetting, setClaudeKey, setSetting } from '../db/settings'
+import {
+  deleteClaudeKey,
+  getClaudeKey,
+  getOpenRouterKey,
+  getSetting,
+  setClaudeKey,
+  setSetting
+} from '../db/settings'
+import { OPENROUTER_MESSAGES, OpenRouterError, openRouterMessage } from '../llm/openrouter'
 import { ReplyError } from '../notifications/direct/babe-reply'
 import { inboxSnapshot, replyMessage, replyTargetFor, sendReplyAs } from '../notifications/service'
 import {
@@ -27,6 +37,7 @@ import {
   type AutoItem
 } from './auto'
 import { ClaudeError, claudeMessage, claudeVerify, type ClaudeResponse } from './claude'
+import { deepseekDraft } from './deepseek'
 import { addUsage, draftRequest, pickExamples, readDraft, type StyleExample } from './prompt'
 
 export const AI_MESSAGES: Record<string, string> = {
@@ -42,26 +53,65 @@ export const AI_MESSAGES: Record<string, string> = {
   REFUSED: 'AI가 이 댓글에는 답글을 쓰지 않았어요. 직접 답해주세요.'
 }
 const aiMessage = (error: unknown): { message: string; code: string } => {
+  if (error instanceof OpenRouterError)
+    return { message: openRouterMessage(error), code: error.code }
   const code = error instanceof ClaudeError ? error.code : 'SERVER'
   return { message: AI_MESSAGES[code] || AI_MESSAGES.SERVER, code }
+}
+
+// 엔진. 고른 엔진에 키가 없고 다른 엔진이 준비돼 있으면 그쪽을 쓴다.
+// 처음(고른 적 없음)에는 OpenRouter 키가 있으면 DeepSeek, 아니면 Claude.
+const ENGINE_KEY = 'ai_reply_engine'
+function chosenEngine(): AiEngine {
+  const stored = getSetting(ENGINE_KEY)
+  if (stored === 'claude' || stored === 'deepseek') return stored
+  return getOpenRouterKey() ? 'deepseek' : 'claude'
+}
+const engineKey = (engine: AiEngine): string | null =>
+  ((engine === 'deepseek' ? getOpenRouterKey() : getClaudeKey()) || '').trim() || null
+function activeEngine(): { engine: AiEngine; key: string | null } {
+  const chosen = chosenEngine()
+  const key = engineKey(chosen)
+  if (key) return { engine: chosen, key }
+  const other: AiEngine = chosen === 'deepseek' ? 'claude' : 'deepseek'
+  const otherKey = engineKey(other)
+  return otherKey ? { engine: other, key: otherKey } : { engine: chosen, key: null }
+}
+const noKeyMessage = (engine: AiEngine): string =>
+  engine === 'deepseek' ? OPENROUTER_MESSAGES.NO_KEY : AI_MESSAGES.NO_KEY
+export function setAiEngine(engine: AiEngine): Promise<AiReplyStatus> {
+  setSetting(ENGINE_KEY, engine === 'deepseek' ? 'deepseek' : 'claude')
+  lastError = null
+  return aiStatus()
 }
 
 // 설정
 const CONFIG_KEY = 'ai_reply_config'
 const config = (): AiReplyConfig => readAiConfig(getSetting(CONFIG_KEY))
 
-// 이번 달 사용량 (이 앱에서 쓴 만큼)
-const USAGE_KEY = 'ai_reply_usage'
-function readUsage(): AiUsage | null {
+// 이번 달 사용량 (이 앱에서 쓴 만큼). 엔진마다 값이 달라 따로 센다.
+const USAGE_KEYS: Record<AiEngine, string> = {
+  claude: 'ai_reply_usage',
+  deepseek: 'ai_reply_usage_deepseek'
+}
+const PRICES = { claude: undefined, deepseek: DEEPSEEK_AI_PRICES }
+function readUsage(engine: AiEngine = 'claude'): AiUsage | null {
   try {
-    const value = JSON.parse(getSetting(USAGE_KEY) || 'null') as AiUsage | null
+    const value = JSON.parse(getSetting(USAGE_KEYS[engine]) || 'null') as AiUsage | null
     return value && typeof value.month === 'string' ? value : null
   } catch {
     return null
   }
 }
-function recordUsage(response: ClaudeResponse): void {
-  setSetting(USAGE_KEY, JSON.stringify(addUsage(readUsage(), response, new Date())))
+function recordUsage(response: ClaudeResponse, engine: AiEngine): void {
+  setSetting(USAGE_KEYS[engine], JSON.stringify(addUsage(readUsage(engine), response, new Date())))
+}
+const engineCost = (usage: AiUsage, engine: AiEngine): number => usageCost(usage, PRICES[engine])
+/** 이번 달 것만 (지난달이면 0) */
+function monthUsage(engine: AiEngine): AiUsage {
+  const empty = { month: '', requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  const usage = readUsage(engine)
+  return usage && usage.month === addUsage(null, {}, new Date()).month ? usage : empty
 }
 
 // 말투 예시. 지난 답글은 자주 바뀌지 않으니 10분 동안 다시 쓴다.
@@ -125,18 +175,19 @@ let lastError: string | null = null
 export async function aiStatus(): Promise<AiReplyStatus> {
   await loadLog()
   const key = getClaudeKey()
-  const usage = readUsage() ?? {
-    month: '',
-    requests: 0,
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0
+  const active = activeEngine()
+  // 화면에는 두 엔진을 합친 이번 달 사용량을 보여준다 (비용은 엔진별 값으로 계산해 더한다).
+  const claudeUsage = monthUsage('claude')
+  const deepseekUsage = monthUsage('deepseek')
+  const shown: AiUsage = {
+    month: addUsage(null, {}, new Date()).month,
+    requests: claudeUsage.requests + deepseekUsage.requests,
+    input: claudeUsage.input + deepseekUsage.input,
+    output: claudeUsage.output + deepseekUsage.output,
+    cacheRead: claudeUsage.cacheRead + deepseekUsage.cacheRead,
+    cacheWrite: claudeUsage.cacheWrite + deepseekUsage.cacheWrite
   }
-  const thisMonth = usage.month === addUsage(null, {}, new Date()).month
-  const shown = thisMonth
-    ? usage
-    : { ...usage, requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  const cost = engineCost(claudeUsage, 'claude') + engineCost(deepseekUsage, 'deepseek')
   let examples = { used: 0, total: 0 }
   try {
     const found = await styleExamples()
@@ -145,11 +196,14 @@ export async function aiStatus(): Promise<AiReplyStatus> {
     // 알림 저장소를 못 열면 0으로 보여준다.
   }
   return {
-    hasKey: !!key,
+    hasKey: !!active.key,
     tail: key ? key.slice(-6) : '',
+    engine: active.engine,
+    claudeReady: !!key,
+    deepseekReady: !!engineKey('deepseek'),
     config: config(),
     examples,
-    usage: { ...shown, cost: usageCost(shown) },
+    usage: { ...shown, cost },
     today: countToday(log, new Date()),
     lastError,
     backlog
@@ -201,8 +255,8 @@ export async function draftReply(id: string): Promise<AiDraftResult & { code?: s
     reason: null,
     code
   })
-  const key = getClaudeKey()
-  if (!key) return fail(AI_MESSAGES.NO_KEY, 'NO_KEY')
+  const { engine, key } = activeEngine()
+  if (!key) return fail(noKeyMessage(engine), 'NO_KEY')
   let found: Awaited<ReturnType<typeof replyTargetFor>>
   try {
     found = await replyTargetFor(String(id || ''))
@@ -217,16 +271,15 @@ export async function draftReply(id: string): Promise<AiDraftResult & { code?: s
   if (!comment) return fail('댓글 내용이 비어 있어서 답글 초안을 쓸 수 없어요.')
   try {
     const { examples } = await styleExamples()
-    const response = await claudeMessage(
-      key,
-      draftRequest(examples, {
-        platform: INBOX_PLATFORMS[item.platform as InboxPlatform] || item.platform,
-        work,
-        author: target.author ?? item.actor.name,
-        comment
-      })
-    )
-    recordUsage(response)
+    const body = draftRequest(examples, {
+      platform: INBOX_PLATFORMS[item.platform as InboxPlatform] || item.platform,
+      work,
+      author: target.author ?? item.actor.name,
+      comment
+    })
+    const response =
+      engine === 'deepseek' ? await deepseekDraft(key, body) : await claudeMessage(key, body)
+    recordUsage(response, engine)
     const draft = readDraft(response)
     return { ok: true, message: '', ...draft }
   } catch (error) {
@@ -272,8 +325,9 @@ const snapshotItems = (items: Awaited<ReturnType<typeof inboxSnapshot>>['items']
 async function tick(): Promise<void> {
   const current = config()
   if (running || backlog?.running || current.mode === 'off') return
-  if (!getClaudeKey()) {
-    lastError = AI_MESSAGES.NO_KEY
+  const active = activeEngine()
+  if (!active.key) {
+    lastError = noKeyMessage(active.engine)
     return
   }
   running = true
@@ -319,6 +373,7 @@ export function stopAiReplies(): void {
 let backlog: AiBacklogState | null = null
 let backlogStop = false
 const DEFAULT_PER_REPLY = 0.0006
+const DEFAULT_PER_REPLY_DEEPSEEK = 0.0005
 
 export async function previewBacklog(days: number): Promise<AiBacklogPreview> {
   const snapshot = await inboxSnapshot()
@@ -335,11 +390,17 @@ export async function previewBacklog(days: number): Promise<AiBacklogPreview> {
     const key = item.platform as InboxPlatform
     byPlatform[key] = (byPlatform[key] || 0) + 1
   }
-  const usage = readUsage()
+  const usageEngine = activeEngine().engine
+  const usage = readUsage(usageEngine)
   return {
     byPlatform,
     drafted: list.filter((item) => log[item.id]?.state === 'drafted').length,
-    perReply: usage && usage.requests > 0 ? usageCost(usage) / usage.requests : DEFAULT_PER_REPLY
+    perReply:
+      usage && usage.requests > 0
+        ? engineCost(usage, usageEngine) / usage.requests
+        : usageEngine === 'deepseek'
+          ? DEFAULT_PER_REPLY_DEEPSEEK
+          : DEFAULT_PER_REPLY
   }
 }
 
@@ -366,8 +427,9 @@ export async function startBacklog(request: AiBacklogRequest): Promise<AiReplySt
     finishedAt: started,
     stopped: null
   }
-  if (!getClaudeKey()) {
-    backlog = { ...empty, stopped: AI_MESSAGES.NO_KEY }
+  const engineNow = activeEngine()
+  if (!engineNow.key) {
+    backlog = { ...empty, stopped: noKeyMessage(engineNow.engine) }
     return aiStatus()
   }
   const snapshot = await inboxSnapshot()

@@ -39,6 +39,7 @@ import {
   removeAiKey,
   saveAiKey,
   setAiConfig,
+  setAiEngine,
   startBacklog,
   stopBacklog
 } from './ai-reply/service'
@@ -225,6 +226,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     handle('aiReply:setKey', ({ key }) => saveAiKey(String(key || '')))
     handle('aiReply:deleteKey', () => removeAiKey())
     handle('aiReply:setConfig', (patch) => setAiConfig(patch || {}))
+    handle('aiReply:setEngine', ({ engine }) => setAiEngine(engine))
     handle('aiReply:draft', async ({ id }) => {
       const result = await draftReply(String(id || ''))
       delete result.code

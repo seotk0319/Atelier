@@ -14,8 +14,10 @@ import { INBOX_PLATFORMS, type InboxPlatform } from '@shared/inbox'
 import { cn } from '../lib/utils'
 import { useAiReplyStore } from '../stores/ai-reply-store'
 import { askConfirm } from '../stores/dialog-store'
+import { useLayoutStore } from '../stores/layout-store'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { Segmented, SegmentedItem } from './ui/segmented'
 
 const MODES: { id: AiReplyMode; label: string; hint: string }[] = [
   { id: 'off', label: '끄기', hint: '새 댓글이 와도 아무것도 하지 않아요.' },
@@ -306,6 +308,8 @@ export function AiReplySection(): React.JSX.Element {
   const status = useAiReplyStore((s) => s.status)
   const load = useAiReplyStore((s) => s.load)
   const setConfig = useAiReplyStore((s) => s.setConfig)
+  const setEngine = useAiReplyStore((s) => s.setEngine)
+  const openSettingsAt = useLayoutStore((s) => s.openSettingsAt)
   const [editing, setEditing] = useState(false)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
@@ -313,6 +317,7 @@ export function AiReplySection(): React.JSX.Element {
   const [log, setLog] = useState<AiLogEntry[]>([])
   const connected = !!status?.hasKey
   const config = status?.config
+  const engine = status?.engine ?? 'deepseek'
 
   useEffect(() => {
     void load()
@@ -365,11 +370,56 @@ export function AiReplySection(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-5">
       <div>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-[13px] text-ink">답글 쓰는 AI</p>
+          <Segmented
+            value={engine}
+            onValueChange={(v) => v && void setEngine(v as 'claude' | 'deepseek')}
+          >
+            <SegmentedItem value="deepseek">DeepSeek</SegmentedItem>
+            <SegmentedItem value="claude">Claude</SegmentedItem>
+          </Segmented>
+        </div>
         <p className="mb-4 text-[12px] leading-relaxed text-faint">
-          알림 모아보기에서 답글 초안을 쓰거나 새 댓글에 자동으로 답글을 달 때 Claude Haiku 5.5를
-          써요. 댓글과 지난 답글 예시만 보내요.
+          알림 모아보기에서 답글 초안을 쓰거나 새 댓글에 자동으로 답글을 달 때{' '}
+          {engine === 'deepseek' ? 'DeepSeek V4.1 Flash' : 'Claude Haiku 5.5'}를 써요. 댓글과 지난
+          답글 예시만 보내요.
         </p>
-        {connected && !editing ? (
+        {engine === 'deepseek' ? (
+          <div className="rounded-xl border border-line p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+                <Sparkles size={17} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-ink">
+                  {status?.deepseekReady ? 'DeepSeek 연결됨' : 'OpenRouter 키가 필요해요'}
+                </p>
+                <p className="mt-0.5 text-[12px] text-faint">
+                  설정 &gt; AI 도우미의 OpenRouter 키를 같이 써요
+                </p>
+              </div>
+              {!status?.deepseekReady && (
+                <Button size="sm" variant="tint" onClick={() => openSettingsAt('ai-helper')}>
+                  키 넣기
+                </Button>
+              )}
+            </div>
+            {status?.deepseekReady && (
+              <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[12px]">
+                <dt className="text-muted">이번 달 (NAIS3에서 쓴 만큼)</dt>
+                <dd className="text-right tabular-nums text-ink">
+                  {dollars(status.usage.cost)} · {status.usage.requests.toLocaleString()}회
+                </dd>
+                <dt className="text-muted">말투 예시</dt>
+                <dd className="text-right tabular-nums text-ink">
+                  지난 답글 {status.examples.used}개 (전체 {status.examples.total.toLocaleString()}
+                  개)
+                </dd>
+              </dl>
+            )}
+          </div>
+        ) : status?.claudeReady && !editing ? (
           <div className="rounded-xl border border-line p-4">
             <div className="flex items-center gap-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">

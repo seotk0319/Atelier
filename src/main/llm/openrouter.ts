@@ -3,15 +3,7 @@
 import { DEEPSEEK_MODEL } from '../../shared/llm'
 
 export type OpenRouterCode =
-  | 'NO_KEY'
-  | 'AUTH'
-  | 'CREDIT'
-  | 'RATE'
-  | 'BAD_REQUEST'
-  | 'SERVER'
-  | 'NETWORK'
-  | 'TIMEOUT'
-  | 'EMPTY'
+  'NO_KEY' | 'AUTH' | 'CREDIT' | 'RATE' | 'BAD_REQUEST' | 'SERVER' | 'NETWORK' | 'TIMEOUT' | 'EMPTY'
 
 export class OpenRouterError extends Error {
   constructor(
@@ -50,8 +42,7 @@ export function codeForStatus(status: number): OpenRouterCode {
 }
 
 export type ChatPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } }
+  { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string | ChatPart[]
@@ -100,12 +91,17 @@ async function call(
   }
 }
 
-/** 한 번 묻고 답 텍스트만 돌려준다. 추론(reasoning) 없이 바로 답하게 한다. */
-export async function openrouterChat(
+export interface ChatResult {
+  text: string
+  usage: { input: number; output: number }
+}
+
+/** 한 번 묻고 답 텍스트와 토큰 수를 돌려준다. 추론(reasoning) 없이 바로 답하게 한다. */
+export async function openrouterChatFull(
   key: string,
   options: ChatOptions,
   fetcher: Fetch = fetch
-): Promise<string> {
+): Promise<ChatResult> {
   const body = {
     model: options.model || DEEPSEEK_MODEL,
     messages: options.messages,
@@ -122,7 +118,22 @@ export async function openrouterChat(
   if (data?.error) throw new OpenRouterError(codeForStatus(Number(data.error.code) || 500))
   const text = data?.choices?.[0]?.message?.content
   if (typeof text !== 'string' || !text.trim()) throw new OpenRouterError('EMPTY')
-  return text.trim()
+  const usage = (data as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } })
+    ?.usage
+  const n = (v: unknown): number => (typeof v === 'number' && v > 0 ? v : 0)
+  return {
+    text: text.trim(),
+    usage: { input: n(usage?.prompt_tokens), output: n(usage?.completion_tokens) }
+  }
+}
+
+/** 답 텍스트만 필요할 때 */
+export async function openrouterChat(
+  key: string,
+  options: ChatOptions,
+  fetcher: Fetch = fetch
+): Promise<string> {
+  return (await openrouterChatFull(key, options, fetcher)).text
 }
 
 /** 키 확인. 맞으면 사용액/한도(달러)를 돌려준다. */

@@ -3,6 +3,9 @@ import type { InboxPlatform } from './inbox'
 
 export const AI_MODEL = 'claude-haiku-5-5'
 
+/** AI 답글 엔진. DeepSeek은 OpenRouter 키(설정 > AI 도우미)를 쓴다. */
+export type AiEngine = 'claude' | 'deepseek'
+
 /** off: 꺼짐 / draft: 초안만 채워 둠 / send: 자동으로 보냄 */
 export type AiReplyMode = 'off' | 'draft' | 'send'
 export const AI_DAILY_LIMITS = [20, 50, 100, 200] as const
@@ -34,14 +37,17 @@ export interface AiUsage {
 }
 /** 100만 토큰당 달러 (Haiku 5.5) */
 export const AI_PRICES = { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }
+/** 100만 토큰당 달러 (DeepSeek V4.1 Flash 1017, OpenRouter) */
+export const DEEPSEEK_AI_PRICES = { input: 0.15, output: 0.6, cacheRead: 0, cacheWrite: 0 }
 export function usageCost(
-  usage: Pick<AiUsage, 'input' | 'output' | 'cacheRead' | 'cacheWrite'>
+  usage: Pick<AiUsage, 'input' | 'output' | 'cacheRead' | 'cacheWrite'>,
+  prices: typeof AI_PRICES = AI_PRICES
 ): number {
   return (
-    (usage.input * AI_PRICES.input +
-      usage.output * AI_PRICES.output +
-      usage.cacheRead * AI_PRICES.cacheRead +
-      usage.cacheWrite * AI_PRICES.cacheWrite) /
+    (usage.input * prices.input +
+      usage.output * prices.output +
+      usage.cacheRead * prices.cacheRead +
+      usage.cacheWrite * prices.cacheWrite) /
     1_000_000
   )
 }
@@ -66,9 +72,14 @@ export interface AiLogEntry {
 }
 
 export interface AiReplyStatus {
+  /** 지금 고른 엔진의 키가 준비됐는지 */
   hasKey: boolean
-  /** 키 끝 6자리 (나머지는 화면에 보내지 않는다) */
+  /** Claude 키 끝 6자리 (나머지는 화면에 보내지 않는다) */
   tail: string
+  /** 쓰는 엔진 (고른 엔진에 키가 없고 다른 엔진이 준비돼 있으면 그쪽) */
+  engine: AiEngine
+  claudeReady: boolean
+  deepseekReady: boolean
   config: AiReplyConfig
   /** 프롬프트에 넣는 말투 예시 수 / 쓸 수 있는 지난 답글 수 */
   examples: { used: number; total: number }

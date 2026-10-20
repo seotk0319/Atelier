@@ -40,11 +40,23 @@ const TARGETS: TranslateTarget[] = ['KO', 'EN-US', 'ZH-HANT', 'JA']
 
 const ENGINE_KEY = 'translate_engine'
 
-/** 저장된 엔진. 처음이면 DeepL 키가 있을 때 DeepL, 없으면 DeepSeek. */
+/**
+ * 쓰는 엔진. 처음이면 OpenRouter 키가 있을 때 DeepSeek, 없으면 DeepL.
+ * 고른 엔진에 키가 없고 다른 엔진은 준비돼 있으면 그쪽으로 넘어간다.
+ */
 export function getTranslateEngine(): TranslateEngine {
   const stored = getSetting(ENGINE_KEY)
-  if (stored === 'deepl' || stored === 'deepseek') return stored
-  return getDeeplKey() ? 'deepl' : 'deepseek'
+  const chosen: TranslateEngine =
+    stored === 'deepl' || stored === 'deepseek'
+      ? stored
+      : getOpenRouterKey()?.trim()
+        ? 'deepseek'
+        : 'deepl'
+  const ready = (engine: TranslateEngine): boolean =>
+    engine === 'deepl' ? !!getDeeplKey() : !!getOpenRouterKey()?.trim()
+  if (ready(chosen)) return chosen
+  const other: TranslateEngine = chosen === 'deepl' ? 'deepseek' : 'deepl'
+  return ready(other) ? other : chosen
 }
 
 export function translateStatus(): TranslateStatus {

@@ -23,6 +23,7 @@ import type {
   AiDraftResult,
   AiLogEntry,
   AiReplyConfig,
+  AiEngine,
   AiReplyStatus
 } from './ai-reply'
 
@@ -460,6 +461,7 @@ export interface IpcInvokeMap {
     req: Partial<Pick<AiReplyConfig, 'mode' | 'excluded' | 'dailyLimit'>>
     res: AiReplyStatus
   }
+  'aiReply:setEngine': { req: { engine: AiEngine }; res: AiReplyStatus }
   'aiReply:draft': { req: { id: string }; res: AiDraftResult }
   'aiReply:entry': { req: { id: string }; res: AiLogEntry | null }
   'aiReply:log': { req: { limit?: number }; res: AiLogEntry[] }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AiReplyConfig, AiReplyStatus } from '@shared/ai-reply'
+import type { AiEngine, AiReplyConfig, AiReplyStatus } from '@shared/ai-reply'
 
 // AI 답글 상태(키·모드·오늘 개수). 설정의 AI 답글 섹션이 바꾸고, 알림 화면이 읽는다.
 interface AiReplyState {
@@ -8,6 +8,7 @@ interface AiReplyState {
   setConfig: (
     patch: Partial<Pick<AiReplyConfig, 'mode' | 'excluded' | 'dailyLimit'>>
   ) => Promise<void>
+  setEngine: (engine: AiEngine) => Promise<void>
 }
 export const useAiReplyStore = create<AiReplyState>((set) => ({
   status: null,
@@ -21,6 +22,13 @@ export const useAiReplyStore = create<AiReplyState>((set) => ({
   setConfig: async (patch) => {
     try {
       set({ status: await window.nais.invoke('aiReply:setConfig', patch) })
+    } catch {
+      // 저장하지 못하면 화면도 바꾸지 않는다.
+    }
+  },
+  setEngine: async (engine) => {
+    try {
+      set({ status: await window.nais.invoke('aiReply:setEngine', { engine }) })
     } catch {
       // 저장하지 못하면 화면도 바꾸지 않는다.
     }
