@@ -5,6 +5,7 @@ import { removeComments } from '@shared/nai-presets'
 import { cn } from '../lib/utils'
 import { caretCoords } from '../lib/caret'
 import { highlightRanges } from '../lib/prompt-weights'
+import { sectionOf } from '@shared/char-sections'
 import { IMAGE_PATHS_MIME, droppedImagePaths, hasImageDrop } from '../lib/image-drag'
 import { fileToBase64 } from '../lib/metadata-request'
 import { fragmentPaths } from '../stores/fragments-store'
@@ -49,6 +50,17 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+/** # == charN == 구간 글씨 색 (캐릭터 번호마다, 6명 넘으면 돌려 쓴다). 굵기는 바꾸지 않는다(정렬 유지). */
+const CHAR_COLORS = [
+  'text-sky-600 dark:text-sky-400',
+  'text-emerald-600 dark:text-emerald-400',
+  'text-amber-600 dark:text-amber-400',
+  'text-rose-600 dark:text-rose-400',
+  'text-violet-600 dark:text-violet-400',
+  'text-teal-600 dark:text-teal-400'
+]
+const charColor = (n: number): string => CHAR_COLORS[(n - 1) % CHAR_COLORS.length]
 
 function mimeForPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase()
@@ -101,11 +113,25 @@ export function PromptEditor({
   // #주석 회색 글씨 표시용 세그먼트. 줄 맨 앞(선행 공백 허용)의 #만 주석으로 본다.
   // textarea "앞"(위) 레이어로 얹어, 주석 글자만 회색으로 덮어 그린다(전송/토큰은 별도 제외).
   const commentSegments = useMemo(() => {
-    const segs: { text: string; comment: boolean }[] = []
+    // "# == charN ==" 아래 줄(캐릭터 프롬프트로 가는 글)은 캐릭터 번호 색으로 덮어 그린다.
+    const segs: { text: string; className: string | null }[] = []
     const lines = value.split('\n')
+    let section = 0
     lines.forEach((line, idx) => {
       const nl = idx < lines.length - 1 ? '\n' : ''
-      segs.push({ text: line + nl, comment: line.trimStart().startsWith('#') })
+      const marker = sectionOf(line)
+      if (marker !== null) section = marker
+      const className =
+        marker !== null
+          ? marker > 0
+            ? charColor(marker)
+            : 'text-faint'
+          : line.trimStart().startsWith('#')
+            ? 'text-faint'
+            : section > 0
+              ? charColor(section)
+              : null
+      segs.push({ text: line + nl, className })
     })
     return segs
   }, [value])
@@ -361,8 +387,8 @@ export function PromptEditor({
         )}
       >
         {commentSegments.map((s, i) =>
-          s.comment ? (
-            <span key={i} className="text-faint">
+          s.className ? (
+            <span key={i} className={s.className}>
               {s.text}
             </span>
           ) : (
