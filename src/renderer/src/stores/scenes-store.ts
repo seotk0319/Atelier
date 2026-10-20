@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { recordNav } from '../lib/nav-history'
 import type { GenerationRequest, Scene, SceneImage, ScenePreset } from '@shared/types'
-import { removeComments } from '@shared/nai-presets'
+import { joinPromptSections } from '@shared/char-sections'
 import { enabledCharacters, useCharactersStore } from './characters-store'
 import {
   enqueueBlockedMessage,
@@ -97,13 +97,12 @@ interface ScenesState {
   generateOne: (sceneId: number) => Promise<boolean>
 }
 
-/** 씬 프롬프트를 기본 프롬프트 뒤에 이어붙임 (콤마 정리) */
+/**
+ * 씬 프롬프트를 기본 프롬프트 뒤에 이어붙임 (콤마 정리).
+ * "# == char1 ==" 같은 구간 표시는 남겨서 생성할 때 캐릭터 프롬프트로 나뉘게 한다.
+ */
 export function appendPrompt(base: string, add: string): string {
-  const b = removeComments(base).trim().replace(/,\s*$/, '')
-  const a = removeComments(add).trim().replace(/^,\s*/, '')
-  if (!b) return a
-  if (!a) return b
-  return `${b}, ${a}`
+  return joinPromptSections(base, add)
 }
 
 /**

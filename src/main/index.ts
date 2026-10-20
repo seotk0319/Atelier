@@ -8,6 +8,8 @@ import { closeDb, getDb, initDb } from './db'
 import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settings'
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
+import { applyCharSections } from '../shared/char-sections'
+import { maxCharactersForModel } from '../shared/nai-models'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
@@ -187,13 +189,17 @@ app.whenReady().then(() => {
       const fragSource = fragmentSource()
       const sub = (text: string): string =>
         rawRequest.skipWildcards ? text : processWildcards(removeComments(text), fragSource)
+      // "# == char1 ==" 같은 구간 표시를 캐릭터 프롬프트로 옮긴다 (주석 제거보다 먼저).
+      const sectioned = rawRequest.skipWildcards
+        ? rawRequest
+        : applyCharSections(rawRequest, maxCharactersForModel(rawRequest.model))
       // 3분할이면 각 조각을 개별 치환 후 병합 — 전송 프롬프트와 메타데이터(promptParts)가
       // 같은 치환 결과를 공유한다 (병합본만 치환하면 메타데이터에 <조각> 원문이 남는 버그)
-      const subbedParts = rawRequest.promptParts
+      const subbedParts = sectioned.promptParts
         ? {
-            base: sub(rawRequest.promptParts.base),
-            additional: sub(rawRequest.promptParts.additional),
-            detail: sub(rawRequest.promptParts.detail)
+            base: sub(sectioned.promptParts.base),
+            additional: sub(sectioned.promptParts.additional),
+            detail: sub(sectioned.promptParts.detail)
           }
         : undefined
       let request = {
@@ -202,10 +208,10 @@ app.whenReady().then(() => {
           ? [subbedParts.base, subbedParts.additional, subbedParts.detail]
               .filter((p) => p.trim())
               .join(', ')
-          : sub(rawRequest.prompt),
-        negativePrompt: sub(rawRequest.negativePrompt),
+          : sub(sectioned.prompt),
+        negativePrompt: sub(sectioned.negativePrompt),
         promptParts: subbedParts,
-        characterPrompts: rawRequest.characterPrompts.map((c) => ({
+        characterPrompts: sectioned.characterPrompts.map((c) => ({
           ...c,
           prompt: sub(c.prompt),
           negativePrompt: sub(c.negativePrompt)
