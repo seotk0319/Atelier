@@ -464,10 +464,20 @@ function useGridWindow(
       })
     }
     let hidden = s.clientWidth === 0
+    // 목록 위에 줄(생성 진행 줄 등)이 생기거나 사라지면 목록 칸의 위치가 바뀐다.
+    // 그만큼 스크롤을 같이 옮겨 카드가 화면에서 제자리에 있게 한다
+    // (연달아 +1장을 누르는 동안 카드가 밀려 다른 씬이 눌리지 않게).
+    let lastTop = hidden ? null : s.getBoundingClientRect().top
     const ro = new ResizeObserver(() => {
       // 숨겨졌던 탭이 다시 보이면 떠날 때의 스크롤 위치로 돌아간다
       const nowHidden = s.clientWidth === 0
       if (hidden && !nowHidden && savedGridScroll > 0) s.scrollTop = savedGridScroll
+      if (nowHidden) lastTop = null
+      else {
+        const top = s.getBoundingClientRect().top
+        if (!hidden && lastTop !== null && top !== lastTop) s.scrollTop += top - lastTop
+        lastTop = top
+      }
       hidden = nowHidden
       measure()
     })
@@ -841,8 +851,8 @@ function SceneGrid(): React.JSX.Element {
             ref={scrollRef}
             data-scene-scroll
             className={cn(
-              'min-h-0 flex-1 overflow-y-auto px-5 no-scrollbar',
-              quickItems.length > 0 ? 'pb-28' : 'pb-5'
+              // 아래 여백은 늘 바로 뽑기 줄 높이만큼 둔다 (줄이 뜨고 질 때 스크롤이 튀지 않게)
+              'min-h-0 flex-1 overflow-y-auto px-5 pb-28 no-scrollbar'
             )}
           >
             <DndContext
