@@ -267,7 +267,8 @@ const TOGGLABLE_PAGES: { id: CenterMode; label: string }[] = [
   { id: 'scene', label: '씬' },
   { id: 'director', label: '디렉터' },
   { id: 'library', label: '라이브러리' },
-  { id: 'gpt', label: 'GPT 이미지' }
+  { id: 'gpt', label: 'GPT 이미지' },
+  { id: 'cover', label: '표지' }
 ]
 
 function PageToggles(): React.JSX.Element {

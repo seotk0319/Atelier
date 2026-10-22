@@ -8,6 +8,7 @@ import type {
   InboxResult
 } from './inbox'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
+import type { CoverProject, CoverProjectSummary } from './cover'
 import type {
   TranslateEngine,
   TranslateResult,
@@ -821,6 +822,30 @@ export interface IpcInvokeMap {
     req: { limit: number; offset: number }
     res: { items: HistoryItem[]; total: number }
   }
+  /** 표지: 작품 목록 (최근 수정 순) */
+  'cover:list': { req: undefined; res: { items: CoverProjectSummary[] } }
+  'cover:create': { req: { name: string }; res: { project: CoverProject } }
+  'cover:load': { req: { id: string }; res: { project: CoverProject | null } }
+  'cover:save': { req: { project: CoverProject }; res: { updatedAt: number } | { error: string } }
+  /** 작품 파일과 그 작품의 모든 이미지·마스크 삭제 */
+  'cover:delete': { req: { id: string }; res: void }
+  'cover:putBlob': { req: { bytes: Uint8Array }; res: { key: string } | { error: string } }
+  /** 라이브러리·GPT·탐색기에서 끌어온 이미지 파일을 표지 저장소로 복사 */
+  'cover:importPaths': {
+    req: { paths: string[] }
+    res: { items: { key: string; name: string }[]; failed: number }
+  }
+  'cover:getBlob': { req: { key: string }; res: { bytes: Uint8Array | null } }
+  'cover:deleteBlobs': { req: { keys: string[] }; res: void }
+  /** 기억해 둔 출력 폴더 */
+  'cover:outputDir': { req: undefined; res: { dir: string | null } }
+  'cover:pickOutputDir': { req: undefined; res: { dir: string | null } }
+  /** 출력 폴더/<folder>/<file> 에 PNG·WEBP 저장 (folder·file 은 cleanCoverName 결과만) */
+  'cover:writeOutput': {
+    req: { folder: string; file: string; bytes: Uint8Array }
+    res: { path: string } | { error: string }
+  }
+  'cover:openOutput': { req: { folder?: string }; res: { ok: boolean } }
 }
 
 /** 메인 → 렌더러 이벤트 채널 */

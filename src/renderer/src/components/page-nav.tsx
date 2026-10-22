@@ -1,5 +1,15 @@
-import { Bell, Image, Images, LayoutGrid, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
+import {
+  Bell,
+  BookImage,
+  Image,
+  Images,
+  LayoutGrid,
+  Sparkles,
+  Wand2,
+  type LucideIcon
+} from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { hasImageDrop } from '../lib/image-drag'
 import { cn } from '../lib/utils'
 import { useLayoutStore, type CenterMode } from '../stores/layout-store'
 
@@ -11,6 +21,7 @@ const PAGES: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: 'director', label: '디렉터', icon: Wand2 },
   { id: 'library', label: '라이브러리', icon: Images },
   { id: 'gpt', label: 'GPT 이미지', icon: Sparkles },
+  { id: 'cover', label: '표지', icon: BookImage },
   { id: 'inbox', label: '알림', icon: Bell }
 ]
 
@@ -59,6 +70,23 @@ export function PageNav(): React.JSX.Element {
   }, [])
   const activePage: Page = centerMode
   const pill = boxes[activePage]
+  // 이미지를 끌고 탭 위에 잠깐 머물면 그 탭이 열린다 (라이브러리 → 표지·GPT 로 끌어 넣기)
+  const springTimer = useRef(0)
+  const [springPage, setSpringPage] = useState<Page | null>(null)
+  const cancelSpring = (): void => {
+    window.clearTimeout(springTimer.current)
+    setSpringPage(null)
+  }
+  const startSpring = (e: React.DragEvent, page: Page): void => {
+    if (!hasImageDrop(e) || page === activePage || springPage === page) return
+    window.clearTimeout(springTimer.current)
+    setSpringPage(page)
+    springTimer.current = window.setTimeout(() => {
+      setSpringPage(null)
+      setCenterMode(page)
+    }, 450)
+  }
+  useEffect(() => () => window.clearTimeout(springTimer.current), [])
 
   return (
     <nav
@@ -83,12 +111,17 @@ export function PageNav(): React.JSX.Element {
             key={page.id}
             data-page={page.id}
             onClick={() => setCenterMode(page.id)}
+            onDragEnter={(e) => startSpring(e, page.id)}
+            onDragOver={(e) => startSpring(e, page.id)}
+            onDragLeave={cancelSpring}
+            onDrop={cancelSpring}
             className={cn(
               'relative h-[34px] whitespace-nowrap rounded-lg px-4 text-[13px] font-semibold transition-colors',
-              active ? 'text-ink' : 'text-muted hover:text-ink'
+              active ? 'text-ink' : 'text-muted hover:text-ink',
+              springPage === page.id && 'bg-accent-soft text-accent'
             )}
           >
-            <span className="relative z-10 flex items-center gap-2">
+            <span className="pointer-events-none relative z-10 flex items-center gap-2">
               <page.icon className={cn('size-4', active && 'text-accent')} />
               {page.label}
             </span>

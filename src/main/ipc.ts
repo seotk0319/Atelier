@@ -60,6 +60,7 @@ import {
 } from './characters/repo'
 import { getDbPath, getDb } from './db'
 import * as gpt from './gpt/service'
+import * as cover from './cover/repo'
 import { analyzeArtists } from './images/artists'
 import { metadataFromPng, metadataFromPayloadJson } from './images/metadata'
 import {
@@ -331,6 +332,37 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
 
   // 그림체 월드컵
   handle('gpt:status', () => gpt.authStatus())
+  handle('cover:list', async () => ({ items: await cover.listCoverProjects() }))
+  handle('cover:create', async ({ name }) => ({ project: await cover.createCoverProject(name) }))
+  handle('cover:load', async ({ id }) => ({ project: await cover.loadCoverProject(id) }))
+  handle('cover:save', async ({ project }) => {
+    try {
+      return await cover.saveCoverProject(project)
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  handle('cover:delete', ({ id }) => cover.deleteCoverProject(id))
+  handle('cover:putBlob', async ({ bytes }) => {
+    try {
+      return await cover.putCoverBlob(bytes)
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  handle('cover:importPaths', ({ paths }) => cover.importCoverPaths(paths))
+  handle('cover:getBlob', async ({ key }) => ({ bytes: await cover.getCoverBlob(key) }))
+  handle('cover:deleteBlobs', ({ keys }) => cover.deleteCoverBlobs(keys))
+  handle('cover:outputDir', () => ({ dir: cover.coverOutputDir() }))
+  handle('cover:pickOutputDir', async () => ({ dir: await cover.pickCoverOutputDir() }))
+  handle('cover:writeOutput', async (req) => {
+    try {
+      return await cover.writeCoverOutput(req)
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  handle('cover:openOutput', async ({ folder }) => ({ ok: await cover.openCoverOutput(folder) }))
   handle('gpt:generate', ({ request, count }) => gpt.generate(request, count))
   handle('gpt:jobs', () => ({ jobs: gpt.listJobs() }))
   handle('gpt:cancel', ({ id }) => gpt.cancel(id))

@@ -1,0 +1,206 @@
+import { Download, Film, FolderOpen, Hand, Move, Paintbrush } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { COVER_CANVASES, type CoverCanvasId } from '@shared/cover'
+import { useCoverStore } from '../../stores/cover-store'
+import { useLayoutStore } from '../../stores/layout-store'
+import { Button } from '../ui/button'
+import { Segmented, SegmentedItem } from '../ui/segmented'
+import { CoverExportDialog } from './cover-export-dialog'
+import { CoverInspector } from './cover-inspector'
+import { CoverMaterials } from './cover-materials'
+import { CoverPreviewStrip } from './cover-preview-strip'
+import { CoverProjectPicker } from './cover-project-picker'
+import { CoverWebpDialog } from './cover-webp-dialog'
+import { createCoverEditor } from './engine/editor'
+import { toEditorBrush, type CoverMode } from './engine/types'
+
+/**
+ * 표지 탭. 배경 N장 × 타이포 M장 × 캔버스 4종(바베·에덴·젠잇·알플)을 한 번에 출력한다.
+ * 왼쪽 재료 · 가운데 편집기와 미리보기 · 오른쪽 설정.
+ */
+export function CoverView(): React.JSX.Element {
+  const visible = useLayoutStore((s) => s.centerMode === 'cover')
+  const ready = useCoverStore((s) => s.ready)
+  const project = useCoverStore((s) => s.project)
+  useCoverStore((s) => s.rev)
+  const outputDir = useCoverStore((s) => s.outputDir)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [webpOpen, setWebpOpen] = useState(false)
+
+  useEffect(() => {
+    void useCoverStore.getState().init()
+  }, [])
+  // 다른 탭으로 갈 때 저장을 미루지 않는다
+  useEffect(() => {
+    if (!visible) void useCoverStore.getState().flush()
+  }, [visible])
+
+  const bgCount = project?.backgrounds.length ?? 0
+  const typoCount = project?.typos.length ?? 0
+  const pngCount = bgCount * typoCount * COVER_CANVASES.length
+
+  return (
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
+      <div className="drag flex h-[60px] shrink-0 items-center gap-3 px-5">
+        <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">표지</h1>
+        <CoverProjectPicker />
+        <div className="flex-1" />
+        {outputDir && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="no-drag"
+            title={'출력 폴더 열기 · ' + outputDir}
+            onClick={() => void window.nais.invoke('cover:openOutput', {})}
+          >
+            <FolderOpen size={16} />
+          </Button>
+        )}
+        <Button
+          variant="tint"
+          className="no-drag"
+          disabled={!bgCount}
+          title={bgCount ? undefined : '배경 그림을 먼저 넣어 주세요'}
+          onClick={() => setWebpOpen(true)}
+        >
+          <Film size={15} /> 움직이는 WEBP
+        </Button>
+        <Button
+          variant="accent"
+          className="no-drag"
+          disabled={!bgCount || !typoCount}
+          title={
+            !bgCount
+              ? '배경 그림을 먼저 넣어 주세요'
+              : !typoCount
+                ? '타이포를 먼저 넣어 주세요'
+                : undefined
+          }
+          onClick={() => setExportOpen(true)}
+        >
+          <Download size={15} /> PNG 저장
+          {pngCount > 0 && (
+            <span className="rounded-full bg-white/20 px-1.5 text-[11px] tabular-nums">
+              {pngCount}
+            </span>
+          )}
+        </Button>
+      </div>
+      <div className="flex min-h-0 flex-1 gap-4 px-5 pb-5">
+        <CoverMaterials />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-paper">
+          <Toolbar />
+          <Stage visible={visible} />
+          {ready && <CoverPreviewStrip />}
+        </div>
+        <CoverInspector />
+      </div>
+      <CoverExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+      <CoverWebpDialog open={webpOpen} onOpenChange={setWebpOpen} />
+    </div>
+  )
+}
+
+const MODES: { id: CoverMode; label: string; icon: typeof Move; hint: string }[] = [
+  {
+    id: 'typo',
+    label: '타이포 배치',
+    icon: Move,
+    hint: '타이포를 끌어 옮기고 손잡이로 크기를 맞춰요'
+  },
+  { id: 'pan', label: '배경 위치', icon: Hand, hint: '그림을 끌어 보이는 부분을 고르세요' },
+  { id: 'censor', label: '검열', icon: Paintbrush, hint: '칠한 부분은 모든 캔버스에 같이 들어가요' }
+]
+
+function Toolbar(): React.JSX.Element {
+  const project = useCoverStore((s) => s.project)
+  useCoverStore((s) => s.rev)
+  const mode = useCoverStore((s) => s.mode)
+  const canvasId = project?.selection.canvasId ?? '1x1'
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-2.5">
+      <Segmented
+        value={canvasId}
+        onValueChange={(v) =>
+          v && useCoverStore.getState().select({ canvasId: v as CoverCanvasId })
+        }
+        aria-label="캔버스 크기"
+      >
+        {COVER_CANVASES.map((c) => (
+          <SegmentedItem key={c.id} value={c.id} title={c.w + '×' + c.h}>
+            <span className="tabular-nums">{c.ratio}</span>
+            {c.label}
+            <span className="hidden text-[11px] font-normal tabular-nums text-faint 2xl:inline">
+              {c.w}×{c.h}
+            </span>
+          </SegmentedItem>
+        ))}
+      </Segmented>
+      <div className="flex-1" />
+      <Segmented
+        value={mode}
+        onValueChange={(v) => v && useCoverStore.getState().setMode(v as CoverMode)}
+        aria-label="편집 모드"
+      >
+        {MODES.map((m) => (
+          <SegmentedItem key={m.id} value={m.id} title={m.hint}>
+            <m.icon size={13} />
+            {m.label}
+          </SegmentedItem>
+        ))}
+      </Segmented>
+    </div>
+  )
+}
+
+/** 편집기 무대. 편집기는 한 번만 만들고 대상·모드·붓만 바꿔 준다 */
+function Stage({ visible }: { visible: boolean }): React.JSX.Element {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const project = useCoverStore((s) => s.project)
+  const editor = useCoverStore((s) => s.editor)
+  const mode = useCoverStore((s) => s.mode)
+  const brush = useCoverStore((s) => s.brush)
+  useCoverStore((s) => s.rev)
+  const sel = project?.selection
+  const target = sel ? sel.canvasId + '|' + sel.bgId + '|' + sel.typoId : ''
+
+  useEffect(() => {
+    const box = boxRef.current
+    if (!box) return
+    const st = useCoverStore.getState()
+    const api = createCoverEditor(box, {
+      getProject: () => useCoverStore.getState().project,
+      onChange: () => useCoverStore.getState().touch(),
+      onHistory: (h) => useCoverStore.getState().setHistory(h)
+    })
+    api.setMode(st.mode)
+    api.setBrush(toEditorBrush(st.brush))
+    st.setEditor(api)
+    return () => {
+      useCoverStore.getState().setEditor(null)
+      api.destroy()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!editor || !project) return
+    const s = project.selection
+    void editor.show({ canvasId: s.canvasId, bgId: s.bgId, typoId: s.typoId })
+    // 프로젝트를 바꾸면 대상이 같아 보여도 새로 그린다
+  }, [editor, project, target])
+
+  useEffect(() => {
+    editor?.setMode(mode)
+  }, [editor, mode])
+
+  useEffect(() => {
+    editor?.setBrush(toEditorBrush(brush))
+  }, [editor, brush])
+
+  // 숨어 있던 동안 바뀐 것이 있을 수 있다
+  useEffect(() => {
+    if (visible) void editor?.refresh()
+  }, [visible, editor])
+
+  return <div ref={boxRef} className="relative min-h-0 flex-1 overflow-hidden bg-surface-2" />
+}

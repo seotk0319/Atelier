@@ -1,4 +1,5 @@
 import {
+  BookImage,
   ClipboardCopy,
   Copy,
   Download,
@@ -10,6 +11,7 @@ import {
   PencilLine,
   Sparkles,
   Trash2,
+  Type,
   Wand2
 } from 'lucide-react'
 import { toast } from '../stores/toast-store'
@@ -19,6 +21,7 @@ import { setI2iSource, useGenerationStore } from '../stores/generation-store'
 import { useMetadataStore } from '../stores/metadata-store'
 import { openCensor } from '../stores/censor-store'
 import { sendToGpt } from '../stores/gpt-store'
+import { sendToCover } from '../stores/cover-store'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -82,6 +85,13 @@ export function ImageContextMenu({
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => void sendToGpt(filePath, 'ref')}>
           <Sparkles size={13} className="text-accent" /> GPT 레퍼런스로 넣기
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => void sendToCover([filePath], 'backgrounds')}>
+          <BookImage size={13} className="text-orange-400" /> 표지 배경으로 쓰기
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void sendToCover([filePath], 'typos')}>
+          <Type size={13} className="text-orange-400" /> 표지 타이포로 쓰기
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => void showMeta({ filePath })}>
