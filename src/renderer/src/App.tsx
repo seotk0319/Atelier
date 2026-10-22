@@ -69,8 +69,9 @@ export default function App(): React.JSX.Element {
   )
   const [ready, setReady] = useState(false)
   // 좌우 패널: 한 번 만들면 지우지 않고 숨기기만 한다 (탭을 옮길 때마다 새로 만들던 비용 제거)
-  const fullWidth = centerMode === 'inbox' || centerMode === 'gpt' || centerMode === 'cover'
-  const showLeft = leftOpen && !fullWidth
+  const fullWidth = centerMode === 'inbox' || centerMode === 'gpt'
+  // 표지 탭은 생성 패널만 막는다. 오른쪽 히스토리는 열어서 그림을 끌어다 쓴다
+  const showLeft = leftOpen && !fullWidth && centerMode !== 'cover'
   const showRight = rightOpen && !fullWidth
   const [leftMounted, setLeftMounted] = useState(showLeft)
   const [rightMounted, setRightMounted] = useState(showRight)

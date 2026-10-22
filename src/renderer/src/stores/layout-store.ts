@@ -16,7 +16,7 @@ const DEFAULT_PANELS: PanelPrefs = {
   library: { left: false, right: false },
   inbox: { left: false, right: false },
   gpt: { left: false, right: false },
-  cover: { left: false, right: false }
+  cover: { left: false, right: true }
 }
 
 interface LayoutState {

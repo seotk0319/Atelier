@@ -88,7 +88,7 @@ export function CoverView(): React.JSX.Element {
       </div>
       <div className="flex min-h-0 flex-1 gap-4 px-5 pb-5">
         <CoverMaterials />
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-paper">
+        <div className="@container flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-paper">
           <Toolbar />
           <Stage visible={visible} />
           {ready && <CoverPreviewStrip />}
@@ -118,7 +118,7 @@ function Toolbar(): React.JSX.Element {
   const mode = useCoverStore((s) => s.mode)
   const canvasId = project?.selection.canvasId ?? '1x1'
   return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-2.5">
+    <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
       <Segmented
         value={canvasId}
         onValueChange={(v) =>
@@ -129,8 +129,8 @@ function Toolbar(): React.JSX.Element {
         {COVER_CANVASES.map((c) => (
           <SegmentedItem key={c.id} value={c.id} title={c.w + '×' + c.h}>
             <span className="tabular-nums">{c.ratio}</span>
-            {c.label}
-            <span className="hidden text-[11px] font-normal tabular-nums text-faint 2xl:inline">
+            <span className="hidden @[560px]:inline">{c.label}</span>
+            <span className="hidden text-[11px] font-normal tabular-nums text-faint @[900px]:inline">
               {c.w}×{c.h}
             </span>
           </SegmentedItem>
@@ -143,9 +143,9 @@ function Toolbar(): React.JSX.Element {
         aria-label="편집 모드"
       >
         {MODES.map((m) => (
-          <SegmentedItem key={m.id} value={m.id} title={m.hint}>
+          <SegmentedItem key={m.id} value={m.id} title={m.label + ' · ' + m.hint}>
             <m.icon size={13} />
-            {m.label}
+            <span className="hidden @[680px]:inline">{m.label}</span>
           </SegmentedItem>
         ))}
       </Segmented>
