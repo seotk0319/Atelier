@@ -12,6 +12,7 @@ import {
 } from '../components/cover/engine/state'
 import type {
   CoverBrushPrefs,
+  CoverChangeKind,
   CoverEditorApi,
   CoverHistoryState,
   CoverMode
@@ -54,6 +55,25 @@ function loadBrush(): CoverBrushPrefs {
 
 export type CoverSaveState = 'idle' | 'saving' | 'saved' | 'error'
 
+/**
+ * 되돌리기 기록: 배치(타이포 위치·크기)·배경 위치·액자. 이미지 추가·삭제와 검열 붓은 넣지 않는다
+ * (검열은 편집기가 따로 기록). 0.5초 안에 이어진 바뀜(슬라이더 끌기, 방향키 연타)은 한 번으로 친다.
+ */
+const HISTORY_MAX = 100
+const HISTORY_MERGE_MS = 500
+type LayoutSnap = string
+
+function layoutSnap(p: CoverProject): LayoutSnap {
+  return JSON.stringify({ placements: p.placements, pans: p.pans, frame: p.frame })
+}
+
+function applySnap(p: CoverProject, snap: LayoutSnap): void {
+  const v = JSON.parse(snap) as Pick<CoverProject, 'placements' | 'pans' | 'frame'>
+  p.placements = v.placements
+  p.pans = v.pans
+  p.frame = v.frame
+}
+
 interface CoverState {
   ready: boolean
   projects: CoverProjectSummary[]
@@ -69,6 +89,11 @@ interface CoverState {
   importing: number
   /** 편집기 인스턴스 (cover-view 가 등록) */
   editor: CoverEditorApi | null
+  /** 배치·배경 위치·액자 되돌리기 가능 여부 */
+  canUndo: boolean
+  canRedo: boolean
+  undo: () => void
+  redo: () => void
 
   init: () => Promise<void>
   openProject: (id: string) => Promise<void>
@@ -78,7 +103,7 @@ interface CoverState {
   /** 프로젝트를 고치고 저장 예약. redraw 면 편집기를 다시 그림 */
   mutate: (fn: (p: CoverProject) => void, opts?: { redraw?: boolean }) => void
   /** 엔진이 이미 고친 뒤 알려 줄 때 (편집기 onChange) */
-  touch: () => void
+  touch: (kind?: CoverChangeKind) => void
   select: (patch: Partial<CoverSelection>) => void
   setMode: (mode: CoverMode) => void
   setBrush: (patch: Partial<CoverBrushPrefs>) => void
@@ -99,8 +124,45 @@ interface CoverState {
 
 let saveTimer: number | null = null
 let initPromise: Promise<void> | null = null
+let undoStack: LayoutSnap[] = []
+let redoStack: LayoutSnap[] = []
+/** 마지막으로 기록에 반영된 상태 (다음 바뀜의 "이전" 값) */
+let baseline: LayoutSnap | null = null
+let lastPushAt = 0
+let lastSource = ''
+/** 같은 종류가 잇따를 때만 한 단계로 묶는다 (끌기는 매번 따로) */
+const MERGEABLE = new Set(['nudge', 'inspector'])
 
 export const useCoverStore = create<CoverState>((set, get) => {
+  const resetHistory = (p: CoverProject | null): void => {
+    undoStack = []
+    redoStack = []
+    baseline = p ? layoutSnap(p) : null
+    lastPushAt = 0
+    lastSource = ''
+  }
+  /** 바뀜이 생긴 뒤 부른다. 배치·위치·액자가 실제로 달라졌을 때만 기록 */
+  const recordHistory = (source: string): void => {
+    const p = get().project
+    if (!p || baseline === null) return
+    const now = layoutSnap(p)
+    if (now === baseline) return
+    const t = Date.now()
+    const merge =
+      undoStack.length > 0 &&
+      source === lastSource &&
+      MERGEABLE.has(source) &&
+      t - lastPushAt <= HISTORY_MERGE_MS
+    if (!merge) {
+      undoStack.push(baseline)
+      if (undoStack.length > HISTORY_MAX) undoStack.shift()
+    }
+    lastPushAt = t
+    lastSource = source
+    redoStack = []
+    baseline = now
+    set({ canUndo: true, canRedo: false })
+  }
   const save = async (): Promise<void> => {
     if (saveTimer !== null) {
       window.clearTimeout(saveTimer)
@@ -138,7 +200,8 @@ export const useCoverStore = create<CoverState>((set, get) => {
     if (saveTimer !== null) window.clearTimeout(saveTimer)
     saveTimer = window.setTimeout(() => void save(), 300)
   }
-  const bump = (redraw = false): void => {
+  const bump = (redraw = false, source = 'inspector'): void => {
+    recordHistory(source)
     set((s) => ({ rev: s.rev + 1 }))
     schedule()
     if (redraw) void get().editor?.refresh()
@@ -148,7 +211,27 @@ export const useCoverStore = create<CoverState>((set, get) => {
     if (p && !p.selection.bgId && p.backgrounds[0]) p.selection.bgId = p.backgrounds[0].id
     if (p && !p.selection.typoId && p.typos[0]) p.selection.typoId = p.typos[0].id
     if (p) localStorage.setItem(LAST_KEY, p.id)
-    set((s) => ({ project: p, rev: s.rev + 1, history: { canUndo: false, canRedo: false } }))
+    resetHistory(p)
+    set((s) => ({
+      project: p,
+      rev: s.rev + 1,
+      history: { canUndo: false, canRedo: false },
+      canUndo: false,
+      canRedo: false
+    }))
+  }
+  const restore = (from: LayoutSnap[], to: LayoutSnap[]): void => {
+    const p = get().project
+    const snap = from.pop()
+    if (!p || snap === undefined) return
+    to.push(baseline ?? layoutSnap(p))
+    applySnap(p, snap)
+    baseline = snap
+    lastPushAt = 0
+    lastSource = ''
+    set((s) => ({ rev: s.rev + 1, canUndo: undoStack.length > 0, canRedo: redoStack.length > 0 }))
+    schedule()
+    void get().editor?.refresh()
   }
 
   return {
@@ -163,6 +246,10 @@ export const useCoverStore = create<CoverState>((set, get) => {
     outputDir: null,
     importing: 0,
     editor: null,
+    canUndo: false,
+    canRedo: false,
+    undo: () => restore(undoStack, redoStack),
+    redo: () => restore(redoStack, undoStack),
 
     init: () => {
       if (initPromise) return initPromise
@@ -251,7 +338,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
       bump(opts?.redraw ?? true)
     },
 
-    touch: () => bump(false),
+    touch: (kind) => bump(false, kind ?? 'placement'),
 
     select: (patch) => {
       const p = get().project
@@ -310,6 +397,8 @@ export const useCoverStore = create<CoverState>((set, get) => {
       if (!p) return
       const item = removeItem(p, kind, id)
       if (!item) return
+      // 삭제로 정리된 배치는 되돌리기 대상이 아니다
+      baseline = layoutSnap(p)
       forgetBitmap(item.blobKey)
       if (item.maskKey) forgetBitmap(item.maskKey)
       if (kind === 'backgrounds') censor.close(id)

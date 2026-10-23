@@ -1,4 +1,4 @@
-import { Download, Film, FolderOpen, Hand, Move, Paintbrush } from 'lucide-react'
+import { Download, Film, FolderOpen, Hand, Move, Paintbrush, Redo2, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { COVER_CANVASES, type CoverCanvasId } from '@shared/cover'
 import { useCoverStore } from '../../stores/cover-store'
@@ -33,6 +33,25 @@ export function CoverView(): React.JSX.Element {
   // 다른 탭으로 갈 때 저장을 미루지 않는다
   useEffect(() => {
     if (!visible) void useCoverStore.getState().flush()
+  }, [visible])
+
+  // Ctrl+Z 되돌리기 · Ctrl+Shift+Z / Ctrl+Y 다시 하기 (글자 입력 중이나 창이 떠 있을 땐 그쪽에 맡김)
+  useEffect(() => {
+    if (!visible) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.defaultPrevented || e.altKey || !(e.ctrlKey || e.metaKey)) return
+      const isZ = e.code === 'KeyZ'
+      const isY = e.code === 'KeyY'
+      if (!isZ && !isY) return
+      const t = e.target as HTMLElement | null
+      if (t?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (document.querySelector('[role="dialog"]')) return
+      e.preventDefault()
+      if (isZ && !e.shiftKey) coverUndo()
+      else coverRedo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [visible])
 
   const bgCount = project?.backgrounds.length ?? 0
@@ -112,10 +131,24 @@ const MODES: { id: CoverMode; label: string; icon: typeof Move; hint: string }[]
   { id: 'censor', label: '검열', icon: Paintbrush, hint: '칠한 부분은 모든 캔버스에 같이 들어가요' }
 ]
 
+/** 검열 모드에선 붓질, 나머지 모드에선 배치·배경 위치·액자를 되돌린다 */
+function coverUndo(): void {
+  const s = useCoverStore.getState()
+  if (s.mode === 'censor') void s.editor?.undo()
+  else s.undo()
+}
+function coverRedo(): void {
+  const s = useCoverStore.getState()
+  if (s.mode === 'censor') void s.editor?.redo()
+  else s.redo()
+}
+
 function Toolbar(): React.JSX.Element {
   const project = useCoverStore((s) => s.project)
   useCoverStore((s) => s.rev)
   const mode = useCoverStore((s) => s.mode)
+  const canUndo = useCoverStore((s) => (s.mode === 'censor' ? s.history.canUndo : s.canUndo))
+  const canRedo = useCoverStore((s) => (s.mode === 'censor' ? s.history.canRedo : s.canRedo))
   const canvasId = project?.selection.canvasId ?? '1x1'
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
@@ -137,6 +170,28 @@ function Toolbar(): React.JSX.Element {
         ))}
       </Segmented>
       <div className="flex-1" />
+      <div className="flex shrink-0 items-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!canUndo}
+          onClick={coverUndo}
+          title={(mode === 'censor' ? '붓질 되돌리기' : '되돌리기') + ' (Ctrl+Z)'}
+          aria-label="되돌리기"
+        >
+          <Undo2 size={15} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!canRedo}
+          onClick={coverRedo}
+          title={(mode === 'censor' ? '붓질 다시 하기' : '다시 하기') + ' (Ctrl+Shift+Z)'}
+          aria-label="다시 하기"
+        >
+          <Redo2 size={15} />
+        </Button>
+      </div>
       <Segmented
         value={mode}
         onValueChange={(v) => v && useCoverStore.getState().setMode(v as CoverMode)}
@@ -170,7 +225,7 @@ function Stage({ visible }: { visible: boolean }): React.JSX.Element {
     const st = useCoverStore.getState()
     const api = createCoverEditor(box, {
       getProject: () => useCoverStore.getState().project,
-      onChange: () => useCoverStore.getState().touch(),
+      onChange: (kind) => useCoverStore.getState().touch(kind),
       onHistory: (h) => useCoverStore.getState().setHistory(h)
     })
     api.setMode(st.mode)

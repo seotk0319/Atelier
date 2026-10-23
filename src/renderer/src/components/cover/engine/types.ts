@@ -43,7 +43,8 @@ export interface CoverTarget {
   typoId: string | null
 }
 
-export type CoverChangeKind = 'placement' | 'pan' | 'mask'
+/** nudge = 방향키 이동 (연타는 되돌리기 한 단계로 묶인다) */
+export type CoverChangeKind = 'placement' | 'pan' | 'mask' | 'nudge'
 
 export interface CoverHistoryState {
   canUndo: boolean

@@ -225,8 +225,8 @@ export function createCoverEditor(
   let destroyed = false
   let dprQuery: MediaQueryList | null = null
   let hover: Point | null = null
-  let snapX = false
-  let snapY = false
+  let snapX: number | null = null
+  let snapY: number | null = null
   let theme: Theme = readTheme()
   const brush: EditorBrush = { ...DEFAULT_BRUSH }
 
@@ -545,7 +545,7 @@ export function createCoverEditor(
   }
 
   function drawSnapGuides(): void {
-    if ((!snapX && !snapY) || !lay) return
+    if ((snapX === null && snapY === null) || !lay) return
     const lw = Math.max(1, Math.round(lay.sx))
     const off = lw % 2 ? 0.5 : 0
     const top = Math.round(lay.oy * lay.sy) + off
@@ -556,21 +556,44 @@ export function createCoverEditor(
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.strokeStyle = theme.accent
     ctx.lineWidth = lw
-    if (snapX) {
-      const x = Math.round((lay.ox + (lay.W * lay.vs) / 2) * lay.sx) + off
+    // 캔버스 가장자리에 붙은 선은 테두리 바로 안쪽에 보이게
+    if (snapX !== null) {
+      const sx = Math.min(Math.max(snapX, 1 / lay.vs), lay.W - 1 / lay.vs)
+      const x = Math.round((lay.ox + sx * lay.vs) * lay.sx) + off
       ctx.beginPath()
       ctx.moveTo(x, top)
       ctx.lineTo(x, bottom)
       ctx.stroke()
     }
-    if (snapY) {
-      const y = Math.round((lay.oy + (lay.H * lay.vs) / 2) * lay.sy) + off
+    if (snapY !== null) {
+      const sy = Math.min(Math.max(snapY, 1 / lay.vs), lay.H - 1 / lay.vs)
+      const y = Math.round((lay.oy + sy * lay.vs) * lay.sy) + off
       ctx.beginPath()
       ctx.moveTo(left, y)
       ctx.lineTo(right, y)
       ctx.stroke()
     }
     ctx.restore()
+  }
+
+  /**
+   * 스냅: 상자 기준점들(anchors, 출력 px) 중 캔버스 가장자리·중앙선(targets)에 가장 가까운 것.
+   * 화면 SNAP_PX 이내면 { delta: 옮길 거리, line: 붙은 선 } 을 돌려준다.
+   */
+  function nearestSnap(
+    anchors: number[],
+    targets: number[],
+    vs: number
+  ): { delta: number; line: number } | null {
+    let best: { delta: number; line: number } | null = null
+    for (const a of anchors) {
+      for (const t of targets) {
+        const delta = t - a
+        if (Math.abs(delta) * vs > SNAP_PX) continue
+        if (!best || Math.abs(delta) < Math.abs(best.delta)) best = { delta, line: t }
+      }
+    }
+    return best
   }
 
   function drawGuides(): void {
@@ -941,16 +964,21 @@ export function createCoverEditor(
       const { pl0, start } = drag
       let cx = clamp(pl0.cx + (po.x - start.x) / W, Math.min(0, pl0.cx), Math.max(1, pl0.cx))
       let cy = clamp(pl0.cy + (po.y - start.y) / H, Math.min(0, pl0.cy), Math.max(1, pl0.cy))
-      snapX = false
-      snapY = false
+      snapX = null
+      snapY = null
       if (!e.altKey) {
-        if (Math.abs(cx * W - W / 2) * lay.vs <= SNAP_PX) {
-          cx = 0.5
-          snapX = true
+        // 상자 왼쪽·가운데·오른쪽 → 캔버스 왼쪽 끝·중앙·오른쪽 끝 (세로도 같게)
+        const bw = pl0.w * W
+        const bh = pl0.h * H
+        const sxr = nearestSnap([cx * W - bw / 2, cx * W, cx * W + bw / 2], [0, W / 2, W], lay.vs)
+        if (sxr) {
+          cx += sxr.delta / W
+          snapX = sxr.line
         }
-        if (Math.abs(cy * H - H / 2) * lay.vs <= SNAP_PX) {
-          cy = 0.5
-          snapY = true
+        const syr = nearestSnap([cy * H - bh / 2, cy * H, cy * H + bh / 2], [0, H / 2, H], lay.vs)
+        if (syr) {
+          cy += syr.delta / H
+          snapY = syr.line
         }
       }
       setPlacement(p, typoId, canvasId, { cx, cy, w: pl0.w, h: pl0.h })
@@ -960,7 +988,30 @@ export function createCoverEditor(
       const qx = po.x - grab.x - fixed.x
       const qy = po.y - grab.y - fixed.y
       const t = (qx * d.x + qy * d.y) / dd
-      const k = Math.max(t, minW / w0, minH / h0)
+      let k = Math.max(t, minW / w0, minH / h0)
+      snapX = null
+      snapY = null
+      if (!e.altKey) {
+        // 움직이는 모서리의 가로 변 또는 세로 변 중 더 가까운 쪽을 선에 붙이고 비율은 유지
+        const mx = fixed.x + d.x * k
+        const my = fixed.y + d.y * k
+        const sxr = Math.abs(d.x) > 1e-6 ? nearestSnap([mx], [0, W / 2, W], lay.vs) : null
+        const syr = Math.abs(d.y) > 1e-6 ? nearestSnap([my], [0, H / 2, H], lay.vs) : null
+        const useX = sxr && (!syr || Math.abs(sxr.delta) <= Math.abs(syr.delta))
+        if (useX && sxr) {
+          const kk = (sxr.line - fixed.x) / d.x
+          if (kk >= minW / w0 && kk >= minH / h0) {
+            k = kk
+            snapX = sxr.line
+          }
+        } else if (syr) {
+          const kk = (syr.line - fixed.y) / d.y
+          if (kk >= minW / w0 && kk >= minH / h0) {
+            k = kk
+            snapY = syr.line
+          }
+        }
+      }
       const cx = fixed.x + (d.x * k) / 2
       const cy = fixed.y + (d.y * k) / 2
       setPlacement(p, typoId, canvasId, {
@@ -972,8 +1023,25 @@ export function createCoverEditor(
     } else if (drag.kind === 'edge') {
       if (!typoId) return
       const { handle, pl0, left, right, top, bottom, grab } = drag
-      const x = po.x - grab.x
-      const y = po.y - grab.y
+      let x = po.x - grab.x
+      let y = po.y - grab.y
+      snapX = null
+      snapY = null
+      if (!e.altKey) {
+        if (handle === 'e' || handle === 'w') {
+          const s = nearestSnap([x], [0, W / 2, W], lay.vs)
+          if (s) {
+            x = s.line
+            snapX = s.line
+          }
+        } else {
+          const s = nearestSnap([y], [0, H / 2, H], lay.vs)
+          if (s) {
+            y = s.line
+            snapY = s.line
+          }
+        }
+      }
       const next = { cx: pl0.cx, cy: pl0.cy, w: pl0.w, h: pl0.h }
       if (handle === 'e' || handle === 'w') {
         const nw = handle === 'e' ? Math.max(x - left, minW) : Math.max(right - x, minW)
@@ -1020,8 +1088,8 @@ export function createCoverEditor(
     if (e && e.pointerId !== drag.pointerId) return
     const d = drag
     drag = null
-    snapX = false
-    snapY = false
+    snapX = null
+    snapY = null
     try {
       if (canvas.hasPointerCapture(d.pointerId)) canvas.releasePointerCapture(d.pointerId)
     } catch {
@@ -1090,9 +1158,13 @@ export function createCoverEditor(
   }
 
   function onKeyDown(e: KeyboardEvent): void {
-    if (e.key === 'Alt' && drag && drag.kind === 'move') {
-      snapX = false
-      snapY = false
+    if (
+      e.key === 'Alt' &&
+      drag &&
+      (drag.kind === 'move' || drag.kind === 'resize' || drag.kind === 'edge')
+    ) {
+      snapX = null
+      snapY = null
       draw()
       return
     }
@@ -1127,10 +1199,10 @@ export function createCoverEditor(
       w: pl.w,
       h: pl.h
     })
-    snapX = false
-    snapY = false
+    snapX = null
+    snapY = null
     draw()
-    notify('placement')
+    notify('nudge')
   }
 
   // ---------- 로드 ----------
@@ -1256,8 +1328,8 @@ export function createCoverEditor(
         : (p?.selection.canvasId ?? ('1x1' as CoverCanvasId))
       endDrag(null)
       target = { canvasId: cid, bgId: t.bgId ?? null, typoId: t.typoId ?? null }
-      snapX = false
-      snapY = false
+      snapX = null
+      snapY = null
       hover = null
       scheduleDraw()
       await load()
