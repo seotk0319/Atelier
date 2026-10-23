@@ -383,6 +383,90 @@ export function createCoverEditor(
     return !!(view && view.typoItem && spec && spec.typo)
   }
 
+  // ---------- 화면 크기 사본 ----------
+  // 원본(수천 px)을 매 프레임 고화질로 줄여 그리면 끌기가 끊긴다.
+  // 화면에 보이는 크기로 한 번 줄여 둔 사본을 그리고, 끄는 동안엔 크기가 조금 달라도 그 사본을 쓴다.
+  interface Scaled {
+    w: number
+    h: number
+    bmp: ImageBitmap | null
+    pending: boolean
+  }
+  const scaled = new Map<CanvasImageSource, Scaled>()
+  const usedSources = new Set<CanvasImageSource>()
+
+  function sizeOf(src: CanvasImageSource): { w: number; h: number } | null {
+    const s = src as { width?: unknown; height?: unknown }
+    return typeof s.width === 'number' && typeof s.height === 'number'
+      ? { w: s.width, h: s.height }
+      : null
+  }
+
+  function scaledFor(src: CanvasImageSource, tw: number, th: number): CanvasImageSource {
+    usedSources.add(src)
+    const size = sizeOf(src)
+    const w = Math.max(1, Math.round(tw))
+    const h = Math.max(1, Math.round(th))
+    // 거의 줄이지 않는 경우는 원본이 더 선명하고 충분히 빠르다
+    if (!size || (w >= size.w * 0.8 && h >= size.h * 0.8)) return src
+    const e = scaled.get(src)
+    if (e?.bmp && Math.abs(e.w - w) <= 2 && Math.abs(e.h - h) <= 2) return e.bmp
+    if (e?.bmp && drag) return e.bmp
+    if (!e?.pending) {
+      const entry: Scaled = { w, h, bmp: e?.bmp ?? null, pending: true }
+      scaled.set(src, entry)
+      createImageBitmap(src as ImageBitmapSource, {
+        resizeWidth: w,
+        resizeHeight: h,
+        resizeQuality: 'high'
+      })
+        .then((bmp) => {
+          if (destroyed || scaled.get(src) !== entry) {
+            bmp.close()
+            return
+          }
+          entry.bmp?.close()
+          entry.bmp = bmp
+          entry.w = w
+          entry.h = h
+          entry.pending = false
+          scheduleDraw()
+        })
+        .catch(() => {
+          entry.pending = false
+        })
+    }
+    return e?.bmp ?? src
+  }
+
+  /** 이번 그리기에서 안 쓴 원본의 사본은 버린다 (배경을 바꾸면 옛 사본이 남지 않게) */
+  function pruneScaled(): void {
+    for (const [src, e] of scaled) {
+      if (usedSources.has(src) || e.pending) continue
+      e.bmp?.close()
+      scaled.delete(src)
+    }
+    usedSources.clear()
+  }
+
+  function toDisplay(s: CoverDrawSpec, l: Layout, m: Measure, liveMask: boolean): CoverDrawSpec {
+    const kx = l.vs * m.sx
+    const ky = l.vs * m.sy
+    const out: CoverDrawSpec = { ...s }
+    if (s.bg) {
+      const r = coverRect(s.bg.width, s.bg.height, s.W, s.H, s.bg.pan)
+      out.bg = { ...s.bg, image: scaledFor(s.bg.image, r.w * kx, r.h * ky) }
+      // 검열 중인 마스크는 붓질마다 바뀌므로 원본 그대로
+      if (s.mask && !liveMask) out.mask = scaledFor(s.mask, r.w * kx, r.h * ky)
+    }
+    if (s.typo) {
+      const r = typoRect(s.W, s.H, s.typo.placement)
+      out.typo = { ...s.typo, image: scaledFor(s.typo.image, r.w * kx, r.h * ky) }
+    }
+    if (s.frameImage) out.frameImage = scaledFor(s.frameImage, s.W * kx, s.H * ky)
+    return out
+  }
+
   function draw(): void {
     if (destroyed) return
     if (raf) {
@@ -423,11 +507,12 @@ export function createCoverEditor(
       ctx.save()
       ctx.translate(lay.ox, lay.oy)
       try {
-        drawCover(ctx, lay.vs, drawSpec)
+        drawCover(ctx, lay.vs, toDisplay(drawSpec, lay, m, !!liveMask))
       } catch (err) {
         console.error(err)
       }
       ctx.restore()
+      pruneScaled()
     }
 
     drawSnapGuides()
@@ -1222,6 +1307,8 @@ export function createCoverEditor(
       loadSeq++
       if (raf) cancelAnimationFrame(raf)
       raf = 0
+      for (const e of scaled.values()) e.bmp?.close()
+      scaled.clear()
       ro.disconnect()
       themeObserver.disconnect()
       if (dprQuery) dprQuery.removeEventListener('change', onDprChange)

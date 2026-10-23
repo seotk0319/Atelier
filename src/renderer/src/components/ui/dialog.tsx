@@ -68,11 +68,12 @@ export function DialogContent({
         }}
       >
         {children}
+        {/* 보이는 칸 32px + 둘레 6px까지 눌림 = 44px (애플 최소 터치 크기) */}
         <DialogPrimitive.Close
           aria-label="Close"
-          className="absolute right-2.5 top-2.5 z-10 grid size-7 place-items-center rounded-md bg-surface/90 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          className="absolute right-2 top-2 z-10 grid size-8 place-items-center rounded-lg bg-surface/90 text-muted transition-colors after:absolute after:-inset-1.5 after:content-[''] hover:bg-surface-2 hover:text-ink"
         >
-          <X size={16} />
+          <X size={17} />
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
