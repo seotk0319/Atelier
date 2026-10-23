@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createStore, type InboxStore } from './core/store.mjs'
 import { displayText, queryInbox, sourceUrl } from './query'
 import { createDirectCollector } from './direct/collector'
+import { groupWorks } from './work-groups'
 import { isDirectPlatform } from './direct/platforms'
 import type {
   InboxConnectResult,
@@ -10,7 +11,9 @@ import type {
   InboxReplied,
   InboxReplyResult,
   InboxReplyTarget,
-  InboxResult
+  InboxResult,
+  InboxWork,
+  InboxWorksResult
 } from '../../shared/inbox'
 import { REPLY_MAX, ReplyError } from './direct/babe-reply'
 import { canReply, type ReplyComment, type ReplyItem } from './direct/replies'
@@ -38,6 +41,90 @@ import {
 let store: InboxStore | null = null
 let direct: ReturnType<typeof createDirectCollector> | null = null
 let start: Promise<void> | null = null
+
+// ───────────── 내 작품 (플랫폼별 이식본과 최초 공개일) ─────────────
+// 연결된 플랫폼에서 내 작품 목록을 읽어 파일로 남긴다. 6시간이 지나면 열 때 새로 읽고,
+// 새로 고침을 누르면 바로 읽는다. 읽지 못한 플랫폼은 이전 결과를 그대로 둔다.
+const WORKS_TTL = 6 * 60 * 60_000
+interface WorksCache {
+  fetchedAt: string | null
+  works: InboxWork[]
+  errors: Record<string, string>
+}
+let worksCache: WorksCache | null = null
+let worksRun: Promise<void> | null = null
+const worksFile = (): string => join(app.getPath('userData'), 'creator-inbox', 'my-works.json')
+
+async function loadWorks(): Promise<WorksCache> {
+  if (worksCache) return worksCache
+  try {
+    const saved = JSON.parse(await readFile(worksFile(), 'utf8')) as WorksCache
+    if (saved && Array.isArray(saved.works)) {
+      for (const w of saved.works) if (w.image) safeImage(w.image)
+      worksCache = {
+        fetchedAt: saved.fetchedAt ?? null,
+        works: saved.works,
+        errors: saved.errors ?? {}
+      }
+      return worksCache
+    }
+  } catch {
+    // 처음이거나 손상된 파일
+  }
+  worksCache = { fetchedAt: null, works: [], errors: {} }
+  return worksCache
+}
+
+function worksError(error: unknown): string {
+  const code = error instanceof Error ? error.message : String(error)
+  if (/LOGIN_REQUIRED|SESSION|401|403/.test(code)) return '로그인이 필요해요'
+  if (/ACCOUNT_MISSING/.test(code)) return '계정 정보를 읽지 못했어요'
+  return '작품 목록을 읽지 못했어요'
+}
+
+async function refreshWorks(): Promise<void> {
+  if (!direct) return
+  const previous = await loadWorks()
+  const platforms = await direct.myWorkPlatforms()
+  const works: InboxWork[] = []
+  const errors: Record<string, string> = {}
+  await Promise.all(
+    platforms.map(async (p) => {
+      try {
+        works.push(...(await direct!.myWorks(p)))
+      } catch (e) {
+        errors[p] = worksError(e)
+        works.push(...previous.works.filter((w) => w.platform === p))
+      }
+    })
+  )
+  for (const w of works) if (w.image) safeImage(w.image)
+  worksCache = { fetchedAt: new Date().toISOString(), works, errors }
+  await writeFile(worksFile(), JSON.stringify(worksCache)).catch(() => undefined)
+}
+
+// 제목 묶기는 work-groups.ts (테스트 가능하게 분리)
+
+export async function getInboxWorks(refresh = false): Promise<InboxWorksResult> {
+  await startInbox().catch(() => undefined)
+  const cache = await loadWorks()
+  const age = cache.fetchedAt ? Date.now() - Date.parse(cache.fetchedAt) : Infinity
+  if (direct && (refresh || age > WORKS_TTL)) {
+    worksRun ??= refreshWorks().finally(() => {
+      worksRun = null
+    })
+    await worksRun
+  }
+  const current = worksCache ?? cache
+  const supported = direct ? await direct.myWorkPlatforms().catch(() => []) : []
+  const byName = (await workCatalog().catch(() => emptyCatalog())).byName
+  return {
+    fetchedAt: current.fetchedAt,
+    groups: groupWorks(current.works, byName),
+    errors: current.errors,
+    supported
+  }
+}
 let error: string | null = null
 
 // 썸네일 기준표(베이비챗 작품 이름·이미지). 파일로 남겨 두고 6시간마다 새로 읽는다.

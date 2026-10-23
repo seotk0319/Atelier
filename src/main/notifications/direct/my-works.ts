@@ -1,0 +1,479 @@
+// 플랫폼별 "내 작품" 목록. 로그인한 계정으로 읽기만 하고, 작품마다 최초 공개일과 링크를 꺼낸다.
+// 주소와 필드는 2026-10-23에 각 플랫폼 응답으로 확인했다.
+// 공개일 필드가 따로 있는 곳(에덴·엘린·젠잇·티팟)은 그 값을, 없는 곳은 등록일을 쓴다(atKind로 구분).
+import type { InboxWork } from '../../../shared/inbox'
+
+export interface WorkReadInit {
+  method?: 'GET' | 'POST'
+  body?: string
+  contentType?: string
+}
+export type WorkRead = (url: string, init?: WorkReadInit) => Promise<Response>
+
+/** 플랫폼마다 내 작품을 읽을 수 있는 주소 (이 밖으로는 요청하지 않는다) */
+export const MY_WORK_ORIGINS: Record<string, string[]> = {
+  eden: ['https://www.eden-chat.com'],
+  babe: ['https://api.babechatapi.com'],
+  luna: ['https://lunatalk.chat'],
+  elyn: ['https://api.elyn.ai'],
+  neko: ['https://www.nekochat.xyz'],
+  teapot: ['https://firestore.googleapis.com'],
+  crack: ['https://crack-api.wrtn.ai'],
+  genit: ['https://api.genit.ai'],
+  // 목록은 로그인 API, 제목·공개일은 공개 작품 API
+  rplay: ['https://api.rplay.live', 'https://chat-api.rplay.live']
+}
+
+export function myWorksReadAllowed(platform: string, url: string): boolean {
+  const origins = MY_WORK_ORIGINS[platform]
+  if (!origins) return false
+  try {
+    const u = new URL(url)
+    return origins.includes(u.origin) && !u.username && !u.password
+  } catch {
+    return false
+  }
+}
+
+const MAX_PAGES = 30
+type Obj = Record<string, unknown>
+const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
+const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
+
+/** 날짜 문자열 → ISO. 시간대가 없는 값은 한국 시각으로 본다 (루나). */
+export function isoDate(v: unknown): string | null {
+  const s = str(v)
+  if (!s) return null
+  const local = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s)
+  const t = Date.parse(local ? s.replace(' ', 'T') + '+09:00' : s)
+  return Number.isFinite(t) ? new Date(t).toISOString() : null
+}
+
+function https(v: unknown, base?: string): string | null {
+  const s = str(v)
+  if (!s) return null
+  try {
+    const u = new URL(s, base)
+    return u.protocol === 'https:' && !u.username && !u.password ? u.href : null
+  } catch {
+    return null
+  }
+}
+
+async function json(res: Response): Promise<unknown> {
+  if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
+  if (!res.ok) throw new Error('WORKS_FAILED ' + res.status)
+  return res.json()
+}
+
+function work(
+  platform: string,
+  id: unknown,
+  title: unknown,
+  url: string | null,
+  published: unknown,
+  created: unknown,
+  isPublic: boolean,
+  image: string | null
+): InboxWork | null {
+  const wid = str(typeof id === 'number' ? String(id) : id)
+  const name = str(title)
+  if (!wid || !name || !url) return null
+  const pub = isoDate(published)
+  return {
+    platform,
+    id: wid,
+    title: name,
+    url,
+    at: pub ?? isoDate(created),
+    atKind: pub ? 'published' : 'created',
+    isPublic,
+    image
+  }
+}
+
+const enc = encodeURIComponent
+
+export interface WorkContext {
+  /** 티팟 파이어베이스 사용자 번호 */
+  teapotUid?: string | null
+  /** 알플레이 계정 번호 */
+  rplayOid?: string | null
+}
+type Lister = (read: WorkRead, ctx: WorkContext) => Promise<(InboxWork | null)[]>
+
+export const MY_WORK_LISTS: Record<string, Lister> = {
+  async rplay(read, ctx) {
+    const me = ctx.rplayOid
+    if (!me || !/^[a-f0-9]{24}$/.test(me)) throw new Error('LOGIN_REQUIRED')
+    // 계정 확인을 먼저 한다 (인증이 만료됐으면 여기서 갱신된다)
+    await json(
+      await read(
+        'https://api.rplay.live/account/getuser?userOid=' + me + '&requestorOid=' + me + '&lang=ko'
+      )
+    )
+    const body = await json(
+      await read(
+        'https://api.rplay.live/content/creator/all-content-oids?creatorOid=' +
+          me +
+          '&requestorOid=' +
+          me
+      )
+    )
+    const byType = isObj(body) && isObj(body.contentsByType) ? body.contentsByType : {}
+    const raw = Array.isArray(byType.storyChats) ? byType.storyChats : []
+    const oids = [
+      ...new Set(
+        raw
+          .map((v) => (isObj(v) ? str(v._id) || str(v.oid) || str(v.contentOid) : str(v)))
+          .filter((v): v is string => !!v && /^[a-f0-9]{24}$/.test(v))
+      )
+    ].slice(0, 300)
+    const out: (InboxWork | null)[] = []
+    // 공개 상세는 네 개씩 나눠 읽는다
+    for (let i = 0; i < oids.length; i += 4) {
+      const part = await Promise.all(
+        oids.slice(i, i + 4).map(async (oid) => {
+          const res = await read(
+            'https://chat-api.rplay.live/story-chat/chat-content?contentOid=' + oid + '&lang=ko'
+          )
+          if (!res.ok) return null
+          const d = (await res.json().catch(() => null)) as unknown
+          if (!isObj(d) || d.deleted === true) return null
+          const titles = isObj(d.multiLangTitle) ? d.multiLangTitle : {}
+          return work(
+            'rplay',
+            oid,
+            str(titles.ko) || d.title,
+            'https://rplay.live/story/' + oid,
+            d.status === 'published' ? d.publishedAt : null,
+            d.createdAt,
+            d.status === 'published' && d.isPrivate !== true,
+            'https://pb3.rplay.live/thumbnail/' + oid
+          )
+        })
+      )
+      out.push(...part)
+    }
+    return out
+  },
+
+  async eden(read) {
+    const me = await json(await read('https://www.eden-chat.com/api/user/profile'))
+    const uid = str(isObj(me) && isObj(me.item) ? me.item.id : null)
+    if (!uid || !/^[0-9a-f-]{36}$/i.test(uid)) throw new Error('ACCOUNT_MISSING')
+    const out: (InboxWork | null)[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const body = await json(
+        await read(
+          'https://www.eden-chat.com/api/creators/' +
+            uid +
+            '/works?page=' +
+            page +
+            '&sort=newest&category=all&limit=24'
+        )
+      )
+      const rows = list(isObj(body) ? body.works : null)
+      for (const w of rows) {
+        const id = str(w.id)
+        out.push(
+          work(
+            'eden',
+            id,
+            w.title,
+            id ? 'https://www.eden-chat.com/works/' + enc(id) : null,
+            w.first_published_at,
+            w.created_at,
+            w.visibility === 'public',
+            https(w.cover_image_url)
+          )
+        )
+      }
+      if (rows.length < 24) break
+    }
+    return out
+  },
+
+  async babe(read) {
+    const rows = list(await json(await read('https://api.babechatapi.com/ko/api/characters/my')))
+    return rows.map((w) => {
+      const id = str(w.id) || str(w.characterId)
+      return work(
+        'babe',
+        id,
+        w.name,
+        id ? 'https://babechat.ai/character/u/' + enc(id) + '/profile' : null,
+        null,
+        w.createdAt,
+        w.visibility === 'public',
+        https(w.mainImage) || https(w.profileImageUrl)
+      )
+    })
+  },
+
+  async elyn(read) {
+    const out: (InboxWork | null)[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const body = await json(
+        await read('https://api.elyn.ai/api/v1/characters/mine?page=' + page + '&limit=50')
+      )
+      const rows = list(isObj(body) ? body.characters : null)
+      for (const w of rows) {
+        const id = str(w.id)
+        out.push(
+          work(
+            'elyn',
+            id,
+            w.name,
+            id ? 'https://elyn.ai/characters/' + enc(id) : null,
+            w.publicAt,
+            w.createdAt,
+            w.visibility !== 'private',
+            https(w.imageUrl)
+          )
+        )
+      }
+      const total = isObj(body) && typeof body.total === 'number' ? body.total : 0
+      if (rows.length < 50 || page * 50 >= total) break
+    }
+    return out
+  },
+
+  async neko(read) {
+    const body = await json(await read('https://www.nekochat.xyz/api/users/me/characters'))
+    return list(isObj(body) ? body.characters : null).map((w) => {
+      const id = str(w.id)
+      return work(
+        'neko',
+        id,
+        w.displayName ?? w.name,
+        id ? 'https://www.nekochat.xyz/character/' + enc(id) : null,
+        null,
+        w.createdAt,
+        w.isPublic === true,
+        https(isObj(w.avatar) ? w.avatar.url : null)
+      )
+    })
+  },
+
+  async crack(read) {
+    const out: (InboxWork | null)[] = []
+    let cursor: string | null = null
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const body = await json(
+        await read(
+          'https://crack-api.wrtn.ai/crack-api/stories/me' +
+            (cursor ? '?cursor=' + enc(cursor) : '')
+        )
+      )
+      const data = isObj(body) && isObj(body.data) ? body.data : {}
+      for (const w of list(data.stories)) {
+        const id = str(w._id)
+        const img = isObj(w.portraitImage) ? w.portraitImage : {}
+        out.push(
+          work(
+            'crack',
+            id,
+            w.name,
+            id ? 'https://crack.wrtn.ai/detail/' + enc(id) : null,
+            null,
+            w.createdAt,
+            w.visibility === 'public' && w.status !== 'deleted',
+            https(img.w600) || https(img.origin)
+          )
+        )
+      }
+      cursor = str(data.nextCursor)
+      if (!cursor) break
+    }
+    return out
+  },
+
+  async genit(read) {
+    const me = await json(await read('https://api.genit.ai/api/auth/user/?lang=ko'))
+    const uid = str(isObj(me) ? me.id : null)
+    if (!uid || !/^[0-9a-f-]{36}$/i.test(uid)) throw new Error('ACCOUNT_MISSING')
+    const out: (InboxWork | null)[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const body = await json(
+        await read(
+          'https://api.genit.ai/api/characters/?page=' +
+            page +
+            '&creator=' +
+            uid +
+            '&ordering=-published_at&page_size=20&lang=ko'
+        )
+      )
+      const rows = list(isObj(body) ? body.results : null)
+      // 다른 작가 작품이 섞여 오면 버린다
+      for (const w of rows.filter((r) => r.creator_id === uid)) {
+        const id = str(w.id)
+        out.push(
+          work(
+            'genit',
+            id,
+            w.name,
+            id ? 'https://genit.ai/ko/contents/' + enc(id) : null,
+            w.published_at,
+            w.created_at,
+            !!w.published_at,
+            https(w.profile_image_url)
+          )
+        )
+      }
+      if (!isObj(body) || !body.next || rows.length < 20) break
+    }
+    return out
+  },
+
+  async luna(read) {
+    const out: (InboxWork | null)[] = []
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const body = await json(
+        await read('https://lunatalk.chat/member/mypage_api', {
+          method: 'POST',
+          contentType: 'application/x-www-form-urlencoded',
+          body:
+            'action=my_characters&offset=' +
+            page * 20 +
+            '&limit=20&filter=all&sort=latest&order=desc'
+        })
+      )
+      if (!isObj(body) || body.success === false) throw new Error('LOGIN_REQUIRED')
+      const rows = list(body.characters)
+      for (const w of rows) {
+        const id = w.idx
+        out.push(
+          work(
+            'luna',
+            id,
+            w.char_name,
+            id != null ? 'https://lunatalk.chat/character/detail/' + enc(String(id)) : null,
+            null,
+            w.char_datetime,
+            w.char_public === 'public',
+            https(w.img_main, 'https://lunatalk.chat/') ||
+              https(w.img_profile, 'https://lunatalk.chat/')
+          )
+        )
+      }
+      if (!body.has_more || rows.length < 20) break
+    }
+    return out
+  },
+
+  async teapot(read, ctx) {
+    const uid = ctx.teapotUid
+    if (!uid) throw new Error('LOGIN_REQUIRED')
+    const url =
+      'https://firestore.googleapis.com/v1/projects/chat-ai-7a275/databases/(default)/documents:runQuery'
+    // 작가 페이지와 같은 조회 (색인이 있는 모양). 성인·일반을 나눠 두 번 묻는다.
+    const query = (nsfw: boolean): string =>
+      JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'OC' }],
+          where: {
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'is_deleted' },
+                    op: 'EQUAL',
+                    value: { booleanValue: false }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'publicity' },
+                    op: 'EQUAL',
+                    value: { stringValue: '1' }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'is_nsfw' },
+                    op: 'EQUAL',
+                    value: { booleanValue: nsfw }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'creator_uid' },
+                    op: 'EQUAL',
+                    value: { stringValue: uid }
+                  }
+                }
+              ]
+            }
+          },
+          orderBy: [
+            { field: { fieldPath: 'time_created' }, direction: 'DESCENDING' },
+            { field: { fieldPath: '__name__' }, direction: 'DESCENDING' }
+          ],
+          limit: 300
+        }
+      })
+    const out: (InboxWork | null)[] = []
+    for (const nsfw of [true, false]) {
+      const rows = list(
+        await json(
+          await read(url, { method: 'POST', contentType: 'application/json', body: query(nsfw) })
+        )
+      )
+      for (const row of rows) {
+        const doc = isObj(row.document) ? row.document : null
+        if (!doc) continue
+        const id = str(doc.name)?.split('/').pop() ?? null
+        const f = isObj(doc.fields) ? doc.fields : {}
+        const v = (k: string, t: string): unknown => (isObj(f[k]) ? (f[k] as Obj)[t] : null)
+        out.push(
+          work(
+            'teapot',
+            id,
+            v('char_name', 'stringValue'),
+            id ? 'https://teapotchat.com/character/' + enc(id) : null,
+            v('time_published', 'timestampValue'),
+            v('time_created', 'timestampValue'),
+            true,
+            https(v('image', 'stringValue'))
+          )
+        )
+      }
+    }
+    return out
+  }
+}
+
+/** 한 플랫폼의 내 작품 (번호 중복 제거, 최신 순) */
+export async function readMyWorks(
+  platform: string,
+  read: WorkRead,
+  ctx: WorkContext = {}
+): Promise<InboxWork[]> {
+  const lister = MY_WORK_LISTS[platform]
+  if (!lister) return []
+  const seen = new Set<string>()
+  const out: InboxWork[] = []
+  for (const w of await lister(read, ctx)) {
+    if (!w || seen.has(w.id)) continue
+    seen.add(w.id)
+    out.push(w)
+  }
+  return out.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
+}
+
+/** 파이어베이스 인증 헤더(JWT)에서 사용자 번호만 꺼낸다. 토큰 자체는 어디에도 남기지 않는다. */
+export function firebaseUid(authorization: string | undefined | null): string | null {
+  const token = String(authorization ?? '').replace(/^Bearer\s+/i, '')
+  const part = token.split('.')[1]
+  if (!part) return null
+  try {
+    const payload = JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as Obj
+    const uid = str(payload.user_id) || str(payload.sub)
+    return uid && /^[A-Za-z0-9]{10,64}$/.test(uid) ? uid : null
+  } catch {
+    return null
+  }
+}

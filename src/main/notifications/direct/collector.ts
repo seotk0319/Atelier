@@ -33,6 +33,14 @@ import {
 import { ReplyError } from './babe-reply'
 import { imageReadAllowed, IMAGE_ROUTES, readWorkImage } from './work-image-routes'
 import {
+  firebaseUid,
+  MY_WORK_LISTS,
+  myWorksReadAllowed,
+  readMyWorks,
+  type WorkRead
+} from './my-works'
+import type { InboxWork } from '../../../shared/inbox'
+import {
   checkContent,
   findEdenReplies,
   REPLY_ADAPTERS,
@@ -112,6 +120,10 @@ export function createDirectCollector(options: {
   babeWorks(): Promise<unknown>
   /** 그 플랫폼 작품의 대표 이미지 주소 (로그인 계정으로 읽음). 연결 안 된 플랫폼은 null. */
   workImage(platform: string, workId: string): Promise<string | null>
+  /** 그 플랫폼에 올린 내 작품 목록 (읽기만 한다). 연결 안 됐으면 LOGIN_REQUIRED */
+  myWorks(platform: string): Promise<InboxWork[]>
+  /** 내 작품 목록을 읽을 수 있는 연결된 플랫폼 */
+  myWorkPlatforms(): Promise<string[]>
   /** 에덴 댓글 번호 → 사이트에서 내가 그 뒤에 단 답글 (읽기만 한다). */
   edenReplies(commentIds: string[]): Promise<Record<string, FoundReply>>
   status(): Promise<{
@@ -622,7 +634,6 @@ export function createDirectCollector(options: {
     }
   }
 
-
   // 답글 쓰기는 수집용 transport(읽기 전용)와 분리한다. 플랫폼마다 그 사이트의 댓글 주소로만
   // 보낼 수 있고, 만료된 토큰은 수집과 같은 방식으로 한 번 갱신한다.
   async function replyContext(
@@ -718,7 +729,8 @@ export function createDirectCollector(options: {
       const route = IMAGE_ROUTES[platform]
       if (!route) return null
       // 요청이 필요 없는 플랫폼(알플레이)은 로그인 없이도 주소를 만든다.
-      if (!route.url) return readWorkImage(platform, workId, () => Promise.reject(new Error('NO_READ')))
+      if (!route.url)
+        return readWorkImage(platform, workId, () => Promise.reject(new Error('NO_READ')))
       const s = await ready()
       const current = s.platforms[platform as DirectPlatformId]
       if (!current) return null
@@ -730,7 +742,9 @@ export function createDirectCollector(options: {
           ses.fetch(url, {
             headers:
               holder.profile.headersByOrigin?.[origin] ||
-              (origin === allowed[platform as DirectPlatformId]?.origin ? holder.profile.headers : {}) ||
+              (origin === allowed[platform as DirectPlatformId]?.origin
+                ? holder.profile.headers
+                : {}) ||
               {},
             credentials: 'include',
             redirect: 'error',
@@ -746,6 +760,63 @@ export function createDirectCollector(options: {
         return response
       }
       return readWorkImage(platform, workId, read)
+    },
+    async myWorks(platform) {
+      if (!MY_WORK_LISTS[platform]) return []
+      const s = await ready()
+      const current = s.platforms[platform as DirectPlatformId]
+      if (!current) throw new ReplyError('LOGIN_REQUIRED')
+      const holder = { profile: current.profile }
+      const read: WorkRead = async (url, init) => {
+        if (!myWorksReadAllowed(platform, url)) throw new Error('UNAPPROVED_READ_ROUTE')
+        const origin = new URL(url).origin
+        const call = (): Promise<Response> =>
+          ses.fetch(url, {
+            method: init?.method ?? 'GET',
+            headers: {
+              ...(holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}),
+              ...(init?.contentType ? { 'content-type': init.contentType } : {})
+            },
+            body: init?.body,
+            credentials: 'include',
+            redirect: 'error',
+            signal: AbortSignal.timeout(20_000)
+          })
+        const response = await call()
+        if (
+          !response.ok &&
+          ((await renewable(response.clone())) ||
+            // 알플레이는 만료를 500 {"error":"jwt expired"} 로도 알린다
+            (platform === 'rplay' &&
+              response.status === 500 &&
+              /jwt expired/i.test(await response.clone().text()))) &&
+          (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false))
+        )
+          return call()
+        return response
+      }
+      const teapotUid =
+        platform === 'teapot'
+          ? firebaseUid(
+              holder.profile.headersByOrigin?.['https://firestore.googleapis.com']?.authorization
+            )
+          : null
+      let rplayOid: string | null = null
+      if (platform === 'rplay') {
+        const route = (holder.profile.routes as Record<string, unknown> | undefined)?.[
+          '/account/getuser'
+        ]
+        try {
+          rplayOid = typeof route === 'string' ? new URL(route).searchParams.get('userOid') : null
+        } catch {
+          rplayOid = null
+        }
+      }
+      return readMyWorks(platform, read, { teapotUid, rplayOid })
+    },
+    async myWorkPlatforms() {
+      const s = await ready()
+      return DIRECT_PLATFORMS.filter((p) => s.platforms[p] && MY_WORK_LISTS[p])
     },
     async babeWorks() {
       const s = await ready()

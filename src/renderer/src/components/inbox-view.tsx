@@ -30,25 +30,9 @@ import { useAiReplyStore } from '../stores/ai-reply-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { useTranslateStore } from '../stores/translate-store'
 import { ReplyComposer, TranslatableText } from './inbox-translate'
+import { InboxWorks } from './inbox-works'
+import { PLATFORM_COLORS as colors, platformTone as tone } from '../lib/inbox-colors'
 
-// Nine separated hues. The previous palette repeated blue, teal and lilac, so three
-// pairs of platforms were not distinguishable at any dot size.
-const colors: Record<string, string> = {
-  crack: '#d95d3e',
-  neko: '#d99b1f',
-  genit: '#8aa320',
-  elyn: '#4ca455',
-  babe: '#17a398',
-  eden: '#3f8fd6',
-  rplay: '#3b4fb8',
-  teapot: '#8a5fd6',
-  luna: '#d65b9e'
-}
-// The raw hues are fine as bars but too light to read as small text. Mixing toward the
-// theme's ink darkens them on light themes and lightens them on dark ones, so the label
-// clears 4.5:1 in both without a second palette.
-const tone = (platform: string): string =>
-  `color-mix(in oklab, ${colors[platform]} 60%, var(--ink))`
 const statusLabels: Record<string, string> = {
   ok: '수집 정상',
   partial: '일부 수집',
@@ -180,6 +164,8 @@ export function InboxView(): React.JSX.Element {
   const [data, setData] = useState<InboxResult | null>(null)
   const [platform, setPlatform] = useState('')
   const [view, setView] = useState<View>('conversation')
+  // 알림 목록 / 내 작품 (플랫폼별 최초 공개일·링크 복사)
+  const [mode, setMode] = useState<'alerts' | 'works'>('alerts')
   const [event, setEvent] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [unrepliedOnly, setUnrepliedOnly] = useState(false)
@@ -641,13 +627,30 @@ export function InboxView(): React.JSX.Element {
       <main className="flex min-w-0 flex-1 flex-col gap-3 p-5">
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="text-[20px] font-bold tracking-tight">알림</h1>
-          {data && (
+          <Segmented
+            aria-label="보기"
+            value={mode}
+            onValueChange={(v) => {
+              if (!v) return
+              setMode(v as typeof mode)
+              setSelected(null)
+            }}
+          >
+            <SegmentedItem value="alerts" className="px-3 text-[13px]">
+              알림 목록
+            </SegmentedItem>
+            <SegmentedItem value="works" className="px-3 text-[13px]">
+              내 작품
+            </SegmentedItem>
+          </Segmented>
+          {mode === 'works' && <span className="mr-auto" />}
+          {mode === 'alerts' && data && (
             <span className="mr-auto text-[13px] tabular-nums text-muted">
               {data.filtered.toLocaleString()}건
               {data.unread ? ` · 안 읽음 ${data.unread.toLocaleString()}` : ''}
             </span>
           )}
-          {ai && (ai.config.mode !== 'off' || ai.backlog?.running) && (
+          {mode === 'alerts' && ai && (ai.config.mode !== 'off' || ai.backlog?.running) && (
             <div className="flex items-center overflow-hidden rounded-lg border border-line bg-paper text-[12px]">
               <button
                 onClick={() => openSettingsAt('ai')}
@@ -689,7 +692,7 @@ export function InboxView(): React.JSX.Element {
                 const value = e.target.value
                 reset(() => setSearch(value))
               }}
-              placeholder="작품, 작성자, 내용 검색"
+              placeholder={mode === 'works' ? '작품 제목 검색' : '작품, 작성자, 내용 검색'}
               aria-label="알림 검색"
               className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
             />
@@ -873,150 +876,156 @@ export function InboxView(): React.JSX.Element {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Segmented
-            aria-label="알림 종류"
-            value={view}
-            onValueChange={(v) =>
-              v &&
-              reset(() => {
-                setView(v as typeof view)
-                setEvent('')
-              })
-            }
-          >
-            {views.map((v) => (
-              <SegmentedItem key={v.id} value={v.id} className="px-3 text-[13px]">
-                {v.label}
-                <SegmentedCount>{tally(v.id).toLocaleString()}</SegmentedCount>
-              </SegmentedItem>
-            ))}
-          </Segmented>
-          {subEvents.length > 1 && (
-            <Segmented
-              value={event || 'any'}
-              onValueChange={(v) =>
-                v && reset(() => setEvent(v === 'any' ? '' : (v as typeof event)))
-              }
-            >
-              {[
-                ['', '모두'] as const,
-                ...subEvents.map((id) => [id, INBOX_EVENTS[id]] as const)
-              ].map(([id, label]) => (
-                <SegmentedItem key={id || 'any'} value={id || 'any'}>
-                  {label}
-                  {id && data ? (
-                    <SegmentedCount>{data.events[id].toLocaleString()}</SegmentedCount>
-                  ) : null}
-                </SegmentedItem>
-              ))}
-            </Segmented>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            {(
-              [
-                ...(view === 'reaction'
-                  ? []
-                  : [['답글 안 단 것만', unrepliedOnly, setUnrepliedOnly] as const]),
-                ['안 읽은 것만', unreadOnly, setUnreadOnly] as const
-              ] as const
-            ).map(([label, on, setOn]) => (
-              <label
-                key={label}
-                className="inline-flex cursor-pointer select-none items-center gap-2 px-2 py-1 text-[12px] text-muted"
+        {mode === 'works' ? (
+          <InboxWorks platform={platform} search={search} />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Segmented
+                aria-label="알림 종류"
+                value={view}
+                onValueChange={(v) =>
+                  v &&
+                  reset(() => {
+                    setView(v as typeof view)
+                    setEvent('')
+                  })
+                }
               >
-                <Switch
-                  checked={on}
-                  onCheckedChange={() => reset(() => setOn((v) => !v))}
-                  aria-label={label}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        </div>
+                {views.map((v) => (
+                  <SegmentedItem key={v.id} value={v.id} className="px-3 text-[13px]">
+                    {v.label}
+                    <SegmentedCount>{tally(v.id).toLocaleString()}</SegmentedCount>
+                  </SegmentedItem>
+                ))}
+              </Segmented>
+              {subEvents.length > 1 && (
+                <Segmented
+                  value={event || 'any'}
+                  onValueChange={(v) =>
+                    v && reset(() => setEvent(v === 'any' ? '' : (v as typeof event)))
+                  }
+                >
+                  {[
+                    ['', '모두'] as const,
+                    ...subEvents.map((id) => [id, INBOX_EVENTS[id]] as const)
+                  ].map(([id, label]) => (
+                    <SegmentedItem key={id || 'any'} value={id || 'any'}>
+                      {label}
+                      {id && data ? (
+                        <SegmentedCount>{data.events[id].toLocaleString()}</SegmentedCount>
+                      ) : null}
+                    </SegmentedItem>
+                  ))}
+                </Segmented>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                {(
+                  [
+                    ...(view === 'reaction'
+                      ? []
+                      : [['답글 안 단 것만', unrepliedOnly, setUnrepliedOnly] as const]),
+                    ['안 읽은 것만', unreadOnly, setUnreadOnly] as const
+                  ] as const
+                ).map(([label, on, setOn]) => (
+                  <label
+                    key={label}
+                    className="inline-flex cursor-pointer select-none items-center gap-2 px-2 py-1 text-[12px] text-muted"
+                  >
+                    <Switch
+                      checked={on}
+                      onCheckedChange={() => reset(() => setOn((v) => !v))}
+                      aria-label={label}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
 
-        <div
-          className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-line bg-paper"
-          aria-label="알림 목록"
-        >
-          {!data ? (
-            <p className="p-10 text-center text-[13px] text-muted">알림을 불러오는 중이에요…</p>
-          ) : !data.items.length ? (
-            <p className="p-10 text-center text-[13px] text-muted">
-              {!data.total
-                ? '연결된 계정의 첫 알림을 기다리고 있어요.'
-                : unrepliedQuery
-                  ? '답글을 기다리는 댓글이 없어요.'
-                  : unreadOnly
-                    ? '안 읽은 알림이 없어요.'
-                    : '조건에 맞는 알림이 없어요.'}
-            </p>
-          ) : (
-            days.map((day) => (
-              <section key={day.label} aria-label={day.label}>
-                <h3 className="sticky top-0 z-10 border-b border-line bg-paper/95 px-5 py-1.5 text-[11px] font-semibold text-faint backdrop-blur">
-                  {day.label}
-                </h3>
-                {day.rows.map((row) =>
-                  row.kind === 'bundle' ? renderBundle(row) : renderItem(row.item)
-                )}
-              </section>
-            ))
-          )}
-        </div>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-line bg-paper"
+              aria-label="알림 목록"
+            >
+              {!data ? (
+                <p className="p-10 text-center text-[13px] text-muted">알림을 불러오는 중이에요…</p>
+              ) : !data.items.length ? (
+                <p className="p-10 text-center text-[13px] text-muted">
+                  {!data.total
+                    ? '연결된 계정의 첫 알림을 기다리고 있어요.'
+                    : unrepliedQuery
+                      ? '답글을 기다리는 댓글이 없어요.'
+                      : unreadOnly
+                        ? '안 읽은 알림이 없어요.'
+                        : '조건에 맞는 알림이 없어요.'}
+                </p>
+              ) : (
+                days.map((day) => (
+                  <section key={day.label} aria-label={day.label}>
+                    <h3 className="sticky top-0 z-10 border-b border-line bg-paper/95 px-5 py-1.5 text-[11px] font-semibold text-faint backdrop-blur">
+                      {day.label}
+                    </h3>
+                    {day.rows.map((row) =>
+                      row.kind === 'bundle' ? renderBundle(row) : renderItem(row.item)
+                    )}
+                  </section>
+                ))
+              )}
+            </div>
 
-        <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-          <span className="tabular-nums">
-            {(data?.filtered || 0).toLocaleString()}건
-            {data?.unread && !unreadOnly ? ` · 안 읽음 ${data.unread.toLocaleString()}` : ''}
-          </span>
-          <span className="tabular-nums text-faint">
-            {data?.collectorOnline
-              ? data.enabled
-                ? `마지막 수집 ${ago(latest, now)}${
-                    data.collecting
-                      ? ' · 수집 중'
-                      : until(data.nextCollectionAt, now)
-                        ? ` · 다음 ${until(data.nextCollectionAt, now)}`
-                        : ''
-                  }`
-                : '자동 수집 일시정지'
-              : '수집기 연결 대기'}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              className={button}
-              aria-label="이전 알림 페이지"
-              disabled={!data || data.page === 0}
-              onClick={() => {
-                setPage(Math.max(0, (data?.page || 0) - 1))
-                setSelected(null)
-                setOpen(new Set())
-              }}
-            >
-              <ChevronLeft size={13} />
-            </button>
-            <span className="tabular-nums">
-              {(data?.page || 0) + 1} / {totalPages}
-            </span>
-            <button
-              className={button}
-              aria-label="다음 알림 페이지"
-              disabled={!data || data.page + 1 >= totalPages}
-              onClick={() => {
-                setPage((data?.page || 0) + 1)
-                setSelected(null)
-                setOpen(new Set())
-              }}
-            >
-              <ChevronRight size={13} />
-            </button>
-          </div>
-        </footer>
+            <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+              <span className="tabular-nums">
+                {(data?.filtered || 0).toLocaleString()}건
+                {data?.unread && !unreadOnly ? ` · 안 읽음 ${data.unread.toLocaleString()}` : ''}
+              </span>
+              <span className="tabular-nums text-faint">
+                {data?.collectorOnline
+                  ? data.enabled
+                    ? `마지막 수집 ${ago(latest, now)}${
+                        data.collecting
+                          ? ' · 수집 중'
+                          : until(data.nextCollectionAt, now)
+                            ? ` · 다음 ${until(data.nextCollectionAt, now)}`
+                            : ''
+                      }`
+                    : '자동 수집 일시정지'
+                  : '수집기 연결 대기'}
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  className={button}
+                  aria-label="이전 알림 페이지"
+                  disabled={!data || data.page === 0}
+                  onClick={() => {
+                    setPage(Math.max(0, (data?.page || 0) - 1))
+                    setSelected(null)
+                    setOpen(new Set())
+                  }}
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <span className="tabular-nums">
+                  {(data?.page || 0) + 1} / {totalPages}
+                </span>
+                <button
+                  className={button}
+                  aria-label="다음 알림 페이지"
+                  disabled={!data || data.page + 1 >= totalPages}
+                  onClick={() => {
+                    setPage((data?.page || 0) + 1)
+                    setSelected(null)
+                    setOpen(new Set())
+                  }}
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            </footer>
+          </>
+        )}
       </main>
 
-      {selected && (
+      {selected && mode === 'alerts' && (
         <aside
           className="flex w-[clamp(320px,28vw,460px)] shrink-0 flex-col border-l border-line bg-paper/40"
           aria-label="알림 상세"

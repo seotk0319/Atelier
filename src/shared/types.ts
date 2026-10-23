@@ -5,7 +5,8 @@ import type {
   InboxQuery,
   InboxReplyResult,
   InboxReplyTarget,
-  InboxResult
+  InboxResult,
+  InboxWorksResult
 } from './inbox'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
 import type { CoverProject, CoverProjectSummary } from './cover'
@@ -425,6 +426,10 @@ export interface SceneImage {
 /** IPC invoke 채널 계약: 채널명 → (요청, 응답) */
 export interface IpcInvokeMap {
   'inbox:query': { req: InboxQuery; res: InboxResult }
+  /** 플랫폼별 내 작품 (제목으로 묶음). refresh면 사이트에서 새로 읽는다 */
+  'inbox:works': { req: { refresh?: boolean }; res: InboxWorksResult }
+  /** 글자를 클립보드에 넣는다 (창이 앞에 없어도 된다) */
+  'app:copyText': { req: { text: string }; res: { ok: boolean } }
   'inbox:control': { req: { enabled: boolean }; res: { enabled: boolean } }
   'inbox:setInterval': {
     req: { minutes: number }

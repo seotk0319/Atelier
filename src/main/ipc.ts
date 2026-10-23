@@ -11,6 +11,7 @@ import {
 import type { IpcEventMap, IpcInvokeMap } from '../shared/types'
 import {
   getInbox,
+  getInboxWorks,
   controlInbox,
   openInboxSource,
   setInboxInterval,
@@ -209,6 +210,12 @@ export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcE
 export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQueue }): void {
   if (PROFILE === 1) {
     handle('inbox:query', (query) => getInbox(query || {}))
+    handle('inbox:works', (req) => getInboxWorks(!!req?.refresh))
+    handle('app:copyText', ({ text }) => {
+      if (typeof text !== 'string' || !text || text.length > 50_000) return { ok: false }
+      clipboard.writeText(text)
+      return { ok: true }
+    })
     handle('inbox:control', ({ enabled }) => controlInbox(enabled))
     handle('inbox:setInterval', ({ minutes }) => setInboxInterval(minutes))
     handle('inbox:openSource', ({ id }) => openInboxSource(id))

@@ -154,3 +154,35 @@ export interface InboxReplyTarget {
   content?: string
   at?: string | null
 }
+
+/** 플랫폼에 올린 내 작품 하나 */
+export interface InboxWork {
+  platform: string
+  id: string
+  title: string
+  url: string
+  /** 최초 공개 시각 (없으면 등록 시각) */
+  at: string | null
+  /** published = 플랫폼이 준 공개일, created = 공개일이 없어 등록일을 씀 */
+  atKind: 'published' | 'created'
+  isPublic: boolean
+  image: string | null
+}
+
+/** 같은 제목으로 묶은 작품 (플랫폼별 이식본) */
+export interface InboxWorkGroup {
+  key: string
+  title: string
+  /** nais-thumb 썸네일 주소 (베이비챗 1:1 이미지 우선) */
+  thumbnail: string | null
+  works: InboxWork[]
+}
+
+export interface InboxWorksResult {
+  fetchedAt: string | null
+  groups: InboxWorkGroup[]
+  /** 플랫폼 → 읽지 못한 이유 */
+  errors: Record<string, string>
+  /** 내 작품 목록을 읽을 수 있는 플랫폼 */
+  supported: string[]
+}
