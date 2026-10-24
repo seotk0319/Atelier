@@ -12,7 +12,8 @@ import {
   moveItem,
   removeExtra,
   removeItem,
-  reorderItem
+  reorderItem,
+  typoToExtra
 } from '../components/cover/engine/state'
 import type {
   CoverBrushPrefs,
@@ -125,6 +126,8 @@ interface CoverState {
   removeExtra: (typoId: string, extraId: string) => void
   moveExtra: (typoId: string, extraId: string, delta: number) => void
   renameExtra: (typoId: string, extraId: string, name: string) => void
+  /** 타이포를 다른 타이포의 문구로 옮기기 */
+  typoToExtra: (sourceId: string, targetId: string) => void
   refreshOutputDir: () => Promise<void>
   pickOutputDir: () => Promise<string | null>
   /** 대기 중인 저장을 바로 실행 */
@@ -483,6 +486,13 @@ export const useCoverStore = create<CoverState>((set, get) => {
       if (!e || e.name === name) return
       e.name = name
       bump(false)
+    },
+
+    typoToExtra: (sourceId, targetId) => {
+      const p = get().project
+      if (!p || !typoToExtra(p, sourceId, targetId)) return
+      bump(true)
+      toast('문구로 옮겼어요', 'success')
     },
 
     refreshOutputDir: async () => {

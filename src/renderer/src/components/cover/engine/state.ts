@@ -324,3 +324,21 @@ export async function setMaskBlob(
   if (oldKey) deleteBlobs([oldKey])
   return { oldKey, newKey }
 }
+
+/**
+ * 타이포 하나를 다른 타이포의 문구로 옮긴다. 이미지·위치(번호가 같으니 그대로)는 유지하고,
+ * 옮기는 타이포에 붙어 있던 문구도 함께 따라간다.
+ */
+export function typoToExtra(project: CoverProject, sourceId: string, targetId: string): boolean {
+  if (sourceId === targetId) return false
+  const si = project.typos.findIndex((t) => t.id === sourceId)
+  const target = project.typos.find((t) => t.id === targetId)
+  if (si < 0 || !target) return false
+  const [source] = project.typos.splice(si, 1)
+  const carried = source.extras ?? []
+  delete source.extras
+  target.extras = [...(target.extras ?? []), source, ...carried]
+  project.selection.typoId = target.id
+  project.selection.layerId = source.id
+  return true
+}

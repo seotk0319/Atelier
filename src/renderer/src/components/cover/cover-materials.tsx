@@ -469,8 +469,8 @@ function ExtraList({
   if (!extras.length && !open) return null
 
   const accept = (e: React.DragEvent): boolean => {
-    // 표지 목록 안에서 끄는 항목은 받지 않는다
-    if (e.dataTransfer.types.includes(ITEM_MIME) || !hasImageDrop(e)) return false
+    // 이미지 파일, 또는 다른 타이포 (끌어 오면 이 타이포의 문구가 된다)
+    if (!e.dataTransfer.types.includes(ITEM_MIME) && !hasImageDrop(e)) return false
     e.preventDefault()
     e.stopPropagation()
     return true
@@ -502,6 +502,17 @@ function ExtraList({
           onDrop={(e) => {
             if (!accept(e)) return
             setOver(false)
+            const raw = e.dataTransfer.getData(ITEM_MIME)
+            if (raw) {
+              try {
+                const moved = JSON.parse(raw) as DraggedItem
+                if (moved.kind === 'typos' && moved.id !== typo.id)
+                  useCoverStore.getState().typoToExtra(moved.id, typo.id)
+              } catch {
+                // 깨진 값은 무시
+              }
+              return
+            }
             const paths = droppedImagePaths(e)
             const files = Array.from(e.dataTransfer.files).filter((f) =>
               f.type.startsWith('image/')
@@ -509,7 +520,7 @@ function ExtraList({
             if (paths.length) void useCoverStore.getState().addExtras(typo.id, paths)
             else if (files.length) void useCoverStore.getState().addExtras(typo.id, files)
           }}
-          title="이 언어에만 들어갈 문구 이미지 (업데이트 이력 등)"
+          title="이 언어에만 들어갈 문구 이미지 (업데이트 이력 등) · 다른 타이포를 끌어 놓으면 문구로 옮겨요"
           className={cn(
             'mt-1 flex h-8 w-full items-center gap-1.5 rounded-md border border-dashed px-2 text-[12px] transition-colors',
             over
