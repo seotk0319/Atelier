@@ -66,6 +66,7 @@ export function flushBlobDeletes(project: CoverProject | null): void {
       if (b.maskKey) used.add(b.maskKey)
     }
     for (const t of project.typos) used.add(t.blobKey)
+    for (const t of project.typos) for (const e of t.extras ?? []) used.add(e.blobKey)
     for (const f of Object.values(project.frameImages)) if (f) used.add(f.blobKey)
   }
   const keys = [...pendingDeletes].filter((k) => !used.has(k))
@@ -152,15 +153,99 @@ export function removeItem(project: CoverProject, kind: CoverKind, id: string): 
   if (idx < 0) return null
   const [item] = arr.splice(idx, 1)
   const map = kind === 'typos' ? project.placements : project.pans
-  for (const key of Object.keys(map)) if (key.startsWith(id + '@')) delete map[key]
+  const ids = [id, ...(item.extras ?? []).map((e) => e.id)]
+  for (const key of Object.keys(map)) if (ids.some((x) => key.startsWith(x + '@'))) delete map[key]
   if (kind === 'backgrounds') {
     project.webp.frames = project.webp.frames.filter((f) => f.bgId !== id)
     if (project.selection.bgId === id) project.selection.bgId = project.backgrounds[0]?.id ?? null
   } else if (project.selection.typoId === id) {
     project.selection.typoId = project.typos[0]?.id ?? null
+    project.selection.layerId = null
   }
-  deleteBlobs([item.blobKey, item.maskKey])
+  deleteBlobs([item.blobKey, item.maskKey, ...(item.extras ?? []).map((e) => e.blobKey)])
   return item
+}
+
+// ───────────── 타이포에 딸린 문구 ─────────────
+
+function pushExtras(project: CoverProject, typoId: string, items: CoverItem[]): void {
+  const typo = project.typos.find((t) => t.id === typoId)
+  if (!typo) {
+    deleteBlobs(items.map((i) => i.blobKey))
+    return
+  }
+  typo.extras = [...(typo.extras ?? []), ...items]
+}
+
+/** 탐색기·붙여넣기 파일을 그 타이포의 문구로 */
+export async function addExtraFiles(
+  project: CoverProject,
+  typoId: string,
+  files: File[]
+): Promise<{ added: CoverItem[]; failed: number }> {
+  const added: CoverItem[] = []
+  let failed = 0
+  for (const f of files) {
+    const size = f.type.startsWith('image/') ? await measure(f) : null
+    if (!size) {
+      failed++
+      continue
+    }
+    added.push({
+      id: crypto.randomUUID(),
+      name: baseName(f.name),
+      blobKey: await putBlob(f),
+      ...size
+    })
+  }
+  pushExtras(project, typoId, added)
+  return { added, failed }
+}
+
+/** 라이브러리·GPT·히스토리에서 끌어온 파일을 그 타이포의 문구로 */
+export async function addExtraPaths(
+  project: CoverProject,
+  typoId: string,
+  paths: string[]
+): Promise<{ added: CoverItem[]; failed: number }> {
+  const res = await window.nais.invoke('cover:importPaths', { paths })
+  const added: CoverItem[] = []
+  let failed = res.failed
+  for (const { key, name } of res.items) {
+    const item = await itemFromKey(key, name)
+    if (item) added.push(item)
+    else failed++
+  }
+  pushExtras(project, typoId, added)
+  return { added, failed }
+}
+
+export function removeExtra(
+  project: CoverProject,
+  typoId: string,
+  extraId: string
+): CoverItem | null {
+  const typo = project.typos.find((t) => t.id === typoId)
+  const list = typo?.extras ?? []
+  const idx = list.findIndex((e) => e.id === extraId)
+  if (!typo || idx < 0) return null
+  const [item] = list.splice(idx, 1)
+  if (!list.length) delete typo.extras
+  for (const key of Object.keys(project.placements))
+    if (key.startsWith(extraId + '@')) delete project.placements[key]
+  if (project.selection.layerId === extraId) project.selection.layerId = null
+  deleteBlobs([item.blobKey])
+  return item
+}
+
+export function moveExtra(
+  project: CoverProject,
+  typoId: string,
+  extraId: string,
+  delta: number
+): boolean {
+  const typo = project.typos.find((t) => t.id === typoId)
+  return typo?.extras ? moveInList(typo.extras, extraId, delta) : false
 }
 
 export function moveItem(

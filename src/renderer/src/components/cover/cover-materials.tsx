@@ -5,6 +5,7 @@ import {
   ImagePlus,
   Loader2,
   Plus,
+  TextQuote,
   Trash2,
   Type
 } from 'lucide-react'
@@ -109,6 +110,7 @@ function MaterialsSection({
   const [over, setOver] = useState(false)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const kind = spec.kind
+  const layerId = useCoverStore((s) => s.project?.selection.layerId ?? null)
 
   const setDrop = (index: number | null): void => {
     dropIndexRef.current = index
@@ -219,7 +221,7 @@ function MaterialsSection({
                 item={item}
                 index={index}
                 count={items.length}
-                selected={selectedId === item.id}
+                selected={selectedId === item.id && !(kind === 'typos' && layerId)}
                 duplicate={
                   kind === 'typos' && duplicates.has(cleanCoverName(item.name).toLowerCase())
                 }
@@ -238,6 +240,9 @@ function MaterialsSection({
                   setDrop(index + (after ? 1 : 0))
                 }}
               />
+              {kind === 'typos' && (
+                <ExtraList typo={item} open={selectedId === item.id} layerId={layerId} />
+              )}
             </li>
           ))}
           {dropIndex === items.length && (
@@ -439,6 +444,194 @@ function ItemRow({
           ) : (
             <Trash2 size={14} />
           )}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 타이포에 딸린 문구 목록 (업데이트 이력 등 언어마다 다른 글귀 이미지).
+ * 고른 타이포에서는 끝에 "문구 붙이기" 자리가 보이고, 여기로 끌어 놓거나 눌러서 고른다.
+ */
+function ExtraList({
+  typo,
+  open,
+  layerId
+}: {
+  typo: CoverItem
+  open: boolean
+  layerId: string | null
+}): React.JSX.Element | null {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [over, setOver] = useState(false)
+  const extras = typo.extras ?? []
+  if (!extras.length && !open) return null
+
+  const accept = (e: React.DragEvent): boolean => {
+    // 표지 목록 안에서 끄는 항목은 받지 않는다
+    if (e.dataTransfer.types.includes(ITEM_MIME) || !hasImageDrop(e)) return false
+    e.preventDefault()
+    e.stopPropagation()
+    return true
+  }
+
+  return (
+    <div className="relative mb-1 ml-[22px] border-l border-line pl-2.5">
+      {extras.map((x, i) => (
+        <ExtraRow
+          key={x.id}
+          typoId={typo.id}
+          item={x}
+          index={i}
+          count={extras.length}
+          selected={open && layerId === x.id}
+        />
+      ))}
+      {open && (
+        <button
+          onClick={() => fileRef.current?.click()}
+          onDragEnter={(e) => accept(e) && setOver(true)}
+          onDragOver={(e) => {
+            if (accept(e)) {
+              e.dataTransfer.dropEffect = 'copy'
+              setOver(true)
+            }
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            if (!accept(e)) return
+            setOver(false)
+            const paths = droppedImagePaths(e)
+            const files = Array.from(e.dataTransfer.files).filter((f) =>
+              f.type.startsWith('image/')
+            )
+            if (paths.length) void useCoverStore.getState().addExtras(typo.id, paths)
+            else if (files.length) void useCoverStore.getState().addExtras(typo.id, files)
+          }}
+          title="이 언어에만 들어갈 문구 이미지 (업데이트 이력 등)"
+          className={cn(
+            'mt-1 flex h-8 w-full items-center gap-1.5 rounded-md border border-dashed px-2 text-[12px] transition-colors',
+            over
+              ? 'border-accent bg-accent-soft text-accent'
+              : 'border-line text-muted hover:border-accent/50 hover:text-ink'
+          )}
+        >
+          <Plus size={13} />
+          {over ? '여기에 놓으면 문구로 붙어요' : '문구 붙이기'}
+        </button>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          if (files.length) void useCoverStore.getState().addExtras(typo.id, files)
+          e.target.value = ''
+        }}
+      />
+    </div>
+  )
+}
+
+function ExtraRow({
+  typoId,
+  item,
+  index,
+  count,
+  selected
+}: {
+  typoId: string
+  item: CoverItem
+  index: number
+  count: number
+  selected: boolean
+}): React.JSX.Element {
+  const thumb = useBlobThumb(item.blobKey, 32)
+  const [confirm, setConfirm] = useState(false)
+  useEffect(() => {
+    if (!confirm) return
+    const t = window.setTimeout(() => setConfirm(false), 2500)
+    return () => window.clearTimeout(t)
+  }, [confirm])
+  const st = (): ReturnType<typeof useCoverStore.getState> => useCoverStore.getState()
+  return (
+    <div
+      className={cn(
+        'group relative flex h-10 items-center gap-2 rounded-md pl-1 pr-1.5 transition-colors',
+        selected ? 'bg-accent-soft' : 'hover:bg-surface'
+      )}
+      onClick={() => st().select({ typoId, layerId: item.id })}
+    >
+      <div className="size-8 shrink-0 overflow-hidden rounded bg-surface-2" style={CHECKER}>
+        {thumb ? (
+          <img src={thumb} alt="" draggable={false} className="size-full object-contain" />
+        ) : (
+          <div className="grid size-full place-items-center text-faint">
+            <TextQuote size={13} />
+          </div>
+        )}
+      </div>
+      <input
+        value={item.name}
+        spellCheck={false}
+        aria-label="문구 이름"
+        placeholder={'문구 ' + (index + 1)}
+        onClick={(e) => {
+          e.stopPropagation()
+          st().select({ typoId, layerId: item.id })
+        }}
+        onChange={(e) => st().renameExtra(typoId, item.id, e.target.value)}
+        className={cn(
+          'h-7 min-w-0 flex-1 truncate rounded border border-transparent bg-transparent px-0.5 text-[12px] outline-none placeholder:text-faint',
+          'hover:bg-surface focus:border-accent/50 focus:bg-surface',
+          selected ? 'font-medium text-accent' : 'text-ink'
+        )}
+      />
+      <div
+        className={cn(
+          'pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-line bg-surface p-0.5 opacity-0 shadow-sm transition-opacity',
+          'group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="앞으로 (먼저 그림)"
+          aria-label="문구 위로"
+          disabled={index === 0}
+          onClick={() => st().moveExtra(typoId, item.id, -1)}
+        >
+          <ChevronUp size={14} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="뒤로"
+          aria-label="문구 아래로"
+          disabled={index === count - 1}
+          onClick={() => st().moveExtra(typoId, item.id, 1)}
+        >
+          <ChevronDown size={14} />
+        </Button>
+        <Button
+          variant={confirm ? 'danger' : 'ghost'}
+          size={confirm ? 'sm' : 'icon-sm'}
+          title={confirm ? '한 번 더 누르면 빼요' : '문구 빼기'}
+          aria-label={confirm ? '문구 빼기 확인' : '문구 빼기'}
+          className={confirm ? 'px-2 text-[11px]' : undefined}
+          onClick={() => {
+            if (!confirm) return setConfirm(true)
+            setConfirm(false)
+            st().removeExtra(typoId, item.id)
+          }}
+        >
+          <Trash2 size={confirm ? 12 : 14} />
+          {confirm && '빼기'}
         </Button>
       </div>
     </div>

@@ -3,10 +3,14 @@ import type { CoverKind, CoverProject, CoverProjectSummary, CoverSelection } fro
 import * as censor from '../components/cover/engine/censor'
 import { forgetBitmap } from '../components/cover/engine/render'
 import {
+  addExtraFiles,
+  addExtraPaths,
   addImageFiles,
   addImagePaths,
   flushBlobDeletes,
+  moveExtra,
   moveItem,
+  removeExtra,
   removeItem,
   reorderItem
 } from '../components/cover/engine/state'
@@ -116,6 +120,11 @@ interface CoverState {
   moveItem: (kind: CoverKind, id: string, delta: number) => void
   reorderItem: (kind: CoverKind, id: string, toIndex: number) => void
   renameItem: (kind: CoverKind, id: string, name: string) => void
+  /** 타이포에 문구 이미지 붙이기 (파일 또는 끌어온 경로) */
+  addExtras: (typoId: string, source: File[] | string[]) => Promise<void>
+  removeExtra: (typoId: string, extraId: string) => void
+  moveExtra: (typoId: string, extraId: string, delta: number) => void
+  renameExtra: (typoId: string, extraId: string, name: string) => void
   refreshOutputDir: () => Promise<void>
   pickOutputDir: () => Promise<string | null>
   /** 대기 중인 저장을 바로 실행 */
@@ -343,6 +352,13 @@ export const useCoverStore = create<CoverState>((set, get) => {
     select: (patch) => {
       const p = get().project
       if (!p) return
+      // 다른 타이포로 바꾸면 그 타이포 본체부터 편집
+      if (
+        patch.typoId !== undefined &&
+        patch.typoId !== p.selection.typoId &&
+        !('layerId' in patch)
+      )
+        patch = { ...patch, layerId: null }
       Object.assign(p.selection, patch)
       bump(false)
     },
@@ -419,6 +435,53 @@ export const useCoverStore = create<CoverState>((set, get) => {
       const it = get().project?.[kind].find((v) => v.id === id)
       if (!it || it.name === name) return
       it.name = name
+      bump(false)
+    },
+
+    addExtras: async (typoId, source) => {
+      await get().init()
+      const p = get().project
+      if (!p || !source.length) return
+      set((s) => ({ importing: s.importing + source.length }))
+      try {
+        const { added, failed } =
+          typeof source[0] === 'string'
+            ? await addExtraPaths(p, typoId, source as string[])
+            : await addExtraFiles(p, typoId, source as File[])
+        if (added.length) {
+          // 넣은 문구를 바로 편집 대상으로
+          p.selection.typoId = typoId
+          p.selection.layerId = added[added.length - 1].id
+          bump(true)
+          toast('문구 ' + added.length + '장을 붙였어요', 'success')
+        }
+        if (failed) toast('이미지 ' + failed + '장을 읽지 못했어요', 'error')
+      } finally {
+        set((s) => ({ importing: Math.max(0, s.importing - source.length) }))
+      }
+    },
+
+    removeExtra: (typoId, extraId) => {
+      const p = get().project
+      if (!p) return
+      const item = removeExtra(p, typoId, extraId)
+      if (!item) return
+      baseline = layoutSnap(p)
+      forgetBitmap(item.blobKey)
+      bump(true)
+    },
+
+    moveExtra: (typoId, extraId, delta) => {
+      const p = get().project
+      if (p && moveExtra(p, typoId, extraId, delta)) bump(true)
+    },
+
+    renameExtra: (typoId, extraId, name) => {
+      const e = get()
+        .project?.typos.find((t) => t.id === typoId)
+        ?.extras?.find((x) => x.id === extraId)
+      if (!e || e.name === name) return
+      e.name = name
       bump(false)
     },
 

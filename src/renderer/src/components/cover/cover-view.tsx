@@ -1,6 +1,6 @@
 import { Download, Film, FolderOpen, Hand, Move, Paintbrush, Redo2, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { COVER_CANVASES, type CoverCanvasId } from '@shared/cover'
+import { activeLayerId, COVER_CANVASES, findLayer, type CoverCanvasId } from '@shared/cover'
 import { useCoverStore } from '../../stores/cover-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { Button } from '../ui/button'
@@ -217,7 +217,8 @@ function Stage({ visible }: { visible: boolean }): React.JSX.Element {
   const brush = useCoverStore((s) => s.brush)
   useCoverStore((s) => s.rev)
   const sel = project?.selection
-  const target = sel ? sel.canvasId + '|' + sel.bgId + '|' + sel.typoId : ''
+  const active = project ? activeLayerId(project) : null
+  const target = sel ? sel.canvasId + '|' + sel.bgId + '|' + active : ''
 
   useEffect(() => {
     const box = boxRef.current
@@ -226,7 +227,16 @@ function Stage({ visible }: { visible: boolean }): React.JSX.Element {
     const api = createCoverEditor(box, {
       getProject: () => useCoverStore.getState().project,
       onChange: (kind) => useCoverStore.getState().touch(kind),
-      onHistory: (h) => useCoverStore.getState().setHistory(h)
+      onHistory: (h) => useCoverStore.getState().setHistory(h),
+      onSelectLayer: (id) => {
+        const st = useCoverStore.getState()
+        const found = st.project ? findLayer(st.project, id) : null
+        if (!found) return
+        st.select({
+          typoId: found.typo.id,
+          layerId: found.item.id === found.typo.id ? null : found.item.id
+        })
+      }
     })
     api.setMode(st.mode)
     api.setBrush(toEditorBrush(st.brush))
@@ -240,7 +250,7 @@ function Stage({ visible }: { visible: boolean }): React.JSX.Element {
   useEffect(() => {
     if (!editor || !project) return
     const s = project.selection
-    void editor.show({ canvasId: s.canvasId, bgId: s.bgId, typoId: s.typoId })
+    void editor.show({ canvasId: s.canvasId, bgId: s.bgId, typoId: activeLayerId(project) })
     // 프로젝트를 바꾸면 대상이 같아 보여도 새로 그린다
   }, [editor, project, target])
 

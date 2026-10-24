@@ -26,7 +26,7 @@ export function CoverPreviewStrip(): React.JSX.Element | null {
         project.id,
         project.selection.canvasId,
         project.backgrounds.map((b) => [b.id, b.blobKey, b.maskKey]),
-        project.typos.map((t) => [t.id, t.blobKey]),
+        project.typos.map((t) => [t.id, t.blobKey, (t.extras ?? []).map((e) => e.blobKey)]),
         project.frame,
         project.frameImages,
         project.placements,

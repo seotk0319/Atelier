@@ -70,4 +70,6 @@ export interface CoverEditorOptions {
   onChange: (kind: CoverChangeKind) => void
   /** 검열 되돌리기 가능 여부가 바뀔 때 */
   onHistory?: (state: CoverHistoryState) => void
+  /** 편집기에서 같은 언어의 다른 레이어(타이포 본체·문구)를 눌러 골랐을 때 */
+  onSelectLayer?: (layerId: string) => void
 }

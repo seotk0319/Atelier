@@ -1,5 +1,6 @@
 import {
   coverRect,
+  findLayer,
   getCoverCanvas,
   getPan,
   getPlacement,
@@ -255,7 +256,17 @@ export function createCoverEditor(
   }
 
   function findTypo(p: CoverProject | null, id: string | null): CoverItem | null {
-    return p && id ? (p.typos.find((it) => it.id === id) ?? null) : null
+    // 타이포 본체 또는 그 타이포의 문구 (편집 대상)
+    return p ? (findLayer(p, id)?.item ?? null) : null
+  }
+
+  /** 편집 대상이 아닌 같은 언어의 레이어들 (지금 위치) */
+  function otherLayers(p: CoverProject): { id: string; rect: ReturnType<typeof coverRect> }[] {
+    if (!spec?.layers || !lay || !view) return []
+    const l = lay
+    return spec.layers
+      .filter((x) => x.id !== view!.typoId)
+      .map((x) => ({ id: x.id, rect: typoRect(l.W, l.H, getPlacement(p, x.item, l.def)) }))
   }
 
   function specKeysOf(p: CoverProject | null, v: View | null): SpecKeys {
@@ -463,6 +474,13 @@ export function createCoverEditor(
       const r = typoRect(s.W, s.H, s.typo.placement)
       out.typo = { ...s.typo, image: scaledFor(s.typo.image, r.w * kx, r.h * ky) }
     }
+    if (s.layers) {
+      out.layers = s.layers.map((l) => {
+        if (l.id === s.activeId) return l
+        const r = typoRect(s.W, s.H, l.placement)
+        return { ...l, image: scaledFor(l.image, r.w * kx, r.h * ky) }
+      })
+    }
     if (s.frameImage) out.frameImage = scaledFor(s.frameImage, s.W * kx, s.H * ky)
     return out
   }
@@ -497,6 +515,10 @@ export function createCoverEditor(
         bg: spec.bg && hasBg() ? { ...spec.bg, pan: getPan(p, view.bgId!, view.canvasId) } : null,
         typo:
           spec.typo && hasTypo() ? { ...spec.typo, placement: currentPlacement(p, view) } : null,
+        // 다른 레이어는 저장된 위치를 그때그때 읽는다 (되돌리기·숫자 입력이 바로 보이게)
+        layers: spec.layers?.map((l) =>
+          l.id === spec!.activeId ? l : { ...l, placement: getPlacement(p, l.item, lay!.def) }
+        ),
         mask,
         frame: p.frame,
         frameImage,
@@ -645,6 +667,26 @@ export function createCoverEditor(
 
   function drawTypoOverlay(p: CoverProject, v: View, m: Measure): void {
     if (!lay) return
+    // 같은 언어의 다른 레이어: 눌러서 고를 수 있게 옅은 점선 테두리
+    const others = otherLayers(p)
+    if (others.length) {
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.lineWidth = Math.max(1, Math.round(m.sx))
+      ctx.strokeStyle = theme.accent
+      ctx.globalAlpha = 0.55
+      ctx.setLineDash([4 * m.sx, 3 * m.sx])
+      for (const o of others) {
+        const { a, b } = handlePoints(o.rect)
+        ctx.strokeRect(
+          Math.round(a.x * m.sx) + 0.5,
+          Math.round(a.y * m.sy) + 0.5,
+          Math.round((b.x - a.x) * m.sx),
+          Math.round((b.y - a.y) * m.sy)
+        )
+      }
+      ctx.restore()
+    }
     const r = currentTypoRect(p, v)
     const { a, b, pts } = handlePoints(r)
     const lw = Math.max(1, Math.round(m.sx))
@@ -852,15 +894,34 @@ export function createCoverEditor(
 
     const pc = clientToCss(e)
     const po = cssToOut(pc)
-    const ids = { canvasId: view.canvasId, bgId: view.bgId, typoId: view.typoId }
+    let ids = { canvasId: view.canvasId, bgId: view.bgId, typoId: view.typoId }
     let next: Drag | null = null
 
     if (mode === 'typo') {
       if (!hasTypo()) return
+      let hit = hitTypo(currentTypoRect(p, view), pc)
+      if (!hit) {
+        // 같은 언어의 다른 레이어(문구·타이포)를 누르면 그것으로 바꿔 바로 끈다
+        const picked = otherLayers(p)
+          .reverse()
+          .find((o) => {
+            const { a, b } = handlePoints(o.rect)
+            return pc.x >= a.x && pc.x <= b.x && pc.y >= a.y && pc.y <= b.y
+          })
+        const layer = picked && spec?.layers?.find((l) => l.id === picked.id)
+        if (!layer || !spec) return
+        view = { ...view, typoId: layer.id, typoItem: layer.item }
+        spec = {
+          ...spec,
+          typo: { image: layer.image, placement: getPlacement(p, layer.item, lay!.def) },
+          activeId: layer.id
+        }
+        ids = { ...ids, typoId: layer.id }
+        hit = 'move'
+        opts.onSelectLayer?.(layer.id)
+      }
       const pl = currentPlacement(p, view)
       const r = currentTypoRect(p, view)
-      const hit = hitTypo(r, pc)
-      if (!hit) return
       const left = r.x
       const top = r.y
       const right = r.x + r.w
@@ -1326,10 +1387,18 @@ export function createCoverEditor(
       const cid = getCoverCanvas(t.canvasId)
         ? t.canvasId
         : (p?.selection.canvasId ?? ('1x1' as CoverCanvasId))
-      endDrag(null)
+      // 편집기에서 레이어를 눌러 바꾼 경우엔 같은 대상이 다시 오므로 끌기를 이어 간다
+      const same =
+        drag &&
+        drag.ids.canvasId === cid &&
+        drag.ids.bgId === (t.bgId ?? null) &&
+        drag.ids.typoId === (t.typoId ?? null)
+      if (!same) endDrag(null)
       target = { canvasId: cid, bgId: t.bgId ?? null, typoId: t.typoId ?? null }
-      snapX = null
-      snapY = null
+      if (!same) {
+        snapX = null
+        snapY = null
+      }
       hover = null
       scheduleDraw()
       await load()

@@ -37,6 +37,11 @@ export interface CoverItem {
   height: number
   /** 배경 전용: 검열 마스크 PNG (배경 원본과 같은 크기, 투명 바탕) */
   maskKey?: string | null
+  /**
+   * 타이포 전용: 이 언어에 딸린 문구 이미지 (업데이트 이력 등).
+   * 타이포와 함께 그려지고, 위치는 문구마다·캔버스마다 따로 저장된다.
+   */
+  extras?: CoverItem[]
 }
 
 export type CoverFrameStyle = 'solid' | 'double' | 'dashed' | 'dotted' | 'corners' | 'image'
@@ -93,6 +98,8 @@ export interface CoverSelection {
   canvasId: CoverCanvasId
   bgId: string | null
   typoId: string | null
+  /** 편집 중인 문구 (null = 타이포 본체) */
+  layerId: string | null
 }
 
 export interface CoverProject {
@@ -151,7 +158,7 @@ export function newCoverProject(id: string, name: string, now = Date.now()): Cov
     frameImages: {},
     placements: {},
     pans: {},
-    selection: { canvasId: '1x1', bgId: null, typoId: null },
+    selection: { canvasId: '1x1', bgId: null, typoId: null, layerId: null },
     webp: defaultWebpSettings()
   }
 }
@@ -179,6 +186,16 @@ function normItem(v: unknown, withMask: boolean): CoverItem | null {
     height: v.height
   }
   if (withMask) item.maskKey = isCoverKey(v.maskKey) ? v.maskKey : null
+  return item
+}
+
+function normTypo(v: unknown): CoverItem | null {
+  const item = normItem(v, false)
+  if (!item || !isObj(v)) return item
+  const extras = (Array.isArray(v.extras) ? v.extras : [])
+    .map((e) => normItem(e, false))
+    .filter((e): e is CoverItem => !!e)
+  if (extras.length) item.extras = extras
   return item
 }
 
@@ -224,8 +241,9 @@ export function normalizeCoverProject(raw: unknown): CoverProject | null {
     .map((v) => normItem(v, true))
     .filter((v): v is CoverItem => !!v)
   const typos = (Array.isArray(raw.typos) ? raw.typos : [])
-    .map((v) => normItem(v, false))
+    .map((v) => normTypo(v))
     .filter((v): v is CoverItem => !!v)
+  const layers = typos.flatMap((t) => [t, ...(t.extras ?? [])])
   const frameImages: CoverProject['frameImages'] = {}
   if (isObj(raw.frameImages)) {
     for (const [cid, v] of Object.entries(raw.frameImages)) {
@@ -239,7 +257,7 @@ export function normalizeCoverProject(raw: unknown): CoverProject | null {
     for (const [key, v] of Object.entries(raw.placements)) {
       if (!isObj(v) || !isNum(v.cx) || !isNum(v.cy) || !isNum(v.w)) continue
       const at = key.lastIndexOf('@')
-      const typo = typos.find((t) => t.id === key.slice(0, at))
+      const typo = layers.find((t) => t.id === key.slice(0, at))
       const canvas = getCoverCanvas(key.slice(at + 1))
       if (!typo || !canvas) continue
       placements[key] = {
@@ -259,6 +277,7 @@ export function normalizeCoverProject(raw: unknown): CoverProject | null {
     }
   }
   const sel = isObj(raw.selection) ? raw.selection : {}
+  const selTypo = typos.find((t) => t.id === sel.typoId) ?? null
   const webpRaw = isObj(raw.webp) ? raw.webp : {}
   const bgIds = new Set(backgrounds.map((b) => b.id))
   const frames = (Array.isArray(webpRaw.frames) ? webpRaw.frames : [])
@@ -281,7 +300,11 @@ export function normalizeCoverProject(raw: unknown): CoverProject | null {
     selection: {
       canvasId: getCoverCanvas(sel.canvasId as string)?.id ?? '1x1',
       bgId: backgrounds.some((b) => b.id === sel.bgId) ? (sel.bgId as string) : null,
-      typoId: typos.some((t) => t.id === sel.typoId) ? (sel.typoId as string) : null
+      typoId: selTypo ? selTypo.id : null,
+      layerId:
+        selTypo && selTypo.extras?.some((e) => e.id === sel.layerId)
+          ? (sel.layerId as string)
+          : null
     },
     webp: {
       frames,
@@ -297,16 +320,58 @@ export function coverBlobKeys(p: CoverProject): string[] {
     keys.push(b.blobKey)
     if (b.maskKey) keys.push(b.maskKey)
   }
-  for (const t of p.typos) keys.push(t.blobKey)
+  for (const t of p.typos) {
+    keys.push(t.blobKey)
+    for (const e of t.extras ?? []) keys.push(e.blobKey)
+  }
   for (const f of Object.values(p.frameImages)) if (f) keys.push(f.blobKey)
   return keys
 }
 
+// ───────────── 타이포 + 문구 ─────────────
+
+/** 타이포 본체와 문구를 그리는 순서대로 */
+export function typoLayers(typo: CoverItem): CoverItem[] {
+  return [typo, ...(typo.extras ?? [])]
+}
+
+/** 본체나 문구 번호 → 그 타이포와 해당 이미지 */
+export function findLayer(
+  p: CoverProject,
+  id: string | null | undefined
+): { typo: CoverItem; item: CoverItem } | null {
+  if (!id) return null
+  for (const t of p.typos) {
+    if (t.id === id) return { typo: t, item: t }
+    const e = t.extras?.find((x) => x.id === id)
+    if (e) return { typo: t, item: e }
+  }
+  return null
+}
+
+/** 지금 편집 중인 이미지 번호 (문구를 골랐으면 문구, 아니면 타이포) */
+export function activeLayerId(p: CoverProject): string | null {
+  const s = p.selection
+  const t = p.typos.find((x) => x.id === s.typoId)
+  if (!t) return null
+  return s.layerId && t.extras?.some((e) => e.id === s.layerId) ? s.layerId : t.id
+}
+
 // ───────────── 배치·팬 ─────────────
 
-export function defaultPlacement(typo: CoverItem, canvas: CoverCanvas): CoverPlacement {
+export function defaultPlacement(
+  typo: CoverItem,
+  canvas: CoverCanvas,
+  extra = false
+): CoverPlacement {
   const iw = typo.width > 0 ? typo.width : 1
   const ih = typo.height > 0 ? typo.height : 1
+  if (extra) {
+    // 문구는 위쪽에 조금 작게 (본체와 겹치지 않게)
+    const w = Math.min(0.7, 0.3 * (canvas.h / canvas.w) * (iw / ih))
+    const h = heightFromWidth(w, typo, canvas)
+    return { cx: 0.5, cy: Math.min(0.5, 0.06 + h / 2), w, h }
+  }
   const w = Math.min(0.8, 0.8 * (canvas.h / canvas.w) * (iw / ih))
   return { cx: 0.5, cy: 0.5, w, h: heightFromWidth(w, typo, canvas) }
 }
@@ -318,7 +383,8 @@ export function getPlacement(
 ): CoverPlacement {
   const saved = p.placements[typo.id + '@' + canvas.id]
   if (saved) return { ...saved }
-  return defaultPlacement(typo, canvas)
+  const extra = p.typos.some((t) => t.extras?.some((e) => e.id === typo.id))
+  return defaultPlacement(typo, canvas, extra)
 }
 
 export function setPlacement(
@@ -332,6 +398,37 @@ export function setPlacement(
 
 export function resetPlacement(p: CoverProject, typoId: string, canvasId: CoverCanvasId): void {
   delete p.placements[typoId + '@' + canvasId]
+}
+
+/**
+ * 같은 순번의 레이어(본체끼리, 1번 문구끼리…)를 다른 타이포에서도 같은 자리에 둔다.
+ * 중심과 높이를 맞추고 너비는 각 이미지 비율대로 (언어마다 글자 길이가 달라서).
+ * 맞춘 타이포 수를 돌려준다.
+ */
+export function alignLayerAcrossTypos(
+  p: CoverProject,
+  layerId: string,
+  canvasIds: CoverCanvasId[]
+): number {
+  const found = findLayer(p, layerId)
+  if (!found) return 0
+  const index = typoLayers(found.typo).indexOf(found.item)
+  let count = 0
+  for (const t of p.typos) {
+    if (t.id === found.typo.id) continue
+    const target = typoLayers(t)[index]
+    if (!target) continue
+    for (const cid of canvasIds) {
+      const canvas = getCoverCanvas(cid)
+      if (!canvas) continue
+      const src = getPlacement(p, found.item, canvas)
+      const h = src.h
+      const w = (h * canvas.h * (target.width / Math.max(1, target.height))) / canvas.w
+      setPlacement(p, target.id, canvas.id, { cx: src.cx, cy: src.cy, w, h })
+    }
+    count++
+  }
+  return count
 }
 
 export function getPan(p: CoverProject, bgId: string, canvasId: CoverCanvasId): CoverPan {

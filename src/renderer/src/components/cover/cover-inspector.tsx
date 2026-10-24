@@ -14,8 +14,11 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {
+  activeLayerId,
+  alignLayerAcrossTypos,
   COVER_CANVASES,
   coverRect,
+  findLayer,
   getCoverCanvas,
   getPan,
   getPlacement,
@@ -89,7 +92,8 @@ export function CoverInspector(): React.JSX.Element {
 function TypoSection({ project }: { project: CoverProject }): React.JSX.Element {
   const mutate = useCoverStore((s) => s.mutate)
   const [lock, setLock] = useState(true)
-  const typo = project.typos.find((t) => t.id === project.selection.typoId)
+  const found = findLayer(project, activeLayerId(project))
+  const typo = found?.item
   const canvas = getCoverCanvas(project.selection.canvasId)
 
   if (!typo || !canvas) {
@@ -102,6 +106,19 @@ function TypoSection({ project }: { project: CoverProject }): React.JSX.Element 
   }
 
   const pl = getPlacement(project, typo, canvas)
+  const isExtra = found.item.id !== found.typo.id
+  const layerIndex = [found.typo, ...(found.typo.extras ?? [])].indexOf(found.item)
+  // 같은 순번 레이어가 있는 다른 언어 수
+  const siblings = project.typos.filter(
+    (t) => t.id !== found.typo.id && [t, ...(t.extras ?? [])][layerIndex]
+  ).length
+  const alignOthers = (all: boolean): void => {
+    let n = 0
+    mutate((p) => {
+      n = alignLayerAcrossTypos(p, typo.id, all ? COVER_CANVASES.map((c) => c.id) : [canvas.id])
+    })
+    if (n) toast('다른 언어 ' + n + '개를 같은 자리로 맞췄어요', 'success')
+  }
   const W = canvas.w
   const H = canvas.h
   const apply = (next: CoverPlacement): void => {
@@ -131,7 +148,14 @@ function TypoSection({ project }: { project: CoverProject }): React.JSX.Element 
 
   return (
     <section>
-      <SectionHead title="타이포 위치" hint={canvas.ratio + ' ' + canvas.label} />
+      <SectionHead
+        title={isExtra ? '문구 위치' : '타이포 위치'}
+        hint={canvas.ratio + ' ' + canvas.label}
+      />
+      <p className="-mt-1 mb-2 truncate text-[11px] text-muted" title={found.item.name}>
+        {found.typo.name}
+        {isExtra ? ' · ' + (found.item.name || '문구 ' + layerIndex) : ''}
+      </p>
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-muted">중심·크기 (px)</span>
         <Button
@@ -179,6 +203,23 @@ function TypoSection({ project }: { project: CoverProject }): React.JSX.Element 
           <RotateCcw size={13} /> 처음
         </Button>
       </div>
+      {siblings > 0 && (
+        <div className="mt-3 rounded-lg bg-surface p-2.5">
+          <p className="text-[12px] font-medium text-ink">다른 언어도 이 자리로</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-faint">
+            {isExtra ? layerIndex + '번째 문구' : '타이포'}끼리 중심과 높이를 맞춰요. 너비는 각
+            이미지 비율대로예요.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => alignOthers(false)}>
+              이 캔버스만
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => alignOthers(true)}>
+              캔버스 4개 모두
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

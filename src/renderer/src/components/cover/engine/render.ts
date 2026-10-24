@@ -4,10 +4,12 @@
  */
 import {
   coverRect,
+  findLayer,
   getCoverCanvas,
   getPan,
   getPlacement,
   typoRect,
+  typoLayers,
   type CoverCanvasId,
   type CoverFrame,
   type CoverItem,
@@ -84,12 +86,26 @@ export function forgetBitmap(key: string): void {
   cachePixels = Math.max(0, cachePixels - entry.pixels)
 }
 
+/** 타이포 본체나 문구 한 장 */
+export interface CoverLayer {
+  id: string
+  item: CoverItem
+  image: CanvasImageSource
+  placement: CoverPlacement
+}
+
 export interface CoverDrawSpec {
   W: number
   H: number
   bg: { image: CanvasImageSource; width: number; height: number; pan: CoverPan } | null
   mask: CanvasImageSource | null
   typo: { image: CanvasImageSource; placement: CoverPlacement } | null
+  /**
+   * 타이포 본체와 문구 전부 (그리는 순서). 있으면 typo 대신 이것을 그리고,
+   * id 가 activeId 인 레이어는 typo.placement 로 그린다 (편집 중인 위치).
+   */
+  layers?: CoverLayer[]
+  activeId?: string | null
   typoAlpha?: number
   frame: CoverFrame
   frameImage: CanvasImageSource | null
@@ -278,13 +294,18 @@ export function drawCover(ctx: CanvasRenderingContext2D, scale: number, spec: Co
 
   // 4. 타이포
   if (typo && typoAlpha > 0) {
-    const r = typoRect(W, H, typo.placement)
-    if (r.w > 0 && r.h > 0) {
-      ctx.save()
-      ctx.globalAlpha = typoAlpha
-      ctx.drawImage(typo.image, r.x, r.y, r.w, r.h)
-      ctx.restore()
+    const list = spec.layers?.length
+      ? spec.layers.map((l) =>
+          l.id === spec.activeId ? { image: typo.image, placement: typo.placement } : l
+        )
+      : [typo]
+    ctx.save()
+    ctx.globalAlpha = typoAlpha
+    for (const l of list) {
+      const r = typoRect(W, H, l.placement)
+      if (r.w > 0 && r.h > 0) ctx.drawImage(l.image, r.x, r.y, r.w, r.h)
     }
+    ctx.restore()
   }
 
   ctx.restore()
@@ -298,6 +319,7 @@ function findItem(list: CoverItem[], id: string | null): CoverItem | null {
 export async function buildSpec(
   project: CoverProject,
   bgId: string | null,
+  /** 타이포 번호 또는 그 타이포의 문구 번호 (문구면 그 문구가 편집 대상) */
   typoId: string | null,
   canvasId: CoverCanvasId
 ): Promise<CoverDrawSpec> {
@@ -307,14 +329,23 @@ export async function buildSpec(
   const H = canvas.h
 
   const bgItem = findItem(project.backgrounds, bgId)
-  const typoItem = findItem(project.typos, typoId)
+  const found = findLayer(project, typoId)
+  const typoItem = found?.item ?? null
+  const layerItems = found ? typoLayers(found.typo) : []
   const frameItem = project.frameImages[canvasId] ?? null
 
-  const [bgBitmap, typoBitmap, frameImage] = await Promise.all([
+  const [bgBitmap, frameImage, ...layerBitmaps] = await Promise.all([
     bgItem ? getBitmap(bgItem.blobKey) : null,
-    typoItem ? getBitmap(typoItem.blobKey) : null,
-    frameItem ? getBitmap(frameItem.blobKey) : null
+    frameItem ? getBitmap(frameItem.blobKey) : null,
+    ...layerItems.map((it) => getBitmap(it.blobKey))
   ])
+  const layers: CoverLayer[] = []
+  layerItems.forEach((it, i) => {
+    const image = layerBitmaps[i]
+    if (image)
+      layers.push({ id: it.id, item: it, image, placement: getPlacement(project, it, canvas) })
+  })
+  const active = layers.find((l) => l.id === typoItem?.id) ?? null
 
   let mask: CanvasImageSource | null = null
   if (bgItem) {
@@ -334,10 +365,9 @@ export async function buildSpec(
           }
         : null,
     mask: bgItem && bgBitmap ? mask : null,
-    typo:
-      typoItem && typoBitmap
-        ? { image: typoBitmap, placement: getPlacement(project, typoItem, canvas) }
-        : null,
+    typo: active ? { image: active.image, placement: active.placement } : null,
+    layers,
+    activeId: active?.id ?? null,
     typoAlpha: 1,
     frame: project.frame,
     frameImage
