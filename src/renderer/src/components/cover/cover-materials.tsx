@@ -241,7 +241,13 @@ function MaterialsSection({
                 }}
               />
               {kind === 'typos' && (
-                <ExtraList typo={item} open={selectedId === item.id} layerId={layerId} />
+                <ExtraList
+                  typo={item}
+                  open={selectedId === item.id}
+                  layerId={layerId}
+                  draggingTypo={dragged?.kind === 'typos' ? dragged.id : null}
+                  onSlotEnter={() => setDrop(null)}
+                />
               )}
             </li>
           ))}
@@ -345,8 +351,11 @@ function ItemRow({
           <img
             src={thumb}
             alt=""
-            draggable={false}
-            className={cn('size-full', isTypo ? 'object-contain' : 'object-cover')}
+            // 그림 자체는 끌리지 않게 하고 누름은 행으로 넘긴다 (draggable=false 는 행 끌기까지 막는다)
+            className={cn(
+              'pointer-events-none size-full',
+              isTypo ? 'object-contain' : 'object-cover'
+            )}
           />
         ) : (
           <div className="grid size-full place-items-center text-faint">
@@ -457,22 +466,32 @@ function ItemRow({
 function ExtraList({
   typo,
   open,
-  layerId
+  layerId,
+  draggingTypo,
+  onSlotEnter
 }: {
   typo: CoverItem
   open: boolean
   layerId: string | null
+  /** 끌고 있는 타이포 (그 동안엔 다른 타이포마다 놓을 자리를 보여 준다) */
+  draggingTypo: string | null
+  onSlotEnter: () => void
 }): React.JSX.Element | null {
   const fileRef = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const extras = typo.extras ?? []
-  if (!extras.length && !open) return null
+  const moving = !!draggingTypo && draggingTypo !== typo.id
+  const showSlot = moving || (open && !draggingTypo)
+  if (!extras.length && !showSlot) return null
 
   const accept = (e: React.DragEvent): boolean => {
     // 이미지 파일, 또는 다른 타이포 (끌어 오면 이 타이포의 문구가 된다)
-    if (!e.dataTransfer.types.includes(ITEM_MIME) && !hasImageDrop(e)) return false
+    const item = e.dataTransfer.types.includes(ITEM_MIME)
+    if (item ? !moving : !hasImageDrop(e)) return false
     e.preventDefault()
     e.stopPropagation()
+    // 끄는 쪽이 허용한 동작과 같아야 브라우저가 놓기를 받아 준다 (타이포는 move, 이미지는 copy)
+    e.dataTransfer.dropEffect = item ? 'move' : 'copy'
     return true
   }
 
@@ -488,15 +507,16 @@ function ExtraList({
           selected={open && layerId === x.id}
         />
       ))}
-      {open && (
+      {showSlot && (
         <button
           onClick={() => fileRef.current?.click()}
-          onDragEnter={(e) => accept(e) && setOver(true)}
+          onDragEnter={(e) => {
+            if (!accept(e)) return
+            setOver(true)
+            onSlotEnter()
+          }}
           onDragOver={(e) => {
-            if (accept(e)) {
-              e.dataTransfer.dropEffect = 'copy'
-              setOver(true)
-            }
+            if (accept(e)) setOver(true)
           }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => {
@@ -529,7 +549,11 @@ function ExtraList({
           )}
         >
           <Plus size={13} />
-          {over ? '여기에 놓으면 문구로 붙어요' : '문구 붙이기'}
+          {over
+            ? '여기에 놓으면 문구로 붙어요'
+            : moving
+              ? '이 타이포의 문구로 옮기기'
+              : '문구 붙이기'}
         </button>
       )}
       <input
@@ -579,7 +603,7 @@ function ExtraRow({
     >
       <div className="size-8 shrink-0 overflow-hidden rounded bg-surface-2" style={CHECKER}>
         {thumb ? (
-          <img src={thumb} alt="" draggable={false} className="size-full object-contain" />
+          <img src={thumb} alt="" className="pointer-events-none size-full object-contain" />
         ) : (
           <div className="grid size-full place-items-center text-faint">
             <TextQuote size={13} />
