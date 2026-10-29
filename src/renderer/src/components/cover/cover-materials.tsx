@@ -15,6 +15,7 @@ import { droppedImagePaths, hasImageDrop } from '../../lib/image-drag'
 import { cn } from '../../lib/utils'
 import { useCoverStore } from '../../stores/cover-store'
 import { Button } from '../ui/button'
+import { readArchiveDrag } from './archive-drag'
 import { useBlobThumb } from './cover-thumbs'
 
 const ITEM_MIME = 'application/x-nais3-cover-item'
@@ -150,6 +151,11 @@ function MaterialsSection({
       if (from >= 0 && from < to) to -= 1
       if (from >= 0) useCoverStore.getState().reorderItem(kind, dragged.id, to)
       setDrop(null)
+      return
+    }
+    const archived = readArchiveDrag(e)
+    if (archived) {
+      void useCoverStore.getState().addFromArchive(archived, kind)
       return
     }
     const paths = droppedImagePaths(e)
@@ -531,6 +537,11 @@ function ExtraList({
               } catch {
                 // 깨진 값은 무시
               }
+              return
+            }
+            const archived = readArchiveDrag(e)
+            if (archived) {
+              void useCoverStore.getState().addFromArchive(archived, 'phrase', typo.id)
               return
             }
             const paths = droppedImagePaths(e)

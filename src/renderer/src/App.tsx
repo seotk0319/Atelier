@@ -1,6 +1,7 @@
 import { AnimatePresence } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { HistoryPanel } from './components/history-panel'
+import { CoverArchivePanel } from './components/cover/cover-archive-panel'
 import { LoadingScreen } from './components/loading-screen'
 import { Toaster } from './components/toaster'
 import { PreviewPane } from './components/preview-pane'
@@ -203,7 +204,8 @@ export default function App(): React.JSX.Element {
                 showRight ? 'panel-in-right h-full w-[240px] shrink-0 overflow-hidden' : 'hidden'
               }
             >
-              <HistoryPanel />
+              {/* 표지 탭에서는 표지에 썼던 그림·타이포만 */}
+              {centerMode === 'cover' ? <CoverArchivePanel /> : <HistoryPanel />}
             </div>
           )}
         </div>

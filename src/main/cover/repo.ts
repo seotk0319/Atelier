@@ -12,6 +12,13 @@ import {
   type CoverProjectSummary
 } from '../../shared/cover'
 import { getSetting, setSetting } from '../db/settings'
+import {
+  backfillCoverArchive,
+  coverArchiveName,
+  listCoverArchive,
+  recordCoverProject
+} from './archive'
+import type { CoverArchiveItem } from '../../shared/cover'
 
 /**
  * 표지 작품 저장소. userData/cover/projects/<id>.json + userData/cover/blobs/<key>.
@@ -36,6 +43,12 @@ function projectPath(id: string): string {
 function blobPath(key: string): string {
   if (!isCoverKey(key)) throw new Error('잘못된 이미지 키')
   return join(blobsDir(), key)
+}
+
+/** 표지 기록이 작품 속 blob 을 읽을 때 */
+async function readBlob(key: string): Promise<Uint8Array | null> {
+  if (!isCoverKey(key)) return null
+  return fsp.readFile(blobPath(key)).catch(() => null)
 }
 
 async function ensureDirs(): Promise<void> {
@@ -105,6 +118,7 @@ async function gcOrphans(projects: CoverProject[]): Promise<void> {
 export async function listCoverProjects(): Promise<CoverProjectSummary[]> {
   const projects = await allProjects()
   void gcOrphans(projects).catch(() => {})
+  void backfillCoverArchive(projects, readBlob).catch(() => {})
   return projects
     .map((p) => ({
       id: p.id,
@@ -114,6 +128,12 @@ export async function listCoverProjects(): Promise<CoverProjectSummary[]> {
       typos: p.typos.length
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** 표지 기록. 기능이 생기기 전 작품들을 다 훑은 뒤에 돌려준다 */
+export async function coverArchiveItems(): Promise<CoverArchiveItem[]> {
+  await backfillCoverArchive(await allProjects(), readBlob).catch(() => {})
+  return listCoverArchive()
 }
 
 export async function createCoverProject(name: string): Promise<CoverProject> {
@@ -128,13 +148,17 @@ export async function loadCoverProject(id: string): Promise<CoverProject | null>
   return readProject(id)
 }
 
-export async function saveCoverProject(project: unknown): Promise<{ updatedAt: number }> {
+export async function saveCoverProject(
+  project: unknown
+): Promise<{ updatedAt: number; archiveChanged: boolean }> {
   const p = normalizeCoverProject(project)
   if (!p) throw new Error('작품 형식이 올바르지 않아요')
   p.updatedAt = Date.now()
   await ensureDirs()
   await serial(p.id, () => atomicWrite(projectPath(p.id), JSON.stringify(p)))
-  return { updatedAt: p.updatedAt }
+  // 표지에 넣었던 그림은 작품에서 빼도 남도록 따로 보관 (실패해도 저장은 성공)
+  const archiveChanged = await recordCoverProject(p, readBlob).catch(() => false)
+  return { updatedAt: p.updatedAt, archiveChanged }
 }
 
 export async function deleteCoverProject(id: string): Promise<void> {
@@ -169,7 +193,8 @@ export async function importCoverPaths(
       if (!st.isFile() || st.size === 0 || st.size > MAX_BLOB) throw new Error()
       const key = randomUUID()
       await fsp.copyFile(p, blobPath(key))
-      items.push({ key, name: basename(p, extname(p)) })
+      const name = (await coverArchiveName(p).catch(() => null)) ?? basename(p, extname(p))
+      items.push({ key, name })
     } catch {
       failed++
     }

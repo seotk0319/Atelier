@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import type { CoverKind, CoverProject, CoverProjectSummary, CoverSelection } from '@shared/cover'
+import type {
+  CoverArchiveItem,
+  CoverKind,
+  CoverProject,
+  CoverProjectSummary,
+  CoverSelection
+} from '@shared/cover'
 import * as censor from '../components/cover/engine/censor'
 import { forgetBitmap } from '../components/cover/engine/render'
 import {
@@ -94,6 +100,12 @@ interface CoverState {
   importing: number
   /** 편집기 인스턴스 (cover-view 가 등록) */
   editor: CoverEditorApi | null
+  /** 표지 기록: 표지에 넣었던 그림·타이포·문구 (작품에서 빼도 남는다) */
+  archive: CoverArchiveItem[]
+  loadArchive: () => Promise<void>
+  removeArchive: (id: string) => Promise<void>
+  /** 기록에서 지금 작품으로 다시 넣기. phrase 는 typoId(없으면 고른 타이포)의 문구로 */
+  addFromArchive: (id: string, as: CoverKind | 'phrase', typoId?: string) => Promise<void>
   /** 배치·배경 위치·액자 되돌리기 가능 여부 */
   canUndo: boolean
   canRedo: boolean
@@ -135,6 +147,7 @@ interface CoverState {
 }
 
 let saveTimer: number | null = null
+let archiveSeq = 0
 let initPromise: Promise<void> | null = null
 let undoStack: LayoutSnap[] = []
 let redoStack: LayoutSnap[] = []
@@ -191,6 +204,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
     }
     p.updatedAt = res.updatedAt
     flushBlobDeletes(p)
+    if (res.archiveChanged) void get().loadArchive()
     set((s) => ({
       saveState: 'saved',
       projects: s.projects
@@ -258,6 +272,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
     outputDir: null,
     importing: 0,
     editor: null,
+    archive: [],
     canUndo: false,
     canRedo: false,
     undo: () => restore(undoStack, redoStack),
@@ -390,6 +405,66 @@ export const useCoverStore = create<CoverState>((set, get) => {
         )
       } finally {
         set((s) => ({ importing: Math.max(0, s.importing - files.length) }))
+      }
+    },
+
+    loadArchive: async () => {
+      const seq = ++archiveSeq
+      const { items } = await window.nais.invoke('cover:archiveList', undefined)
+      if (seq === archiveSeq) set({ archive: items })
+    },
+
+    removeArchive: async (id) => {
+      set((s) => ({ archive: s.archive.filter((a) => a.id !== id) }))
+      await window.nais.invoke('cover:archiveDelete', { id })
+      await get().loadArchive()
+    },
+
+    addFromArchive: async (id, as, typoId) => {
+      await get().init()
+      const p = get().project
+      const a = get().archive.find((x) => x.id === id)
+      if (!p || !a) return
+      set((s) => ({ importing: s.importing + 1 }))
+      try {
+        const target = typoId ?? p.selection.typoId
+        if (as === 'phrase' && target && p.typos.some((t) => t.id === target)) {
+          const { added } = await addExtraPaths(p, target, [a.path])
+          const item = added[0]
+          if (!item) {
+            toast('이미지를 읽지 못했어요', 'error')
+            return
+          }
+          item.name = a.name
+          p.selection.typoId = target
+          p.selection.layerId = item.id
+          bump(true)
+          toast('문구로 붙였어요', 'success')
+          return
+        }
+        const kind: CoverKind = as === 'backgrounds' ? 'backgrounds' : 'typos'
+        const { added } = await addImagePaths(p, kind, [a.path])
+        const item = added[0]
+        if (!item) {
+          toast('이미지를 읽지 못했어요', 'error')
+          return
+        }
+        item.name = a.name
+        if (kind === 'backgrounds') {
+          // 검열 마스크도 그때 그대로
+          if (a.maskPath) {
+            const res = await window.nais.invoke('cover:importPaths', { paths: [a.maskPath] })
+            if (res.items[0]) item.maskKey = res.items[0].key
+          }
+          p.selection.bgId = item.id
+        } else {
+          p.selection.typoId = item.id
+          p.selection.layerId = null
+        }
+        bump(true)
+        toast(kind === 'backgrounds' ? '배경으로 넣었어요' : '타이포로 넣었어요', 'success')
+      } finally {
+        set((s) => ({ importing: Math.max(0, s.importing - 1) }))
       }
     },
 

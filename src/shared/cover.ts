@@ -127,6 +127,33 @@ export interface CoverProjectSummary {
   typos: number
 }
 
+/** 표지 기록: 표지에 한 번이라도 넣었던 그림·타이포·문구. 작품에서 빼도 남는다 */
+export type CoverArchiveKind = 'background' | 'typo' | 'phrase'
+
+export interface CoverArchiveItem {
+  /** 기록 하나의 식별자 (같은 그림도 배경·타이포로 따로 기록) */
+  id: string
+  /** 이미지 내용 해시 (같은 그림은 하나로 묶인다) */
+  hash: string
+  kind: CoverArchiveKind
+  name: string
+  width: number
+  height: number
+  /** 보관본 파일 경로 (끌어 놓기·가져오기에 쓴다) */
+  path: string
+  /** 배경의 검열 마스크 보관본 */
+  maskPath: string | null
+  /** 썸네일 webp base64 */
+  thumb: string
+  /** 마지막으로 쓴 작품 */
+  projectId: string
+  projectName: string
+  addedAt: number
+  usedAt: number
+  /** 이 그림을 가리켰던 작품 속 blob 키들 (지금 작품에 들어 있는지 표시용) */
+  blobKeys: string[]
+}
+
 export function defaultCoverFrame(): CoverFrame {
   return {
     enabled: false,

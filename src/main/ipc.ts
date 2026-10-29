@@ -62,6 +62,7 @@ import {
 import { getDbPath, getDb } from './db'
 import * as gpt from './gpt/service'
 import * as cover from './cover/repo'
+import * as coverArchive from './cover/archive'
 import { analyzeArtists } from './images/artists'
 import { metadataFromPng, metadataFromPayloadJson } from './images/metadata'
 import {
@@ -350,6 +351,8 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     }
   })
   handle('cover:delete', ({ id }) => cover.deleteCoverProject(id))
+  handle('cover:archiveList', async () => ({ items: await cover.coverArchiveItems() }))
+  handle('cover:archiveDelete', ({ id }) => coverArchive.deleteCoverArchive(id))
   handle('cover:putBlob', async ({ bytes }) => {
     try {
       return await cover.putCoverBlob(bytes)

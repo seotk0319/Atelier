@@ -9,7 +9,7 @@ import type {
   InboxWorksResult
 } from './inbox'
 import type { GptAuthStatus, GptJob, GptRequest } from './gpt'
-import type { CoverProject, CoverProjectSummary } from './cover'
+import type { CoverArchiveItem, CoverProject, CoverProjectSummary } from './cover'
 import type {
   TranslateEngine,
   TranslateResult,
@@ -831,7 +831,12 @@ export interface IpcInvokeMap {
   'cover:list': { req: undefined; res: { items: CoverProjectSummary[] } }
   'cover:create': { req: { name: string }; res: { project: CoverProject } }
   'cover:load': { req: { id: string }; res: { project: CoverProject | null } }
-  'cover:save': { req: { project: CoverProject }; res: { updatedAt: number } | { error: string } }
+  'cover:save': {
+    req: { project: CoverProject }
+    res: { updatedAt: number; archiveChanged?: boolean } | { error: string }
+  }
+  'cover:archiveList': { req: undefined; res: { items: CoverArchiveItem[] } }
+  'cover:archiveDelete': { req: { id: string }; res: void }
   /** 작품 파일과 그 작품의 모든 이미지·마스크 삭제 */
   'cover:delete': { req: { id: string }; res: void }
   'cover:putBlob': { req: { bytes: Uint8Array }; res: { key: string } | { error: string } }
