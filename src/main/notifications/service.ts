@@ -17,6 +17,7 @@ import type {
 } from '../../shared/inbox'
 import { REPLY_MAX, ReplyError } from './direct/babe-reply'
 import { canReply, type ReplyComment, type ReplyItem } from './direct/replies'
+import { classifyTopics, topicMap, topicState } from './topics'
 import {
   catalogFrom,
   emptyCatalog,
@@ -329,17 +330,32 @@ export async function getInbox(query: InboxQuery): Promise<InboxResult> {
   const view = await store.view()
   await loadPlatformImages()
   await loadReplied()
+  const topics = await topicMap()
   const result = queryInbox(
     view,
     query,
     Date.now(),
     await workCatalog(),
     platformImageMap(),
-    replied.items
+    replied.items,
+    topics
   )
   noticeUnknownWorks(view.items)
   result.thumbnailsPending = fillPlatformImages(view.items)
   result.repliesPending = checkEdenReplies(view.items as EdenStored[])
+  // 새 댓글을 뒤에서 분류한다 (기다리지 않는다)
+  void classifyTopics(
+    view.items.map((item) => ({
+      id: item.id,
+      event: item.event,
+      at: item.at,
+      text: item.body && item.body !== item.title ? displayText(item.body) : '',
+      work: item.work?.title ? displayText(item.work.title) : null
+    }))
+  ).catch(() => undefined)
+  const ts = topicState()
+  result.topicsPending = ts.pending
+  result.topicsError = ts.error
   if (!direct) return result
   const status = await direct.status()
   return {

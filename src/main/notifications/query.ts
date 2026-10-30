@@ -1,4 +1,6 @@
 import { INBOX_EVENTS, INBOX_EVENT_GROUPS, INBOX_PLATFORMS } from '../../shared/inbox'
+import { INBOX_TOPIC_IDS } from '../../shared/inbox-topic'
+import type { StoredTopic } from './topic-prompt'
 import { emptyCatalog, thumbnailFor, type PlatformImages, type WorkCatalog } from './work-images'
 import { canReply } from './direct/replies'
 import type {
@@ -80,7 +82,8 @@ export function queryInbox(
   now = Date.now(),
   catalog: WorkCatalog = emptyCatalog(),
   platformImages: PlatformImages = {},
-  replied: Record<string, InboxReplied> = {}
+  replied: Record<string, InboxReplied> = {},
+  topics: Record<string, StoredTopic> = {}
 ): InboxResult {
   const events = Object.fromEntries(Object.keys(INBOX_EVENTS).map((k) => [k, 0])) as Record<
     InboxEvent,
@@ -134,12 +137,19 @@ export function queryInbox(
   // 답글을 달 수 있는 댓글 중 아직 내 답글이 없는 것
   const awaitingReply = (item: InboxItem): boolean =>
     (item.event === 'comment' || item.event === 'reply') && !replied[item.id] && canReplyTo(item)
+  const topicCounts = Object.fromEntries(INBOX_TOPIC_IDS.map((k) => [k, 0])) as Record<
+    string,
+    number
+  >
+  // 분류는 댓글·답글에만 붙는다. 본문이 바뀌어 다시 나눠야 하는 것도 일단 지난 분류를 보여준다.
+  const topicOf = (item: InboxItem): StoredTopic | undefined =>
+    item.event === 'comment' || item.event === 'reply' ? topics[item.id] : undefined
   const filtered = displayItems.filter((item) => {
     if (Object.hasOwn(counts, item.platform)) counts[item.platform]++
     if (!shown(item)) return false
     const platformMatches = !query.platform || query.platform === item.platform
     if (platformMatches && Object.hasOwn(events, item.event)) events[item.event]++
-    return (
+    const base =
       platformMatches &&
       eventMatches(item.event) &&
       (!query.unread || item.unread === true) &&
@@ -148,7 +158,10 @@ export function queryInbox(
         [item.title, item.body, item.actor?.name, item.work?.title, item.work?.id].some((v) =>
           v?.toLocaleLowerCase().includes(search)
         ))
-    )
+    if (!base) return false
+    const t = topicOf(item)
+    if (t) topicCounts[t.t]++
+    return !query.topic || t?.t === query.topic
   })
   const unread = filtered.reduce((total, item) => total + (item.unread === true ? 1 : 0), 0)
   const pageSize = 80
@@ -169,7 +182,11 @@ export function queryInbox(
     url: item.url,
     thumbnail: thumbnailFor(item, catalog, platformImages),
     canReply: canReplyTo(item),
-    replied: replied[item.id] ?? null
+    replied: replied[item.id] ?? null,
+    topic: (() => {
+      const t = topicOf(item)
+      return t ? { topic: t.t, summary: t.s } : null
+    })()
   }))
   return {
     available: true,
@@ -188,6 +205,7 @@ export function queryInbox(
     pageSize,
     items,
     events,
+    topics: topicCounts,
     platforms: (Object.entries(INBOX_PLATFORMS) as [InboxPlatform, string][]).map(
       ([id, label]) => ({
         id,

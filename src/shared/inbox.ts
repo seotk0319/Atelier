@@ -44,6 +44,8 @@ export interface InboxItem {
   canReply?: boolean
   /** 내가 이 댓글에 답글을 달았는지. NAIS3에서 보냈거나, 에덴 사이트에서 직접 단 답글을 찾았을 때. */
   replied?: InboxReplied | null
+  /** AI가 나눈 댓글 분류 (아직 안 나눴거나 대상이 아니면 null) */
+  topic?: import('./inbox-topic').InboxTopicInfo | null
 }
 export interface InboxReplied {
   at: string
@@ -93,6 +95,8 @@ export interface InboxQuery {
   unread?: boolean
   /** 답글을 달 수 있는데 아직 안 단 댓글만 */
   unreplied?: boolean
+  /** 댓글 분류 (inbox-topic) */
+  topic?: string
 }
 export interface InboxResult {
   intervalMinutes: number
@@ -138,6 +142,12 @@ export interface InboxResult {
   thumbnailsPending: boolean
   /** 사이트에서 단 답글을 뒤에서 확인하는 중이면 true — 화면이 잠시 뒤 다시 읽는다. */
   repliesPending?: boolean
+  /** 분류별 댓글 수 (플랫폼·종류·검색 조건 안에서) */
+  topics?: Record<string, number>
+  /** 아직 분류하지 못한 댓글 수 */
+  topicsPending?: number
+  /** 분류를 못 하는 이유 (키 없음·오류) */
+  topicsError?: string | null
 }
 export interface InboxConnectResult {
   state: 'connected' | 'login-required' | 'error'

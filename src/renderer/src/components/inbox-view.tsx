@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CirclePause,
+  Copy,
   ExternalLink,
   Pause,
   Play,
@@ -16,6 +17,13 @@ import {
   X
 } from 'lucide-react'
 import { INBOX_EVENTS, INBOX_EVENT_GROUPS, INBOX_PLATFORMS } from '@shared/inbox'
+import {
+  ACTION_TOPICS,
+  INBOX_TOPIC_IDS,
+  INBOX_TOPICS,
+  topicCopyText,
+  type InboxTopic
+} from '@shared/inbox-topic'
 import type {
   InboxEvent,
   InboxEventGroup,
@@ -32,6 +40,29 @@ import { useTranslateStore } from '../stores/translate-store'
 import { ReplyComposer, TranslatableText } from './inbox-translate'
 import { InboxWorks } from './inbox-works'
 import { PLATFORM_COLORS as colors, platformTone as tone } from '../lib/inbox-colors'
+import { toast } from '../stores/toast-store'
+
+/** 분류 배지 색 (의미 토큰 + 보조색) */
+const TOPIC_TONE: Record<InboxTopic, string> = {
+  bug: 'bg-danger/10 text-danger',
+  asset: 'bg-accent-soft text-accent',
+  request: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  question: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  praise: 'bg-surface-2 text-muted',
+  other: 'bg-surface-2 text-faint'
+}
+function TopicBadge({ topic }: { topic: InboxTopic }): React.JSX.Element {
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-md px-1.5 py-px text-[11px] font-semibold leading-4',
+        TOPIC_TONE[topic]
+      )}
+    >
+      {INBOX_TOPICS[topic]}
+    </span>
+  )
+}
 
 const statusLabels: Record<string, string> = {
   ok: '수집 정상',
@@ -167,6 +198,8 @@ export function InboxView(): React.JSX.Element {
   // 알림 목록 / 내 작품 (플랫폼별 최초 공개일·링크 복사)
   const [mode, setMode] = useState<'alerts' | 'works'>('alerts')
   const [event, setEvent] = useState('')
+  // 댓글 분류 필터 ('' = 전체)
+  const [topic, setTopic] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [unrepliedOnly, setUnrepliedOnly] = useState(false)
   const [brokenDetail, setBrokenDetail] = useState(false)
@@ -263,6 +296,7 @@ export function InboxView(): React.JSX.Element {
   const [now, setNow] = useState(0)
   const eventQuery = event || (view === 'all' ? '' : view)
   const unrepliedQuery = unrepliedOnly && view !== 'reaction'
+  const topicQuery = view === 'reaction' ? '' : topic
 
   useEffect(() => {
     let disposed = false,
@@ -274,6 +308,7 @@ export function InboxView(): React.JSX.Element {
           event: eventQuery,
           unread: unreadOnly,
           unreplied: unrepliedQuery,
+          topic: topicQuery,
           search,
           page
         })
@@ -297,7 +332,7 @@ export function InboxView(): React.JSX.Element {
       disposed = true
       clearTimeout(timer)
     }
-  }, [platform, eventQuery, unreadOnly, unrepliedQuery, search, page, revision, loadAi])
+  }, [platform, eventQuery, unreadOnly, unrepliedQuery, topicQuery, search, page, revision, loadAi])
 
   const totalPages = data ? Math.max(1, Math.ceil(data.filtered / data.pageSize)) : 1
   const latest =
@@ -460,6 +495,9 @@ export function InboxView(): React.JSX.Element {
               <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-px text-[11px] font-semibold text-accent">
                 답글 완료
               </span>
+            )}
+            {item.topic && ACTION_TOPICS.includes(item.topic.topic) && (
+              <TopicBadge topic={item.topic.topic} />
             )}
           </span>
           <span className="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[12px] leading-snug text-muted">
@@ -943,6 +981,33 @@ export function InboxView(): React.JSX.Element {
               </div>
             </div>
 
+            {view !== 'reaction' && data?.topics && (
+              <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span className="text-[12px] font-medium text-muted">분류</span>
+                <Segmented
+                  aria-label="댓글 분류"
+                  size="sm"
+                  value={topic || 'any'}
+                  onValueChange={(v) => v && reset(() => setTopic(v === 'any' ? '' : v))}
+                >
+                  <SegmentedItem value="any">전체</SegmentedItem>
+                  {INBOX_TOPIC_IDS.map((id) => (
+                    <SegmentedItem key={id} value={id}>
+                      {INBOX_TOPICS[id]}
+                      <SegmentedCount>{(data.topics?.[id] ?? 0).toLocaleString()}</SegmentedCount>
+                    </SegmentedItem>
+                  ))}
+                </Segmented>
+                {data.topicsError ? (
+                  <span className="text-[12px] text-faint">{data.topicsError}</span>
+                ) : (data.topicsPending ?? 0) > 0 ? (
+                  <span className="text-[12px] text-faint">
+                    댓글 {data.topicsPending!.toLocaleString()}개 분류하는 중
+                  </span>
+                ) : null}
+              </div>
+            )}
+
             <div
               className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-line bg-paper"
               aria-label="알림 목록"
@@ -1073,6 +1138,37 @@ export function InboxView(): React.JSX.Element {
             </div>
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
+            {selected.topic && ACTION_TOPICS.includes(selected.topic.topic) && (
+              <div className="flex shrink-0 items-start gap-2.5 rounded-xl bg-surface-2 px-3 py-2.5">
+                <TopicBadge topic={selected.topic.topic} />
+                <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink">
+                  {selected.topic.summary || INBOX_TOPICS[selected.topic.topic]}
+                </p>
+                <button
+                  className="-my-1 -mr-1 grid size-7 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-paper hover:text-ink"
+                  title="작품 세션에 넘길 수 있게 복사"
+                  aria-label="분류 요약 복사"
+                  onClick={() => {
+                    const text = topicCopyText(
+                      { ...selected, body: comment?.text ?? selected.body },
+                      selected.topic!,
+                      INBOX_PLATFORMS[selected.platform],
+                      time(selected.at)
+                    )
+                    void window.nais.invoke('app:copyText', { text }).then(
+                      (r) =>
+                        toast(
+                          r.ok ? '복사했어요' : '복사하지 못했어요',
+                          r.ok ? 'success' : 'error'
+                        ),
+                      () => toast('복사하지 못했어요', 'error')
+                    )
+                  }}
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            )}
             {/* 작품 이름이 없으면 위 머리 줄이 이미 제목을 보여준다 */}
             {!selected.canReply && workNameOf(selected) && (
               <h3 className="text-[15px] font-semibold leading-snug">{selected.title}</h3>
