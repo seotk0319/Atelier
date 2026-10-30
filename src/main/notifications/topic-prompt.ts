@@ -19,7 +19,7 @@ const TEXT_MAX = 400
 
 /** 본문 없이 알림 문구만 온 것 (크랙 "○○에 달린 댓글을 확인하세요", 루나 "캐릭터 댓글" 등) */
 const PLACEHOLDER =
-  /^(?:.+에 달린 (?:댓글|답글)을 확인하세요\.?|캐릭터 (?:댓글|답글)|(?:새 )?(?:댓글|답글))$/
+  /^(?:.+에 달린 (?:댓글|답글)을 확인하세요\.?|(?:캐릭터|제작자 페이지) (?:댓글|답글)|댓글 답글|(?:새 )?(?:댓글|답글))$/
 export const isTopicText = (text: string): boolean => {
   const t = text.trim()
   return !!t && !PLACEHOLDER.test(t)

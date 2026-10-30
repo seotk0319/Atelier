@@ -43,6 +43,14 @@ describe('comment topics', () => {
         work: null
       },
       { id: 'g', event: 'comment', at: '2026-10-07T00:00:00Z', text: '캐릭터 댓글', work: null },
+      {
+        id: 'h',
+        event: 'reply',
+        at: '2026-10-08T00:00:00Z',
+        text: '제작자 페이지 댓글',
+        work: null
+      },
+      { id: 'i', event: 'reply', at: '2026-10-09T00:00:00Z', text: '댓글 답글', work: null },
       { id: 'e', event: 'comment', at: '2026-10-05T00:00:00Z', text: '새 글', work: null }
     ]
     const stored = {
