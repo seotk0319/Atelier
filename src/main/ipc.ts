@@ -117,6 +117,13 @@ import {
   renamePreset,
   deletePreset,
   reorderPresets,
+  listPresetFolders,
+  createPresetFolder,
+  renamePresetFolder,
+  setPresetFolderCollapsed,
+  deletePresetFolder,
+  movePresetsToFolder,
+  reorderPresetTree,
   setPresetCharacters,
   setPresetDefaultResolution,
   listScenes,
@@ -454,8 +461,8 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     return { ok: (await shell.openPath(dir)) === '', dir }
   })
 
-  handle('scenePresets:list', () => ({ items: listPresets() }))
-  handle('scenePresets:create', ({ name }) => ({ id: createPreset(name) }))
+  handle('scenePresets:list', () => ({ items: listPresets(), folders: listPresetFolders() }))
+  handle('scenePresets:create', ({ name, folderId }) => ({ id: createPreset(name, folderId) }))
   handle('scenePresets:rename', ({ id, name }) => {
     renamePreset(id, name)
   })
@@ -464,6 +471,22 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
   handle('scenePresets:reorder', ({ ids }) => {
     reorderPresets(ids)
+  })
+  handle('scenePresets:reorderTree', ({ order }) => {
+    reorderPresetTree(order)
+  })
+  handle('scenePresets:moveToFolder', ({ ids, folderId }) => {
+    movePresetsToFolder(ids, folderId)
+  })
+  handle('scenePresetFolders:create', ({ name }) => ({ id: createPresetFolder(name) }))
+  handle('scenePresetFolders:rename', ({ id, name }) => {
+    renamePresetFolder(id, name)
+  })
+  handle('scenePresetFolders:setCollapsed', ({ id, collapsed }) => {
+    setPresetFolderCollapsed(id, collapsed)
+  })
+  handle('scenePresetFolders:delete', ({ id }) => {
+    deletePresetFolder(id)
   })
   handle('scenePresets:setCharacters', ({ id, characterIds }) => {
     setPresetCharacters(id, characterIds)

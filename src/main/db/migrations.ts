@@ -478,6 +478,24 @@ export const migrations: ((db: Database.Database) => void)[] = [
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `)
+  },
+
+  // v20: 씬 프리셋 폴더 (작품별로 묶기). 앱 안 목록만 정리하고 디스크 저장 폴더는 그대로
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS scene_preset_folders (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        collapsed INTEGER NOT NULL DEFAULT 0,
+        color TEXT
+      );
+    `)
+    if (!hasColumn(db, 'scene_presets', 'folder_id')) {
+      db.exec(
+        `ALTER TABLE scene_presets ADD COLUMN folder_id INTEGER REFERENCES scene_preset_folders(id) ON DELETE SET NULL;`
+      )
+    }
   }
 ]
 

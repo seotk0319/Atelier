@@ -360,6 +360,8 @@ export interface ScenePreset {
   defaultHeight: number | null
   /** 바인드된 캐릭터 카드 id들 — 이 프리셋 생성 시 사이드바 대신 이 캐릭터들로 교체 (null = 바인드 없음) */
   characterIds: number[] | null
+  /** 작품별 묶음 폴더 (null = 폴더 없음). 앱 안 목록만 정리하고 디스크 폴더와는 무관 */
+  folderId: number | null
 }
 
 /** 프리셋에 함께 저장되는 생성 파라미터 (시드·캐릭터는 제외) */
@@ -671,11 +673,19 @@ export interface IpcInvokeMap {
     req: { filePath?: string; base64?: string }
     res: { tags: ArtistTag[] } | { error: string }
   }
-  'scenePresets:list': { req: void; res: { items: ScenePreset[] } }
-  'scenePresets:create': { req: { name: string }; res: { id: number } }
+  'scenePresets:list': { req: void; res: { items: ScenePreset[]; folders: ListFolder[] } }
+  'scenePresets:create': { req: { name: string; folderId?: number | null }; res: { id: number } }
   'scenePresets:rename': { req: { id: number; name: string }; res: void }
   'scenePresets:delete': { req: { id: number }; res: void }
   'scenePresets:reorder': { req: { ids: number[] }; res: void }
+  /** 폴더·프리셋 전체 순서 (미분류 먼저, 소속은 직전 폴더에서 파생) */
+  'scenePresets:reorderTree': { req: { order: CharacterOrderEntry[] }; res: void }
+  'scenePresets:moveToFolder': { req: { ids: number[]; folderId: number | null }; res: void }
+  'scenePresetFolders:create': { req: { name: string }; res: { id: number } }
+  'scenePresetFolders:rename': { req: { id: number; name: string }; res: void }
+  'scenePresetFolders:setCollapsed': { req: { id: number; collapsed: boolean }; res: void }
+  /** 폴더만 지우고 안의 프리셋은 폴더 없음으로 */
+  'scenePresetFolders:delete': { req: { id: number }; res: void }
   /** 프리셋의 새 씬 기본 해상도 (N3) */
   'scenePresets:setDefaultResolution': {
     req: { id: number; width: number; height: number }

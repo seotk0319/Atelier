@@ -1,6 +1,5 @@
 import {
   CalendarX,
-  ChevronDown,
   Copy,
   FileDown,
   FileUp,
@@ -19,7 +18,6 @@ import {
   Square,
   Trash2,
   UserRound,
-  UsersRound,
   X
 } from 'lucide-react'
 import {
@@ -58,7 +56,7 @@ import { SceneDetail } from './scene-detail'
 import { SceneCardImage } from './scene-card-image'
 import { formatEta, useQueueRun } from '../lib/queue-run'
 import { PresetManager } from './preset-manager'
-import { SortableList, SortableRow } from './sortable-list'
+import { ScenePresetPicker } from './scene-preset-picker'
 import { Button } from './ui/button'
 import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
 import { EditableCount } from './ui/editable-count'
@@ -88,144 +86,14 @@ export function SceneMode(): React.JSX.Element {
   return <SceneGrid />
 }
 
-/** NAIS2식 프리셋 드롭다운 — 현재 프리셋 표시 + 전환/추가/이름변경/삭제 */
+/** 프리셋 드롭다운 — 작품 폴더별 목록 + 검색 (scene-preset-picker) */
 function PresetDropdown(): React.JSX.Element {
   const [manageOpen, setManageOpen] = useState(false)
-  const presets = useScenesStore((s) => s.presets)
-  const activePresetId = useScenesStore((s) => s.activePresetId)
-  const setActivePreset = useScenesStore((s) => s.setActivePreset)
-  const createPreset = useScenesStore((s) => s.createPreset)
-  const renamePreset = useScenesStore((s) => s.renamePreset)
-  const deletePreset = useScenesStore((s) => s.deletePreset)
-  const reorderPresets = useScenesStore((s) => s.reorderPresets)
-  const [open, setOpen] = useState(false)
   // 캐릭터 바인드 다이얼로그 대상 프리셋
   const [bindPreset, setBindPreset] = useState<ScenePreset | null>(null)
-  // 팝오버가 닫히는 클릭과 같은 틱에 다이얼로그를 열면 dismiss 레이스로 바로 닫힘 — 한 틱 미룸
-  const openBindDialog = (p: ScenePreset): void => {
-    setOpen(false)
-    setTimeout(() => setBindPreset(p), 0)
-  }
-
-  const active = presets.find((p) => p.id === activePresetId)
-
-  // 프리셋 선택 + 닫기 — 닫기를 먼저 (선택의 store 재렌더가 끼어들기 전에 확정) (B9)
-  const choose = (id: number): void => {
-    setOpen(false)
-    void setActivePreset(id)
-  }
-
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button className="flex h-9 min-w-0 max-w-[360px] items-center gap-1.5 rounded-lg bg-paper px-3 text-[13px] font-semibold text-ink outline-none hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent/40">
-            <span className="min-w-0 flex-1 truncate text-left">{active?.name ?? '프리셋'}</span>
-            <ChevronDown size={14} className="shrink-0 text-muted" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-[max(var(--radix-popover-trigger-width),24rem)] p-1"
-        >
-          <div className="max-h-64 overflow-y-auto overflow-x-hidden no-scrollbar">
-            {/* 드래그로 순서 변경 */}
-            <SortableList
-              ids={presets.map((p) => p.id)}
-              onReorder={(ids) => void reorderPresets(ids)}
-            >
-              {presets.map((p) => (
-                <SortableRow
-                  key={p.id}
-                  id={p.id}
-                  className="group gap-1"
-                  onTap={() => choose(p.id)}
-                >
-                  <div
-                    onClick={() => choose(p.id)}
-                    className={cn(
-                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]',
-                      p.id === activePresetId && 'font-semibold text-accent'
-                    )}
-                  >
-                    <span className="truncate">{p.name}</span>
-                    {(p.characterIds?.length ?? 0) > 0 && (
-                      // 바인드 표시 겸 편집 진입점. 반드시 <button> — SortableRow의 onTap(행 선택)이
-                      // button/input에서 시작한 클릭만 제외하므로, span이면 행 선택으로 먹혀버린다
-                      <button
-                        className="flex shrink-0 cursor-pointer items-center gap-0.5 rounded-full bg-accent/12 px-1.5 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/25"
-                        title="캐릭터 바인드됨 — 클릭해서 편집"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openBindDialog(p)
-                        }}
-                      >
-                        <UserRound size={9} /> {p.characterIds!.length}
-                      </button>
-                    )}
-                  </div>
-                  {(p.characterIds?.length ?? 0) === 0 && (
-                    <button
-                      className="shrink-0 rounded p-1 text-faint opacity-0 hover:text-fg group-hover:opacity-100"
-                      onClick={() => openBindDialog(p)}
-                      title="캐릭터 바인드 — 이 프리셋 생성 시 사이드바 대신 지정 캐릭터 사용"
-                    >
-                      <UsersRound size={12} />
-                    </button>
-                  )}
-                  <button
-                    className="shrink-0 rounded p-1 text-faint opacity-0 hover:text-fg group-hover:opacity-100"
-                    onClick={async () => {
-                      const name = await askText('프리셋 이름', p.name)
-                      if (name) void renamePreset(p.id, name)
-                    }}
-                    title="이름 변경"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  {presets.length > 1 && (
-                    <button
-                      className="shrink-0 rounded p-1 text-faint opacity-0 hover:text-danger group-hover:opacity-100"
-                      onClick={async () => {
-                        if (
-                          await askConfirm('프리셋 삭제', {
-                            message: `"${p.name}" 프리셋과 그 안의 씬을 모두 삭제해요.`,
-                            confirmLabel: '삭제',
-                            danger: true
-                          })
-                        )
-                          void deletePreset(p.id)
-                      }}
-                      title="삭제"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </SortableRow>
-              ))}
-            </SortableList>
-          </div>
-          <div className="my-1 h-px bg-line" />
-          <button
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-surface-2"
-            onClick={() => {
-              setOpen(false)
-              setManageOpen(true)
-            }}
-          >
-            <ListChecks size={14} /> 프리셋 관리
-          </button>
-          <button
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-accent hover:bg-surface-2"
-            onClick={async () => {
-              const name = await askText('새 프리셋 이름', '새 프리셋')
-              if (name) void createPreset(name)
-            }}
-          >
-            <Plus size={14} /> 새 프리셋
-          </button>
-        </PopoverContent>
-      </Popover>
+      <ScenePresetPicker onManage={() => setManageOpen(true)} onBind={setBindPreset} />
       {manageOpen && <PresetManager kind="scene" onClose={() => setManageOpen(false)} />}
       {bindPreset && (
         <PresetCharacterDialog preset={bindPreset} onClose={() => setBindPreset(null)} />
@@ -947,6 +815,7 @@ function SceneGrid(): React.JSX.Element {
 function BulkBar(): React.JSX.Element {
   const selection = useScenesStore((s) => s.selection)
   const presets = useScenesStore((s) => s.presets)
+  const presetFolders = useScenesStore((s) => s.presetFolders)
   const activePresetId = useScenesStore((s) => s.activePresetId)
   const selectAll = useScenesStore((s) => s.selectAll)
   const clearSelection = useScenesStore((s) => s.clearSelection)
@@ -979,12 +848,29 @@ function BulkBar(): React.JSX.Element {
             프리셋 이동
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-44 p-1">
-          {presets
-            .filter((p) => p.id !== activePresetId)
-            .map((p) => (
-              <MenuItem key={p.id} label={p.name} onClick={() => void bulkMove(p.id)} />
-            ))}
+        <PopoverContent align="start" className="w-56 p-1">
+          {/* 작품 폴더별로 묶어서 (폴더 없는 프리셋은 맨 아래) */}
+          <div className="no-scrollbar max-h-[min(60vh,420px)] overflow-y-auto">
+            {[
+              ...presetFolders.map((f) => ({ id: f.id, name: f.name })),
+              { id: null, name: '' }
+            ].map((g) => {
+              const list = presets.filter((p) => p.folderId === g.id && p.id !== activePresetId)
+              if (!list.length) return null
+              return (
+                <div key={g.id ?? 'none'}>
+                  {(g.id != null || presetFolders.length > 0) && (
+                    <p className="truncate px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-faint">
+                      {g.id != null ? g.name : '폴더 없음'}
+                    </p>
+                  )}
+                  {list.map((p) => (
+                    <MenuItem key={p.id} label={p.name} onClick={() => void bulkMove(p.id)} />
+                  ))}
+                </div>
+              )
+            })}
+          </div>
           {presets.filter((p) => p.id !== activePresetId).length === 0 && (
             <p className="px-2 py-1.5 text-[12px] text-faint">다른 프리셋 없음</p>
           )}

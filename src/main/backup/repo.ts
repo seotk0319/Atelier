@@ -20,6 +20,7 @@ const TABLES = [
   'vibe_images',
   'charref_folders',
   'charref_images',
+  'scene_preset_folders',
   'scene_presets',
   'gen_scenes',
   'prompt_presets'

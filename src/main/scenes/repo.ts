@@ -2,7 +2,13 @@ import { BrowserWindow, dialog } from 'electron'
 import { readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { isAbsolute, relative } from 'path'
 import JSZip from 'jszip'
-import type { Scene, SceneImage, ScenePreset } from '../../shared/types'
+import type {
+  CharacterOrderEntry,
+  ListFolder,
+  Scene,
+  SceneImage,
+  ScenePreset
+} from '../../shared/types'
 import { getDb } from '../db'
 import { libraryRoot } from '../images/storage'
 import {
@@ -51,7 +57,7 @@ function toScene(
 export function listPresets(): ScenePreset[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, name, default_width AS defaultWidth, default_height AS defaultHeight, character_ids FROM scene_presets ORDER BY sort_order, id'
+      'SELECT id, name, default_width AS defaultWidth, default_height AS defaultHeight, character_ids, folder_id AS folderId FROM scene_presets ORDER BY sort_order, id'
     )
     .all() as (Omit<ScenePreset, 'characterIds'> & { character_ids: string | null })[]
   return rows.map(({ character_ids, ...r }) => {
@@ -79,15 +85,102 @@ export function setPresetCharacters(id: number, characterIds: number[] | null): 
     .run(characterIds && characterIds.length > 0 ? JSON.stringify(characterIds) : null, id)
 }
 
-export function createPreset(name: string): number {
+export function createPreset(name: string, folderId: number | null = null): number {
   const db = getDb()
   const max = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM scene_presets').get() as {
     m: number
   }
+  const folder =
+    folderId != null && db.prepare('SELECT 1 FROM scene_preset_folders WHERE id = ?').get(folderId)
+      ? folderId
+      : null
   return Number(
-    db.prepare('INSERT INTO scene_presets (name, sort_order) VALUES (?, ?)').run(name, max.m + 1)
-      .lastInsertRowid
+    db
+      .prepare('INSERT INTO scene_presets (name, sort_order, folder_id) VALUES (?, ?, ?)')
+      .run(name, max.m + 1, folder).lastInsertRowid
   )
+}
+
+// ── 프리셋 폴더 (작품별 묶음) ─────────────────────────────
+export function listPresetFolders(): ListFolder[] {
+  return (
+    getDb()
+      .prepare(
+        'SELECT id, name, collapsed, color FROM scene_preset_folders ORDER BY sort_order, id'
+      )
+      .all() as { id: number; name: string; collapsed: number; color: string | null }[]
+  ).map((f) => ({ id: f.id, name: f.name, collapsed: f.collapsed === 1, color: f.color }))
+}
+
+export function createPresetFolder(name: string): number {
+  const db = getDb()
+  const max = db
+    .prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM scene_preset_folders')
+    .get() as { m: number }
+  return Number(
+    db
+      .prepare('INSERT INTO scene_preset_folders (name, sort_order) VALUES (?, ?)')
+      .run(name, max.m + 1).lastInsertRowid
+  )
+}
+
+export function renamePresetFolder(id: number, name: string): void {
+  getDb().prepare('UPDATE scene_preset_folders SET name = ? WHERE id = ?').run(name, id)
+}
+
+export function setPresetFolderCollapsed(id: number, collapsed: boolean): void {
+  getDb()
+    .prepare('UPDATE scene_preset_folders SET collapsed = ? WHERE id = ?')
+    .run(collapsed ? 1 : 0, id)
+}
+
+/** 폴더만 지운다. 안의 프리셋·씬·이미지는 그대로 두고 "폴더 없음"으로 */
+export function deletePresetFolder(id: number): void {
+  const db = getDb()
+  db.transaction(() => {
+    db.prepare('UPDATE scene_presets SET folder_id = NULL WHERE folder_id = ?').run(id)
+    db.prepare('DELETE FROM scene_preset_folders WHERE id = ?').run(id)
+  })()
+}
+
+/** 프리셋들을 폴더로 옮긴다 (null = 폴더 없음). 옮긴 프리셋은 그 폴더 끝에 붙는다 */
+export function movePresetsToFolder(ids: number[], folderId: number | null): void {
+  const db = getDb()
+  db.transaction(() => {
+    const target =
+      folderId != null &&
+      db.prepare('SELECT 1 FROM scene_preset_folders WHERE id = ?').get(folderId)
+        ? folderId
+        : null
+    const max = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM scene_presets').get() as {
+      m: number
+    }
+    const stmt = db.prepare('UPDATE scene_presets SET folder_id = ?, sort_order = ? WHERE id = ?')
+    ids.forEach((id, i) => stmt.run(target, max.m + 1 + i, id))
+  })()
+}
+
+/**
+ * 폴더·프리셋 전체 순서. 프리셋 소속은 "직전 폴더 행"에서 파생된다 (미분류가 먼저 와야 함).
+ * 캐릭터·조각 폴더와 같은 전송 규약 (folder-list.ts toOrderEntries).
+ */
+export function reorderPresetTree(order: CharacterOrderEntry[]): void {
+  const db = getDb()
+  const setFolder = db.prepare('UPDATE scene_preset_folders SET sort_order = ? WHERE id = ?')
+  const setPreset = db.prepare(
+    'UPDATE scene_presets SET sort_order = ?, folder_id = ? WHERE id = ?'
+  )
+  db.transaction(() => {
+    let currentFolder: number | null = null
+    order.forEach((entry, i) => {
+      if (entry.type === 'folder') {
+        currentFolder = entry.id
+        setFolder.run(i, entry.id)
+      } else {
+        setPreset.run(i, currentFolder, entry.id)
+      }
+    })
+  })()
 }
 
 /** 프리셋 이름 중복 시 " (1)", " (2)" 를 붙여 유일한 이름을 만든다 */
@@ -128,7 +221,7 @@ export function manageScenePresets(ids: number[], action: 'duplicate' | 'delete'
       return selected.map((p) => p.id)
     }
     return selected.map((p) => {
-      const id = createPreset(uniquePresetName(`${p.name} 복사`))
+      const id = createPreset(uniquePresetName(`${p.name} 복사`), p.folderId ?? null)
       db.prepare(
         'UPDATE scene_presets SET default_width = ?, default_height = ?, character_ids = ? WHERE id = ?'
       ).run(

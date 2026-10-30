@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { recordNav } from '../lib/nav-history'
-import type { GenerationRequest, Scene, SceneImage, ScenePreset } from '@shared/types'
+import type { GenerationRequest, ListFolder, Scene, SceneImage, ScenePreset } from '@shared/types'
+import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
 import { joinPromptSections } from '@shared/char-sections'
 import { enabledCharacters, useCharactersStore } from './characters-store'
 import {
@@ -17,6 +18,8 @@ let imagesSeq = 0 // loadImages() 비동기 응답 순서 보장용
 
 interface ScenesState {
   presets: ScenePreset[]
+  /** 작품별 프리셋 폴더 */
+  presetFolders: ListFolder[]
   activePresetId: number
   scenes: Scene[]
   selectedId: number | null // 상세로 연 씬
@@ -35,12 +38,19 @@ interface ScenesState {
 
   loadPresets: (loadScenes?: boolean) => Promise<void>
   setActivePreset: (id: number) => Promise<void>
-  createPreset: (name: string) => Promise<void>
+  createPreset: (name: string, folderId?: number | null) => Promise<void>
   renamePreset: (id: number, name: string) => Promise<void>
   deletePreset: (id: number) => Promise<void>
   /** 프리셋 순서 이동 (dir: -1 위 / +1 아래) */
   /** 프리셋 드래그 정렬 — 새 id 순서 반영 */
   reorderPresets: (ids: number[]) => Promise<void>
+  /** 폴더 목록 드래그 결과 반영 (rowKey: "f-1" | "i-3" | "divider") */
+  movePresetRow: (activeKey: string, overKey: string) => Promise<void>
+  movePresetsToFolder: (ids: number[], folderId: number | null) => Promise<void>
+  createPresetFolder: (name: string) => Promise<number>
+  renamePresetFolder: (id: number, name: string) => Promise<void>
+  setPresetFolderCollapsed: (id: number, collapsed: boolean) => Promise<void>
+  deletePresetFolder: (id: number) => Promise<void>
 
   load: () => Promise<void>
   select: (id: number | null) => void
@@ -176,6 +186,7 @@ export function buildSceneRequest(
 
 export const useScenesStore = create<ScenesState>((set, get) => ({
   presets: [],
+  presetFolders: [],
   activePresetId: 1,
   scenes: [],
   selectedId: null,
@@ -192,8 +203,8 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   favoritesOnly: false,
 
   loadPresets: async (loadScenes = true) => {
-    const { items } = await window.nais.invoke('scenePresets:list', undefined)
-    set({ presets: items })
+    const { items, folders } = await window.nais.invoke('scenePresets:list', undefined)
+    set({ presets: canonicalize(folders, items), presetFolders: folders })
     if (!items.some((p) => p.id === get().activePresetId) && items[0]) {
       set({ activePresetId: items[0].id })
     }
@@ -203,8 +214,8 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     set({ activePresetId: id, selectedId: null, selection: new Set(), selectionAnchor: null })
     await get().load()
   },
-  createPreset: async (name) => {
-    const { id } = await window.nais.invoke('scenePresets:create', { name })
+  createPreset: async (name, folderId = null) => {
+    const { id } = await window.nais.invoke('scenePresets:create', { name, folderId })
     await get().loadPresets()
     await get().setActivePreset(id)
   },
@@ -220,6 +231,44 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     const byId = new Map(get().presets.map((p) => [p.id, p]))
     set({ presets: ids.map((pid) => byId.get(pid)!).filter(Boolean) })
     await window.nais.invoke('scenePresets:reorder', { ids })
+  },
+  movePresetRow: async (activeKey, overKey) => {
+    const { presetFolders, presets } = get()
+    const next = moveRow(presetFolders, presets, activeKey, overKey)
+    set({ presetFolders: next.folders, presets: canonicalize(next.folders, next.items) })
+    await window.nais.invoke('scenePresets:reorderTree', {
+      order: toOrderEntries(next.folders, next.items)
+    })
+  },
+  movePresetsToFolder: async (ids, folderId) => {
+    const moving = new Set(ids)
+    const { presetFolders, presets } = get()
+    // 옮긴 프리셋은 그 폴더 끝으로
+    const rest = presets.filter((p) => !moving.has(p.id))
+    const moved = presets.filter((p) => moving.has(p.id)).map((p) => ({ ...p, folderId }))
+    set({ presets: canonicalize(presetFolders, [...rest, ...moved]) })
+    await window.nais.invoke('scenePresets:moveToFolder', { ids, folderId })
+  },
+  createPresetFolder: async (name) => {
+    const { id } = await window.nais.invoke('scenePresetFolders:create', { name })
+    set({ presetFolders: [...get().presetFolders, { id, name, collapsed: false, color: null }] })
+    return id
+  },
+  renamePresetFolder: async (id, name) => {
+    set({ presetFolders: get().presetFolders.map((f) => (f.id === id ? { ...f, name } : f)) })
+    await window.nais.invoke('scenePresetFolders:rename', { id, name })
+  },
+  setPresetFolderCollapsed: async (id, collapsed) => {
+    set({
+      presetFolders: get().presetFolders.map((f) => (f.id === id ? { ...f, collapsed } : f))
+    })
+    await window.nais.invoke('scenePresetFolders:setCollapsed', { id, collapsed })
+  },
+  deletePresetFolder: async (id) => {
+    const folders = get().presetFolders.filter((f) => f.id !== id)
+    const items = get().presets.map((p) => (p.folderId === id ? { ...p, folderId: null } : p))
+    set({ presetFolders: folders, presets: canonicalize(folders, items) })
+    await window.nais.invoke('scenePresetFolders:delete', { id })
   },
   setPresetDefaultResolution: async (id, width, height) => {
     set({

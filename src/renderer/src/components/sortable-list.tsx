@@ -61,7 +61,7 @@ export function SortableRow({
   onTap,
   children
 }: {
-  id: number
+  id: number | string
   className?: string
   onTap?: () => void
   children: React.ReactNode
