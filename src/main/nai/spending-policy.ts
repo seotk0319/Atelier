@@ -7,10 +7,16 @@ import { fetchAnlasBalance } from './client'
 export async function checkFreeGeneration(
   token: string,
   request: GenerationRequest,
-  refs: { characterCount: number; vibeCount: number; unencodedVibes: number }
+  refs: {
+    characterCount: number
+    vibeCount: number
+    unencodedVibes: number
+    /** 레퍼런스 인셋: 앱이 만든 인페인트라 소스 이미지가 있어도 무료 조건(해상도·스텝)으로 판단 */
+    inset?: boolean
+  }
 ): Promise<void> {
   if (
-    request.source ||
+    (request.source && !refs.inset) ||
     refs.characterCount > 0 ||
     refs.unencodedVibes > 0 ||
     refs.vibeCount > 4 ||

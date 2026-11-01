@@ -12,12 +12,15 @@ import {
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CharRefItem, CharRefType, VibeItem } from '@shared/types'
+import { isV5Model } from '@shared/nai-models'
+import { insetShare } from '@shared/ref-inset'
 import { cn } from '../lib/utils'
 import { applyClickSelection, useSelectAllShortcut } from '../lib/edit-selection'
 import { droppedImagePaths, hasImageDrop } from '../lib/image-drag'
 import { isLeavingDropZone, useDragEndCleanup } from '../lib/drop-zone'
 import { buildDisplayRows } from '../lib/folder-list'
 import { CHARREF_TYPES, refsStoreFor } from '../stores/refs-store'
+import { useGenerationStore } from '../stores/generation-store'
 import { askConfirm, askText } from '../stores/dialog-store'
 import { toast } from '../stores/toast-store'
 import { FolderListView } from './folder-list-view'
@@ -49,6 +52,8 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
   const setFolderColor = store((s) => s.setFolderColor)
   const removeFolder = store((s) => s.removeFolder)
   const move = store((s) => s.move)
+  // V5에는 캐릭터 레퍼런스가 없어 레퍼런스 인셋(참고 칸 + 인페인트)으로 바꿔 보낸다
+  const insetMode = useGenerationStore((s) => kind === 'charref' && isV5Model(s.request.model))
 
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
@@ -259,7 +264,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
         {kind === 'vibe' ? (
           <VibeParams item={item as VibeItem} update={update} />
         ) : (
-          <CharRefParams item={item as CharRefItem} update={update} />
+          <CharRefParams item={item as CharRefItem} update={update} inset={insetMode} />
         )}
       </div>
     )
@@ -314,7 +319,22 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
             {enabledCount}
           </span>
         )}
+        {insetMode && (
+          <span
+            className="rounded-md bg-surface-2 px-1.5 py-px text-[11px] font-medium text-muted"
+            title="V5에는 캐릭터 레퍼런스가 없어서, 켜 둔 그림을 화면 왼쪽 칸에 두고 오른쪽만 새로 그려 같은 캐릭터를 뽑아요. 결과에서는 참고 칸을 잘라 내요."
+          >
+            V5 인셋
+          </span>
+        )}
       </div>
+      {insetMode && (
+        <p className="-mt-1 text-[11px] leading-snug text-faint">
+          {enabledCount > 1
+            ? '켜 둔 것 중 맨 위 하나만 써요. 배경이 단순한 전신 그림일수록 잘 따라가요.'
+            : '켜 둔 그림을 옆 칸에 두고 같은 캐릭터로 그려요. 배경이 단순한 전신 그림일수록 잘 따라가요.'}
+        </p>
+      )}
 
       <div className="flex items-center gap-1.5">
         <div className="relative flex-1">
@@ -606,11 +626,31 @@ function VibeParams({
 
 function CharRefParams({
   item,
-  update
+  update,
+  inset
 }: {
   item: CharRefItem
   update: (id: number, patch: Record<string, unknown>) => void
+  /** V5 레퍼런스 인셋: 강도 = 참고 칸 크기, 타입·충실도는 쓰지 않는다 */
+  inset: boolean
 }): React.JSX.Element {
+  if (inset)
+    return (
+      <div className="flex flex-col gap-1.5">
+        <ParamRow label={`참고 칸 ${Math.round(insetShare(item.strength) * 100)}%`}>
+          <Slider
+            min={0}
+            max={1}
+            step={0.05}
+            value={[item.strength]}
+            onValueChange={([v]) => update(item.id, { strength: Math.round(v * 100) / 100 })}
+          />
+        </ParamRow>
+        <p className="text-[11px] leading-snug text-faint">
+          칸이 클수록 캐릭터를 더 잘 따라가고, 그리는 쪽은 좁아져요.
+        </p>
+      </div>
+    )
   return (
     <div className="flex flex-col gap-1.5">
       <ParamRow label="타입">

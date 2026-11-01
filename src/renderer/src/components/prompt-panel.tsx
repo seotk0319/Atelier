@@ -206,7 +206,7 @@ export function PromptPanel(): React.JSX.Element {
         height: request.height,
         steps,
         model: request.model,
-        charRefCount: enabledCrefs,
+        charRefCount: isV5Model(request.model) ? 0 : enabledCrefs, // V5는 인셋(무료 인페인트)
         isOpus: subscriptionTier === 'opus',
         batchCount,
         unencodedVibes: 0 // 캐시 상태는 오버레이에서 확인 — 배지로만 안내
@@ -245,7 +245,7 @@ export function PromptPanel(): React.JSX.Element {
       height: largest.height,
       steps,
       model: request.model,
-      charRefCount: enabledCrefs,
+      charRefCount: isV5Model(request.model) ? 0 : enabledCrefs, // V5는 인셋(무료 인페인트)
       isOpus: subscriptionTier === 'opus',
       batchCount: 1,
       unencodedVibes: 0
