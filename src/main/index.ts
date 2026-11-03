@@ -10,7 +10,7 @@ import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
 import { applyCharSections } from '../shared/char-sections'
 import { maxCharactersForModel } from '../shared/nai-models'
-import { isV5Model, withFixedSettings } from '../shared/nai-models'
+import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
 import { sniffImage, thumbAllowed } from './notifications/work-images'
@@ -24,13 +24,6 @@ import { checkFreeGeneration } from './nai/spending-policy'
 import { enabledCharRefRows, enabledVibeRows } from './refs/repo'
 import { snapNaiResolution } from './nai/resolution'
 import { prepareCharRefs, prepareExtraCharRefs, prepareVibes } from './refs/prepare'
-import {
-  buildInsetSource,
-  cropInsetResult,
-  insetPlan,
-  insetShare,
-  type InsetPlan
-} from './refs/inset'
 import {
   APP_NAME,
   APP_TITLE,
@@ -180,13 +173,9 @@ app.whenReady().then(() => {
         if (maySpend()) return
         const rows = enabledVibeRows()
         await checkFreeGeneration(token, rawRequest, {
-          // V5는 캐릭터 레퍼런스를 보내지 않고 무료 해상도 안의 인셋 인페인트로 바꾼다
-          characterCount: isV5Model(rawRequest.model)
-            ? 0
-            : enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0),
+          characterCount: enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0),
           vibeCount: rows.length,
-          unencodedVibes: rows.filter((r) => !r.encoded || r.encodedIe !== r.infoExtracted).length,
-          inset: isV5Model(rawRequest.model) && !rawRequest.source
+          unencodedVibes: rows.filter((r) => !r.encoded || r.encodedIe !== r.infoExtracted).length
         })
         signal.throwIfAborted()
       }
@@ -232,42 +221,12 @@ app.whenReady().then(() => {
       // 바이브/캐릭레퍼는 DB의 enabled 항목에서 준비 (바이브는 필요 시 인코딩 — 2 Anlas, 캐시됨)
       const { vibes, newlyEncoded } = await prepareVibes(token, maySpend)
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
-      // V5에는 캐릭터 레퍼런스가 없다 → 아래에서 레퍼런스 인셋으로 바꾼다
-      const v5 = isV5Model(request.model)
-      const extraCharacterReferences =
-        !v5 && rawRequest.extraCharRefs?.length
-          ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
-          : []
-      const characterReferences = v5
-        ? []
-        : [...extraCharacterReferences, ...(await prepareCharRefs())]
+      const extraCharacterReferences = rawRequest.extraCharRefs?.length
+        ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
+        : []
+      const characterReferences = [...extraCharacterReferences, ...(await prepareCharRefs())]
 
       let source = request.source
-      // 레퍼런스 인셋: 켜 둔 레퍼런스(1회성 우선, 없으면 라이브러리 첫 번째)를 왼쪽 칸에 넣고
-      // 오른쪽만 인페인트한다. 강도 = 참고 칸 크기. i2i·인페인트 중이면 건드리지 않는다.
-      let inset: InsetPlan | null = null
-      if (v5 && !source) {
-        const ref = rawRequest.extraCharRefs?.[0] ?? enabledCharRefRows()[0]
-        if (ref) {
-          inset = insetPlan(request.width, request.height, insetShare(ref.strength))
-          const built = await buildInsetSource(ref.filePath, inset)
-          source = {
-            imageBase64: built.imageBase64,
-            maskBase64: built.maskBase64,
-            strength: 1,
-            noise: 0
-          }
-          request = {
-            ...request,
-            width: inset.canvasW,
-            height: inset.canvasH,
-            // 칸을 나눈 그림이라고 알려 준다 (원글 EXIF와 같은 태그)
-            prompt: /\bsplit screen\b/i.test(request.prompt)
-              ? request.prompt
-              : request.prompt.replace(/[\s,]*$/, '') + ', split screen'
-          }
-        }
-      }
       // i2i/인페인트: 소스 해상도를 유효 NAI 해상도(64 배수·픽셀 상한)로 스냅하고 이미지를 맞춰 리사이즈.
       // NAI는 width/height가 64 배수가 아니면 400을 낸다 (임의 크기 업로드 이미지 → i2i 실패 원인).
       if (source) {
@@ -319,8 +278,7 @@ app.whenReady().then(() => {
           {
             characterCount: characterReferences.length,
             vibeCount: vibes.length,
-            unencodedVibes: 0,
-            inset: !!inset
+            unencodedVibes: 0
           }
         )
       }
@@ -352,17 +310,10 @@ app.whenReady().then(() => {
       // 씬 생성은 씬루트/<프리셋>/<씬 이름>/에 모아 저장 (NAIS2와 동일 계층)
       const scene = request.sceneId ? getScene(request.sceneId) : null
       const saved = await saveGeneratedImage({
-        // 레퍼런스 인셋이면 참고 칸을 잘라 새로 그린 쪽만 남긴다
-        png: inset ? await cropInsetResult(png, imageFormat, inset) : png,
+        png,
         sentPayload,
         seed: request.seed,
-        kind: request.sceneId
-          ? 'scene'
-          : source && !inset
-            ? source.maskBase64
-              ? 'inpaint'
-              : 'i2i'
-            : 't2i',
+        kind: request.sceneId ? 'scene' : source ? (source.maskBase64 ? 'inpaint' : 'i2i') : 't2i',
         sceneId: request.sceneId,
         format: imageFormat,
         sceneName: scene?.name,

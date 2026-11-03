@@ -19,7 +19,7 @@ import { useVibesStore, useCharRefsStore } from '../stores/refs-store'
 import { estimateAnlas } from '@shared/anlas'
 import type { V5UsageStatus } from '@shared/types'
 import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
-import { isMediumEffort, isV5Model, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
+import { isMediumEffort, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
 import { PageNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
 
@@ -204,7 +204,7 @@ export function Titlebar(): React.JSX.Element {
     steps: isMediumEffort(request.model) ? MEDIUM_EFFORT_STEPS : request.steps,
     model: request.model,
     strength: request.source ? (request.i2iStrength ?? 0.7) : 1,
-    charRefCount: isV5Model(request.model) ? 0 : enabledCrefs, // V5는 인셋(무료 인페인트)
+    charRefCount: enabledCrefs,
     isOpus: tier === 'opus',
     batchCount,
     unencodedVibes
