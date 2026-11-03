@@ -586,6 +586,12 @@ export interface IpcInvokeMap {
   }
   /** 선택 모델 기준 토큰 카운트 (V4.5=T5, V5=Qwen) */
   'tokens:count': { req: { texts: string[]; model: string }; res: { counts: number[] } }
+  /** NAI 태그 지식 지표: 태그(소문자 정리) → 모델이 아는 정도 0~10000, 목록에 없으면 null */
+  'tags:knowledge': {
+    req: { tags: string[]; model: string }
+    /** artists: 로컬 태그 사전상 작가 이름이라 확인하지 않은 태그 */
+    res: { counts: Record<string, number | null>; artists?: string[]; error?: string }
+  }
   /** 히스토리 이미지를 i2i/인페인트 소스로 읽기 */
   'images:readForSource': {
     req: { filePath: string }

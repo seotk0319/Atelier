@@ -63,6 +63,7 @@ import { getDbPath, getDb } from './db'
 import * as gpt from './gpt/service'
 import * as cover from './cover/repo'
 import * as coverArchive from './cover/archive'
+import { tagKnowledge } from './nai/tag-knowledge'
 import { analyzeArtists } from './images/artists'
 import { metadataFromPng, metadataFromPayloadJson } from './images/metadata'
 import {
@@ -716,6 +717,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
 
   handle('tags:search', ({ query, limit }) => ({ items: searchTags(query, limit) }))
+  handle('tags:knowledge', ({ tags, model }) => tagKnowledge(tags, model))
   handle('tokens:count', ({ texts, model }) => {
     // 토큰 수는 실제 전송본 기준 — 조각(<이름>)·주석을 치환/제거한 결과로 센다.
     // rng 고정(항상 첫 줄)이라 결정적이고, peek이라 <*이름> 순차 카운터를 소모하지 않는다.

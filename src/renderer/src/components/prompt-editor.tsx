@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { tokenLimitForModel } from '@shared/nai-models'
+import { ScanSearch, X } from 'lucide-react'
+import { isV5Model, tokenLimitForModel } from '@shared/nai-models'
+import {
+  isCheckable,
+  KNOWLEDGE_LABEL,
+  knowledgeLevel,
+  normalizeTag,
+  promptTags,
+  type KnowledgeLevel,
+  type PromptTag
+} from '@shared/tag-knowledge'
 import { removeComments } from '@shared/nai-presets'
 import { cn } from '../lib/utils'
 import { caretCoords } from '../lib/caret'
+import { cachedKnowledge, fetchKnowledge, knowledgeTitle } from '../lib/tag-knowledge'
+import { KnowledgeDot } from './knowledge-dot'
 import { highlightRanges } from '../lib/prompt-weights'
 import { sectionOf } from '@shared/char-sections'
 import { IMAGE_PATHS_MIME, droppedImagePaths, hasImageDrop } from '../lib/image-drag'
@@ -107,6 +119,20 @@ export function PromptEditor({
   const [tokenStart, setTokenStart] = useState(-1)
   const [popupPos, setPopupPos] = useState<{ left: number; top: number } | null>(null)
   const [imageHover, setImageHover] = useState(false)
+  // 태그 지식 지표: 자동완성 목록용 값, 점검 결과 패널
+  const [suggestKnowledge, setSuggestKnowledge] = useState<Record<string, number | null>>({})
+  const [check, setCheck] = useState<
+    | null
+    | { loading: true }
+    | {
+        loading: false
+        rows: (PromptTag & { count: number | null })[]
+        skipped: number
+        error?: string
+        pos: { left: number; top: number }
+      }
+  >(null)
+  const modelLabel = isV5Model(model) ? 'V5' : 'V4.5'
 
   const ranges = useMemo(() => highlightRanges(value), [value])
 
@@ -243,8 +269,59 @@ export function PromptEditor({
           setSuggestions(items.map((t) => ({ kind: 'tag' as const, ...t })))
           setSelected(0)
           if (items.length > 0) placePopup(items.length)
+          // 모델이 이 태그를 얼마나 아는지 (NAI 웹의 흰~검 점). 작가 태그는 확인할 수 없어 뺀다
+          const ask = items
+            .filter((t) => t.type !== 'artist')
+            .map((t) => t.tag)
+            .filter((t) => isCheckable(normalizeTag(t)))
+          const known: Record<string, number | null> = {}
+          for (const t of ask) {
+            const c = cachedKnowledge(model, t)
+            if (c !== undefined) known[normalizeTag(t)] = c
+          }
+          setSuggestKnowledge(known)
+          if (ask.some((t) => cachedKnowledge(model, t) === undefined))
+            void fetchKnowledge(model, ask).then(({ counts }) => {
+              if (searchSeqRef.current !== seq) return
+              setSuggestKnowledge(Object.fromEntries(counts))
+            })
         })
     }, 90)
+  }
+
+  /** 프롬프트의 태그를 모두 조회해 모델이 잘 모르는 태그를 보여 준다 */
+  async function runCheck(anchor: HTMLElement): Promise<void> {
+    const tags = promptTags(value)
+    const rect = anchor.getBoundingClientRect()
+    const pos = {
+      left: Math.max(8, Math.min(rect.right - 320, window.innerWidth - 328)),
+      top: Math.max(8, rect.top - 8)
+    }
+    if (!tags.length) {
+      setCheck({ loading: false, rows: [], skipped: 0, pos })
+      return
+    }
+    setCheck({ loading: true })
+    const { counts, artists, error } = await fetchKnowledge(
+      model,
+      tags.map((t) => t.key)
+    )
+    const rows = tags
+      .filter((t) => counts.has(t.key))
+      .map((t) => ({ ...t, count: counts.get(t.key) ?? null }))
+    const skipped = (value.match(/artist:/gi) || []).length + artists.size
+    setCheck({ loading: false, rows, skipped, error, pos })
+  }
+
+  function selectTag(t: PromptTag): void {
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.focus()
+    ta.setSelectionRange(t.start, t.end)
+    // 선택한 곳이 보이게 스크롤
+    const caret = caretCoords(ta, t.start)
+    ta.scrollTop = Math.max(0, caret.top - ta.clientHeight / 3)
+    syncScroll()
   }
 
   function complete(s: Suggestion): void {
@@ -398,21 +475,45 @@ export function PromptEditor({
         {value.endsWith('\n') && '\u200b'}
       </div>
 
-      {tokens !== null && (
-        <span
-          className={cn(
-            'pointer-events-none absolute bottom-1 right-1.5 rounded bg-paper/85 px-1 font-mono text-[11px] backdrop-blur-sm',
-            tokens > tokenLimit ? 'text-danger' : 'text-faint'
-          )}
-          title={
-            tokens > tokenLimit
-              ? `한도 초과 — ${tokens}/${tokenLimit} 토큰. 넘친 부분은 잘려서 반영되지 않아요`
-              : `${tokens}/${tokenLimit} 토큰`
-          }
-        >
-          {tokens}/{tokenLimit}
-        </span>
-      )}
+      <div className="pointer-events-none absolute bottom-1 right-1.5 flex items-center gap-1">
+        {!negative && value.trim() && (
+          <button
+            className="pointer-events-auto grid size-5 place-items-center rounded bg-paper/85 text-faint backdrop-blur-sm transition-colors hover:bg-surface-2 hover:text-ink"
+            title={'태그 점검 — ' + modelLabel + '가 이 프롬프트의 태그를 얼마나 아는지 봐요'}
+            aria-label="태그 점검"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => void runCheck(e.currentTarget)}
+          >
+            <ScanSearch size={12} />
+          </button>
+        )}
+        {tokens !== null && (
+          <span
+            className={cn(
+              'rounded bg-paper/85 px-1 font-mono text-[11px] backdrop-blur-sm',
+              tokens > tokenLimit ? 'text-danger' : 'text-faint'
+            )}
+            title={
+              tokens > tokenLimit
+                ? `한도 초과 — ${tokens}/${tokenLimit} 토큰. 넘친 부분은 잘려서 반영되지 않아요`
+                : `${tokens}/${tokenLimit} 토큰`
+            }
+          >
+            {tokens}/{tokenLimit}
+          </span>
+        )}
+      </div>
+
+      {check &&
+        createPortal(
+          <CheckPanel
+            state={check}
+            modelLabel={modelLabel}
+            onClose={() => setCheck(null)}
+            onPick={selectTag}
+          />,
+          document.body
+        )}
 
       {suggestions.length > 0 &&
         popupPos &&
@@ -440,6 +541,12 @@ export function PromptEditor({
                     <span className={cn('min-w-0 flex-1 truncate', TYPE_COLORS[s.type])}>
                       {s.tag}
                     </span>
+                    {Object.hasOwn(suggestKnowledge, normalizeTag(s.tag)) && (
+                      <KnowledgeDot
+                        count={suggestKnowledge[normalizeTag(s.tag)]}
+                        title={knowledgeTitle(suggestKnowledge[normalizeTag(s.tag)], modelLabel)}
+                      />
+                    )}
                     <span className="shrink-0 text-[11px] text-faint">
                       {s.nai ? 'V5' : formatCount(s.count)}
                     </span>
@@ -457,5 +564,120 @@ export function PromptEditor({
         </div>
       )}
     </div>
+  )
+}
+
+const LEVEL_ORDER: KnowledgeLevel[] = ['unknown', 'weak', 'fair', 'strong']
+
+/** 태그 점검 결과: 모델이 잘 모르는 태그부터. 누르면 프롬프트에서 그 태그를 선택한다 */
+function CheckPanel({
+  state,
+  modelLabel,
+  onClose,
+  onPick
+}: {
+  state:
+    | { loading: true }
+    | {
+        loading: false
+        rows: (PromptTag & { count: number | null })[]
+        skipped: number
+        error?: string
+        pos: { left: number; top: number }
+      }
+  modelLabel: string
+  onClose: () => void
+  onPick: (t: PromptTag) => void
+}): React.JSX.Element | null {
+  const [showAll, setShowAll] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  if (state.loading) return null
+  const counts = Object.fromEntries(LEVEL_ORDER.map((l) => [l, 0])) as Record<
+    KnowledgeLevel,
+    number
+  >
+  for (const r of state.rows) counts[knowledgeLevel(r.count)]++
+  const sorted = [...state.rows].sort((a, b) => (a.count ?? -1) - (b.count ?? -1))
+  const shown = showAll ? sorted : sorted.filter((r) => knowledgeLevel(r.count) !== 'strong')
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onMouseDown={onClose} />
+      <div
+        className="fixed z-50 flex w-80 -translate-y-full flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xl"
+        style={{ left: state.pos.left, top: state.pos.top }}
+      >
+        <div className="flex items-center gap-2 px-3 pb-1.5 pt-2.5">
+          <span className="text-[13px] font-semibold text-ink">태그 점검</span>
+          <span className="text-[11px] text-faint">{modelLabel} 기준</span>
+          <span className="flex-1" />
+          <button
+            className="grid size-6 place-items-center rounded-md text-faint hover:bg-surface-2 hover:text-ink"
+            aria-label="닫기"
+            onClick={onClose}
+          >
+            <X size={13} />
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 px-3 pb-2 text-[11px] text-muted">
+          {[...LEVEL_ORDER].reverse().map((l) => (
+            <span key={l} className="inline-flex items-center gap-1">
+              <KnowledgeDot
+                count={l === 'strong' ? 10000 : l === 'fair' ? 5000 : l === 'weak' ? 1 : null}
+              />
+              {KNOWLEDGE_LABEL[l]} {counts[l]}
+            </span>
+          ))}
+        </div>
+        <div className="no-scrollbar max-h-72 overflow-y-auto border-t border-line py-1">
+          {state.rows.length === 0 ? (
+            <p className="px-3 py-4 text-center text-[12px] text-faint">
+              {state.error || '확인할 태그가 없어요'}
+            </p>
+          ) : shown.length === 0 ? (
+            <p className="px-3 py-4 text-center text-[12px] text-faint">
+              모든 태그를 모델이 잘 알아요
+            </p>
+          ) : (
+            shown.map((r) => (
+              <button
+                key={r.key}
+                className="flex w-full items-center gap-2 px-3 py-1 text-left font-mono text-[12px] text-ink hover:bg-surface-2"
+                title={knowledgeTitle(r.count, modelLabel) + '\n누르면 프롬프트에서 선택해요'}
+                onClick={() => onPick(r)}
+              >
+                <KnowledgeDot count={r.count} />
+                <span className="min-w-0 flex-1 truncate">{r.tag}</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-faint">
+                  {r.count == null ? '모름' : r.count.toLocaleString()}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="flex items-center gap-2 border-t border-line px-3 py-1.5 text-[11px] text-faint">
+          <span className="min-w-0 flex-1 truncate">
+            {state.error && state.rows.length
+              ? state.error
+              : state.skipped
+                ? '작가 태그 ' + state.skipped + '개는 확인할 수 없어 뺐어요'
+                : '모를수록 다른 이름이나 외형 태그로 풀어 쓰세요'}
+          </span>
+          {counts.strong > 0 && (
+            <button
+              className="shrink-0 font-medium text-accent"
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? '약한 것만' : '전체 보기'}
+            </button>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
