@@ -496,6 +496,12 @@ export const migrations: ((db: Database.Database) => void)[] = [
         `ALTER TABLE scene_presets ADD COLUMN folder_id INTEGER REFERENCES scene_preset_folders(id) ON DELETE SET NULL;`
       )
     }
+  },
+
+  // v21: 씬별 시드 (null = 메인 시드 설정을 따른다)
+  (db) => {
+    if (!hasColumn(db, 'gen_scenes', 'seed'))
+      db.exec('ALTER TABLE gen_scenes ADD COLUMN seed INTEGER;')
   }
 ]
 

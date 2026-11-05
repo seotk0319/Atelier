@@ -1,6 +1,7 @@
-import { ArrowLeft, Loader2, Minus, Play, Plus, Star, Trash2 } from 'lucide-react'
+import { ArrowLeft, Dices, Loader2, Lock, Minus, Play, Plus, Star, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Scene } from '@shared/types'
+import { normalizeSceneSeed } from '@shared/scene-seed'
 import { removeComments } from '@shared/nai-presets'
 import { imageUrl } from '../lib/constants'
 import { ResolutionPicker } from './resolution-picker'
@@ -13,6 +14,7 @@ import { useLayoutStore } from '../stores/layout-store'
 import { cn } from '../lib/utils'
 import { setImagePathDrag } from '../lib/image-drag'
 import { ImageContextMenu } from './image-context-menu'
+import { ContextMenuItem } from './ui/context-menu'
 import { Lightbox } from './lightbox'
 import { PromptEditor } from './prompt-editor'
 import { Button } from './ui/button'
@@ -166,6 +168,11 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
           width={scene.width}
           height={scene.height}
           onPick={(width, height) => void update(scene.id, { width, height })}
+        />
+        <SceneSeedField
+          key={scene.id + ':' + (scene.seed ?? '')}
+          seed={scene.seed}
+          onCommit={(seed) => void update(scene.id, { seed })}
         />
         {/* 바로 생성 — 예약 없이 이 씬 1장 (NAIS2식) */}
         <Button
@@ -341,6 +348,18 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
                 key={img.id}
                 filePath={img.filePath}
                 onDelete={() => void deleteImage(img.id)}
+                extra={
+                  img.seed != null ? (
+                    <ContextMenuItem
+                      onSelect={() => {
+                        void update(scene.id, { seed: img.seed })
+                        toast('이 씬을 시드 ' + img.seed + '로 고정했어요', 'success')
+                      }}
+                    >
+                      <Lock size={13} className="text-muted" /> 이 시드로 씬 고정
+                    </ContextMenuItem>
+                  ) : undefined
+                }
               >
                 <div
                   className="group relative overflow-hidden rounded-md bg-surface-2"
@@ -390,6 +409,72 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
           onIndex={setLightboxIdx}
           onClose={() => setLightboxIdx(-1)}
         />
+      )}
+    </div>
+  )
+}
+
+/** 씬 시드 칸: 비우면 메인 시드 설정(고정/무작위)을 따른다. Enter·포커스 이동 때 저장 */
+function SceneSeedField({
+  seed,
+  onCommit
+}: {
+  seed: number | null
+  onCommit: (seed: number | null) => void
+}): React.JSX.Element {
+  const [text, setText] = useState(seed == null ? '' : String(seed))
+  const commit = (): void => {
+    const next = normalizeSceneSeed(text)
+    if (text.trim() && next == null) {
+      toast('시드는 0~4294967295 사이 정수만 넣을 수 있어요', 'error')
+      setText(seed == null ? '' : String(seed))
+      return
+    }
+    if (next !== seed) onCommit(next)
+  }
+  return (
+    <div
+      className={cn(
+        'flex h-8 w-40 shrink-0 items-center gap-1 rounded-md px-2 text-[12px]',
+        seed != null ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-muted'
+      )}
+      title={
+        seed != null
+          ? '이 씬은 항상 이 시드로 뽑아요 (여러 장이면 +1씩). 지우면 메인 시드 설정을 따라요'
+          : '비워 두면 메인 시드 설정(고정/무작위)을 따라요. 숫자를 넣으면 이 씬만 그 시드로 뽑아요'
+      }
+    >
+      {seed != null ? (
+        <Lock size={12} className="shrink-0" />
+      ) : (
+        <Dices size={12} className="shrink-0" />
+      )}
+      <input
+        className="min-w-0 flex-1 bg-transparent font-mono tabular-nums text-ink outline-none placeholder:text-faint"
+        inputMode="numeric"
+        placeholder="씬 시드 (자동)"
+        value={text}
+        onChange={(e) => setText(e.target.value.replace(/[^\d]/g, ''))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') {
+            setText(seed == null ? '' : String(seed))
+            e.currentTarget.blur()
+          }
+        }}
+      />
+      {seed != null && (
+        <button
+          className="shrink-0 text-[11px] font-medium hover:text-ink"
+          title="씬 시드 지우기"
+          onClick={() => {
+            setText('')
+            onCommit(null)
+          }}
+        >
+          해제
+        </button>
       )}
     </div>
   )

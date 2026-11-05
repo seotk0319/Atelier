@@ -3,6 +3,7 @@ import { recordNav } from '../lib/nav-history'
 import type { GenerationRequest, ListFolder, Scene, SceneImage, ScenePreset } from '@shared/types'
 import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
 import { joinPromptSections } from '@shared/char-sections'
+import { sceneSeedFrom } from '@shared/scene-seed'
 import { enabledCharacters, useCharactersStore } from './characters-store'
 import {
   enqueueBlockedMessage,
@@ -347,7 +348,9 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
         negativePrompt: patch.negativePrompt,
         width: patch.width,
         height: patch.height,
-        reserveCount: patch.reserveCount
+        reserveCount: patch.reserveCount,
+        // null = 씬 시드 해제 (메인 시드 설정을 따름)
+        ...('seed' in patch ? { seed: patch.seed ?? null } : {})
       }
     })
   },
@@ -619,7 +622,10 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
         ).length ?? 0
     // 소스는 이 호출의 인자 평가 시점(첫 await 전)에 이미 요청에 담긴다
     const result = await window.nais.invoke('queue:enqueueQuick', {
-      request: { ...buildSceneRequest(scene, preset?.characterIds ?? null), seed: sceneSeed(live) }
+      request: {
+        ...buildSceneRequest(scene, preset?.characterIds ?? null),
+        seed: sceneSeed(scene, live)
+      }
     })
     if (result.blockedReason) {
       toast(enqueueBlockedMessage(result.blockedReason), 'info')
@@ -638,14 +644,18 @@ function buildReservedRequests(
   for (const scene of scenes) {
     const request = buildSceneRequest(scene, characterIds)
     for (let i = 0; i < scene.reserveCount; i++) {
-      requests.push({ ...request, seed: sceneSeed(i) })
+      requests.push({ ...request, seed: sceneSeed(scene, i) })
     }
   }
   return requests
 }
 
-/** 씬 생성 시드 — 시드 고정을 존중 (고정이면 base+offset, 아니면 랜덤) */
-function sceneSeed(offset: number): number {
+/**
+ * 씬 생성 시드 — 씬에 시드가 있으면 그 값+offset, 없으면 메인 시드 고정을 따른다
+ * (고정이면 base+offset, 아니면 랜덤)
+ */
+function sceneSeed(scene: Scene, offset: number): number {
+  if (scene.seed != null) return sceneSeedFrom(scene.seed, offset)
   const g = useGenerationStore.getState()
   return g.seedLocked && g.request.seed >= 0 ? (g.request.seed + offset) % 4294967296 : randomSeed()
 }

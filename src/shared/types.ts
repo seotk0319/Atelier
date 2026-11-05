@@ -406,6 +406,8 @@ export interface Scene {
   height: number
   /** 예약 수 (예약→생성 워크플로. +/-로 조정) */
   reserveCount: number
+  /** 씬별 시드. null = 메인 시드 설정(고정/무작위)을 따른다 */
+  seed: number | null
   /** 목록 카드용: 최신 생성 이미지 썸네일 (없으면 '') */
   thumbnail: string
   /** 최신 생성 이미지의 원본 파일 경로 (카드에 풀해상도로 선명하게 표시. 없으면 '') */
@@ -741,7 +743,10 @@ export interface IpcInvokeMap {
     req: {
       id: number
       patch: Partial<
-        Pick<Scene, 'name' | 'prompt' | 'negativePrompt' | 'width' | 'height' | 'reserveCount'>
+        Pick<
+          Scene,
+          'name' | 'prompt' | 'negativePrompt' | 'width' | 'height' | 'reserveCount' | 'seed'
+        >
       >
     }
     res: void

@@ -10,6 +10,7 @@ import type {
   ScenePreset
 } from '../../shared/types'
 import { getDb } from '../db'
+import { normalizeSceneSeed } from '../../shared/scene-seed'
 import { libraryRoot } from '../images/storage'
 import {
   planSceneZipEntries,
@@ -28,6 +29,7 @@ interface Row {
   width: number
   height: number
   reserve_count: number
+  seed: number | null
 }
 
 function toScene(
@@ -46,6 +48,7 @@ function toScene(
     width: r.width,
     height: r.height,
     reserveCount: r.reserve_count,
+    seed: r.seed ?? null,
     thumbnail: '',
     thumbnailPath: r.thumb_path ?? '',
     imageCount: r.image_count,
@@ -231,8 +234,8 @@ export function manageScenePresets(ids: number[], action: 'duplicate' | 'delete'
         id
       )
       db.prepare(
-        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count)
-        SELECT ?, name, prompt, negative_prompt, width, height, sort_order, 0 FROM gen_scenes WHERE preset_id = ? ORDER BY sort_order, id`
+        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count, seed)
+        SELECT ?, name, prompt, negative_prompt, width, height, sort_order, 0, seed FROM gen_scenes WHERE preset_id = ? ORDER BY sort_order, id`
       ).run(id, p.id)
       return id
     })
@@ -245,7 +248,7 @@ export function listScenes(presetId: number): Scene[] {
   // 카드 썸네일: 즐겨찾기가 있으면 최상단(최신) 즐겨찾기, 없으면 최신 이미지 (NAIS2 방식)
   const rows = getDb()
     .prepare(
-      `SELECT s.id, s.preset_id, s.name, s.prompt, s.negative_prompt, s.width, s.height, s.reserve_count,
+      `SELECT s.id, s.preset_id, s.name, s.prompt, s.negative_prompt, s.width, s.height, s.reserve_count, s.seed,
               (SELECT COUNT(*) FROM images WHERE scene_id = s.id) AS image_count,
               (SELECT file_path FROM images WHERE scene_id = s.id ORDER BY favorite DESC, id DESC LIMIT 1) AS thumb_path,
               EXISTS(SELECT 1 FROM images WHERE scene_id = s.id AND favorite = 1) AS has_favorite
@@ -278,7 +281,7 @@ export function getPresetName(id: number): string | null {
 export function getScene(id: number): Scene | null {
   const r = getDb()
     .prepare(
-      `SELECT id, preset_id, name, prompt, negative_prompt, width, height, reserve_count,
+      `SELECT id, preset_id, name, prompt, negative_prompt, width, height, reserve_count, seed,
               (SELECT COUNT(*) FROM images WHERE scene_id = ?) AS image_count
        FROM gen_scenes WHERE id = ?`
     )
@@ -314,11 +317,19 @@ export function duplicateScene(id: number): number {
   return Number(
     db
       .prepare(
-        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0)`
+        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count, seed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
       )
-      .run(s.preset_id, `${s.name} 복제`, s.prompt, s.negative_prompt, s.width, s.height, max.m + 1)
-      .lastInsertRowid
+      .run(
+        s.preset_id,
+        `${s.name} 복제`,
+        s.prompt,
+        s.negative_prompt,
+        s.width,
+        s.height,
+        max.m + 1,
+        s.seed ?? null
+      ).lastInsertRowid
   )
 }
 
@@ -328,14 +339,16 @@ const FIELDS: Record<string, string> = {
   negativePrompt: 'negative_prompt',
   width: 'width',
   height: 'height',
-  reserveCount: 'reserve_count'
+  reserveCount: 'reserve_count',
+  seed: 'seed'
 }
 
 export function updateScene(id: number, patch: Record<string, unknown>): void {
   const sets: string[] = []
   const values: unknown[] = []
   for (const [key, col] of Object.entries(FIELDS)) {
-    if (patch[key] === undefined) continue
+    // seed는 null(해제)도 저장한다
+    if (patch[key] === undefined || (patch[key] === null && key !== 'seed')) continue
     sets.push(`${col} = ?`)
     values.push(patch[key])
   }
@@ -592,7 +605,7 @@ export function deleteImage(id: number, deleteFile: boolean): void {
 export async function exportScenesJson(presetId: number): Promise<boolean> {
   const scenes = getDb()
     .prepare(
-      'SELECT name, prompt, negative_prompt, width, height FROM gen_scenes WHERE preset_id = ? ORDER BY sort_order, id'
+      'SELECT name, prompt, negative_prompt, width, height, seed FROM gen_scenes WHERE preset_id = ? ORDER BY sort_order, id'
     )
     .all(presetId) as Row[]
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -602,12 +615,14 @@ export async function exportScenesJson(presetId: number): Promise<boolean> {
     filters: [{ name: 'JSON', extensions: ['json'] }]
   })
   if (result.canceled || !result.filePath) return false
+  // seed는 지정한 씬에만 적는다 (없으면 메인 시드 설정을 따른다)
   const data = scenes.map((s) => ({
     name: s.name,
     prompt: s.prompt,
     negativePrompt: s.negative_prompt,
     width: s.width,
-    height: s.height
+    height: s.height,
+    ...(s.seed != null ? { seed: s.seed } : {})
   }))
   writeFileSync(result.filePath, JSON.stringify({ version: 1, scenes: data }, null, 2), 'utf-8')
   return true
@@ -636,6 +651,8 @@ export async function importScenesJson(
       negativePrompt?: string
       width?: number
       height?: number
+      /** 씬별 시드 (0~4294967295). 없거나 이상하면 메인 시드 설정을 따른다 */
+      seed?: unknown
     }[]
   }
   const scenes = parsed.scenes ?? []
@@ -654,7 +671,7 @@ export async function importScenesJson(
     .get(targetPresetId) as { m: number }
   let order = max.m
   const stmt = db.prepare(
-    'INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, seed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   )
   db.transaction(() => {
     for (const s of scenes) {
@@ -665,7 +682,8 @@ export async function importScenesJson(
         s.negativePrompt ?? '',
         s.width ?? 832,
         s.height ?? 1216,
-        ++order
+        ++order,
+        normalizeSceneSeed(s.seed)
       )
     }
   })()

@@ -64,6 +64,7 @@ import * as gpt from './gpt/service'
 import * as cover from './cover/repo'
 import * as coverArchive from './cover/archive'
 import { tagKnowledge } from './nai/tag-knowledge'
+import { normalizeSceneSeed } from '../shared/scene-seed'
 import { analyzeArtists } from './images/artists'
 import { metadataFromPng, metadataFromPayloadJson } from './images/metadata'
 import {
@@ -586,7 +587,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('scenes:create', ({ presetId, name }) => ({ id: createScene(presetId, name) }))
   handle('scenes:get', ({ id }) => ({ scene: getScene(id) }))
   handle('scenes:update', ({ id, patch }) => {
-    updateScene(id, patch)
+    updateScene(id, 'seed' in patch ? { ...patch, seed: normalizeSceneSeed(patch.seed) } : patch)
   })
   handle('scenes:duplicate', ({ id }) => ({ id: duplicateScene(id) }))
   handle('scenes:delete', ({ id }) => {
