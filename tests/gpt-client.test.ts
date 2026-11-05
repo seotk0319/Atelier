@@ -42,12 +42,10 @@ describe('gpt client', () => {
     expect(r.end()).toMatchObject({ b64: null, text: "I can't make that." })
   })
 
-  // gpt-6-astra는 reasoning 'none'을 400으로 거절한다 (2026-10-17 서버 응답)
-  it('asks gpt-6-astra for low reasoning and keeps none for the older models', () => {
-    expect((buildBody(req({ model: 'gpt-6-astra' })) as { reasoning: unknown }).reasoning).toEqual({
-      effort: 'low'
-    })
-    expect((buildBody(req()) as { reasoning: unknown }).reasoning).toEqual({ effort: 'none' })
+  // 2026-11-05: 서버가 reasoning 단계를 전부 "Complexity … not supported"로 거절해 보내지 않는다
+  it('sends no reasoning effort for any model', () => {
+    expect('reasoning' in buildBody(req({ model: 'gpt-6-astra' }))).toBe(false)
+    expect('reasoning' in buildBody(req())).toBe(false)
   })
 
   it('edits the first image, adds the alpha mask to the tool, and keeps refs after it', () => {

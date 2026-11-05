@@ -1,7 +1,7 @@
 /**
  * ChatGPT Codex 응답 API로 이미지 한 장을 만든다. 요청 모양은 ima2-gen(MIT)을 참고했다.
  */
-import { reasoningEffortFor, type GptRequest } from '../../shared/gpt'
+import type { GptRequest } from '../../shared/gpt'
 import type { GptCredentials } from './auth'
 
 const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses'
@@ -98,7 +98,8 @@ export function buildBody(req: GptRequest): Record<string, unknown> {
       }
     ],
     tool_choice: 'required',
-    reasoning: { effort: reasoningEffortFor(req.model) },
+    // reasoning은 보내지 않는다. 2026-11-05부터 서버가 어떤 단계(none~xhigh)든
+    // "Complexity '…' is not supported for this image model"로 거절하고, 빼면 모든 모델이 그린다.
     store: false,
     stream: true
   }

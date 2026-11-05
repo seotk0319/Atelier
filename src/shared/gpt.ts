@@ -14,14 +14,6 @@ export const GPT_MODELS = [
 ] as const
 export type GptModel = (typeof GPT_MODELS)[number]
 
-/**
- * 모델별 추론 단계. gpt-6-astra는 'none'을 받지 않고 low부터 받는다 (2026-10-17 서버 응답 확인).
- * 이미지 만들기는 도구 호출 한 번이라 가장 낮은 단계로 둔다.
- */
-export function reasoningEffortFor(model: string): 'none' | 'low' {
-  return model.startsWith('gpt-6-astra') ? 'low' : 'none'
-}
-
 export const GPT_SIZES = [
   { value: 'auto', label: '자동' },
   { value: '1024x1024', label: '정사각' },
