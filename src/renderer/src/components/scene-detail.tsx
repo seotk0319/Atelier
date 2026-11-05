@@ -423,7 +423,13 @@ function SceneSeedField({
   onCommit: (seed: number | null) => void
 }): React.JSX.Element {
   const [text, setText] = useState(seed == null ? '' : String(seed))
+  // Esc 취소 뒤 이어지는 blur가 편집 중이던 값을 저장하지 않게 막는다
+  const cancelledRef = useRef(false)
   const commit = (): void => {
+    if (cancelledRef.current) {
+      cancelledRef.current = false
+      return
+    }
     const next = normalizeSceneSeed(text)
     if (text.trim() && next == null) {
       toast('시드는 0~4294967295 사이 정수만 넣을 수 있어요', 'error')
@@ -459,6 +465,9 @@ function SceneSeedField({
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur()
           if (e.key === 'Escape') {
+            // 입력 취소만 하고 씬 상세 닫기(전역 Esc)로 번지지 않게
+            e.preventDefault()
+            cancelledRef.current = true
             setText(seed == null ? '' : String(seed))
             e.currentTarget.blur()
           }
