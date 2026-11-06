@@ -300,6 +300,7 @@ function ItemRow({
   const thumb = useBlobThumb(item.blobKey, 44)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const confirmTimer = useRef<number | null>(null)
+  const dragStartTimer = useRef<number | null>(null)
   const isTypo = kind === 'typos'
 
   useEffect(
@@ -340,9 +341,18 @@ function ItemRow({
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData(ITEM_MIME, JSON.stringify({ kind, id: item.id }))
-        onDragStart({ kind, id: item.id })
+        // 끌기 시작 이벤트 안에서 목록 모양이 바뀌면(타이포마다 문구 자리가 생김) 크롬이 끌기를 바로 취소한다.
+        // 그래서 한 박자 뒤에 알린다.
+        dragStartTimer.current = window.setTimeout(() => {
+          dragStartTimer.current = null
+          onDragStart({ kind, id: item.id })
+        }, 0)
       }}
-      onDragEnd={onDragEnd}
+      onDragEnd={() => {
+        if (dragStartTimer.current !== null) window.clearTimeout(dragStartTimer.current)
+        dragStartTimer.current = null
+        onDragEnd()
+      }}
       onDragOver={onDragOverRow}
     >
       {!isTypo && (
