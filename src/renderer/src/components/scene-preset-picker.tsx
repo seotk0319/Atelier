@@ -12,6 +12,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CornerLeftUp,
   Folder,
   FolderInput,
   FolderPlus,
@@ -25,15 +26,24 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { ListFolder, ScenePreset } from '@shared/types'
-import { buildDisplayRows, DIVIDER_KEY, rowKey } from '../lib/folder-list'
+import { DIVIDER_KEY } from '../lib/folder-list'
+import { buildPresetRows, folderCounts, folderPath, type PresetTreeRow } from '../lib/preset-tree'
 import { cn } from '../lib/utils'
 import { askConfirm, askText } from '../stores/dialog-store'
 import { useScenesStore } from '../stores/scenes-store'
+import { toast } from '../stores/toast-store'
 import { SortableRow } from './sortable-list'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 
+const treeKey = (row: PresetTreeRow<ScenePreset>): string =>
+  row.type === 'divider'
+    ? DIVIDER_KEY
+    : row.type === 'folder'
+      ? 'f-' + row.folder.id
+      : 'i-' + row.item.id
+
 /**
- * 씬 프리셋 고르기. 작품별 폴더(한 단계)로 묶고, 검색은 폴더를 가리지 않는다.
+ * 씬 프리셋 고르기. 작품 폴더 아래 캐릭터 폴더까지 2단계로 묶고, 검색은 폴더를 가리지 않는다.
  * 폴더는 앱 안 목록만 정리한다 — 디스크의 이미지 저장 폴더는 그대로.
  */
 export function ScenePresetPicker({
@@ -49,17 +59,23 @@ export function ScenePresetPicker({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   // 지금 프리셋이 든 폴더는 열 때 접혀 있어도 펼쳐 보여 준다 (저장된 접힘 상태는 그대로)
-  const [revealId, setRevealId] = useState<number | null>(null)
+  const [reveal, setReveal] = useState<number[]>([])
 
   const active = presets.find((p) => p.id === activePresetId)
   const activeFolder = folders.find((f) => f.id === active?.folderId)
-  const folderName = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders])
+  const activeParent = folders.find((f) => f.id === activeFolder?.parentId)
+  const folderName = useMemo(
+    () => new Map(folders.map((f) => [f.id, folderPath(folders, f.id)])),
+    [folders]
+  )
+  const revealFor = (): number[] =>
+    [activeFolder?.id, activeFolder?.parentId].filter((x): x is number => x != null)
 
   const onOpenChange = (next: boolean): void => {
     setOpen(next)
     if (next) {
       setQuery('')
-      setRevealId(active?.folderId ?? null)
+      setReveal(revealFor())
     }
   }
 
@@ -74,11 +90,11 @@ export function ScenePresetPicker({
     setTimeout(fn, 0)
   }
 
-  const collapsed = (f: ListFolder): boolean => f.collapsed && revealId !== f.id
+  const collapsed = (f: ListFolder): boolean => f.collapsed && !reveal.includes(f.id)
   const toggle = (f: ListFolder): void => {
     const st = useScenesStore.getState()
-    if (revealId === f.id) {
-      setRevealId(null)
+    if (reveal.includes(f.id)) {
+      setReveal(reveal.filter((id) => id !== f.id))
       if (!f.collapsed) void st.setPresetFolderCollapsed(f.id, true)
       return
     }
@@ -86,17 +102,14 @@ export function ScenePresetPicker({
   }
 
   const rows = useMemo(
-    () =>
-      buildDisplayRows(folders, presets).filter(
-        (r) => r.type !== 'item' || !r.hidden || r.item.folderId === revealId
-      ),
-    [folders, presets, revealId]
+    () => buildPresetRows(folders, presets, (f) => f.collapsed && !reveal.includes(f.id)),
+    [folders, presets, reveal]
   )
-  const counts = useMemo(() => {
-    const m = new Map<number, number>()
-    for (const p of presets) if (p.folderId != null) m.set(p.folderId, (m.get(p.folderId) ?? 0) + 1)
-    return m
-  }, [presets])
+  const counts = useMemo(() => folderCounts(folders, presets), [folders, presets])
+  const hasKids = useMemo(
+    () => new Set(folders.map((f) => f.parentId).filter((x): x is number => x != null)),
+    [folders]
+  )
 
   const q = query.trim().toLowerCase()
   const matches = q
@@ -134,6 +147,14 @@ export function ScenePresetPicker({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button className="flex h-9 min-w-0 max-w-[420px] items-center gap-1.5 rounded-lg bg-paper px-3 text-[13px] font-semibold text-ink outline-none hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent/40">
+          {activeParent && (
+            <>
+              <span className="min-w-0 max-w-[120px] shrink truncate font-medium text-muted">
+                {activeParent.name}
+              </span>
+              <ChevronRight size={12} className="shrink-0 text-faint" />
+            </>
+          )}
           {activeFolder && (
             <>
               <span className="min-w-0 max-w-[160px] shrink truncate font-medium text-muted">
@@ -193,12 +214,15 @@ export function ScenePresetPicker({
               modifiers={[restrictToVerticalAxis, restrictToParentElement]}
               onDragEnd={onDragEnd}
             >
-              <SortableContext items={rows.map(rowKey)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={rows.map(treeKey)} strategy={verticalListSortingStrategy}>
                 {rows.map((row) =>
                   row.type === 'folder' ? (
                     <FolderRow
-                      key={rowKey(row)}
+                      key={treeKey(row)}
                       folder={row.folder}
+                      depth={row.depth}
+                      folders={folders}
+                      hasKids={hasKids.has(row.folder.id)}
                       count={counts.get(row.folder.id) ?? 0}
                       collapsed={collapsed(row.folder)}
                       onToggle={() => toggle(row.folder)}
@@ -207,6 +231,16 @@ export function ScenePresetPicker({
                           const name = await askText(row.folder.name + '에 새 프리셋', '새 프리셋')
                           if (name)
                             await useScenesStore.getState().createPreset(name, row.folder.id)
+                        })
+                      }
+                      onAddSub={() =>
+                        later(async () => {
+                          const name = await askText(
+                            row.folder.name + ' 아래 새 폴더 (캐릭터 등)',
+                            '새 폴더'
+                          )
+                          if (name)
+                            await useScenesStore.getState().createPresetFolder(name, row.folder.id)
                         })
                       }
                       onRename={() =>
@@ -218,16 +252,20 @@ export function ScenePresetPicker({
                       }
                       onDelete={() =>
                         later(async () => {
-                          const n = counts.get(row.folder.id) ?? 0
+                          const n = presets.filter((p) => p.folderId === row.folder.id).length
+                          const kids = folders.filter((f) => f.parentId === row.folder.id).length
                           const ok = await askConfirm('폴더 삭제', {
                             message:
-                              n > 0
+                              (n > 0
                                 ? '"' +
                                   row.folder.name +
                                   '" 폴더만 지워요. 안의 프리셋 ' +
                                   n +
                                   '개와 씬·이미지는 그대로 "폴더 없음"으로 옮겨요.'
-                                : '"' + row.folder.name + '" 폴더를 지워요.',
+                                : '"' + row.folder.name + '" 폴더를 지워요.') +
+                              (kids > 0
+                                ? ' 하위 폴더 ' + kids + '개는 맨 위 단계로 올라와요.'
+                                : ''),
                             confirmLabel: '폴더 삭제',
                             danger: true
                           })
@@ -239,9 +277,9 @@ export function ScenePresetPicker({
                     <DividerRow key={DIVIDER_KEY} />
                   ) : (
                     <PresetRow
-                      key={rowKey(row)}
+                      key={treeKey(row)}
                       preset={row.item}
-                      indent={row.item.folderId != null}
+                      depth={row.depth}
                       active={row.item.id === activePresetId}
                       folders={folders}
                       canDelete={presets.length > 1}
@@ -308,25 +346,52 @@ const ICON_BTN =
 
 function FolderRow({
   folder,
+  depth,
+  folders,
+  hasKids,
   count,
   collapsed,
   onToggle,
   onAdd,
+  onAddSub,
   onRename,
   onDelete
 }: {
   folder: ListFolder
+  depth: 0 | 1
+  folders: ListFolder[]
+  hasKids: boolean
   count: number
   collapsed: boolean
   onToggle: () => void
   onAdd: () => void
+  onAddSub: () => void
   onRename: () => void
   onDelete: () => void
 }): React.JSX.Element {
+  const [moveOpen, setMoveOpen] = useState(false)
+  const tops = folders.filter((f) => f.parentId == null && f.id !== folder.id)
+  const moveTo = (parentId: number | null): void => {
+    setMoveOpen(false)
+    if (parentId === (folder.parentId ?? null)) return
+    void useScenesStore
+      .getState()
+      .setPresetFolderParent(folder.id, parentId)
+      .then((r) => {
+        if (!r.ok) toast(r.message, 'error')
+      })
+  }
   return (
-    <SortableRow id={'f-' + folder.id} className="group mt-0.5 gap-0.5" onTap={onToggle}>
+    <SortableRow
+      id={'f-' + folder.id}
+      className={cn('group mt-0.5 gap-0.5', depth === 1 && 'pl-5')}
+      onTap={onToggle}
+    >
       <div
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] font-semibold text-ink hover:bg-surface-2"
+        className={cn(
+          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] text-ink hover:bg-surface-2',
+          depth === 0 ? 'font-semibold' : 'font-medium'
+        )}
         title={collapsed ? '펼치기' : '접기'}
       >
         {collapsed ? (
@@ -341,6 +406,56 @@ function FolderRow({
       <button className={ICON_BTN} onClick={onAdd} title="이 폴더에 새 프리셋">
         <Plus size={12} />
       </button>
+      {depth === 0 && (
+        <button className={ICON_BTN} onClick={onAddSub} title="하위 폴더 만들기 (캐릭터별 등)">
+          <FolderPlus size={12} />
+        </button>
+      )}
+      <Popover open={moveOpen} onOpenChange={setMoveOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(ICON_BTN, moveOpen && 'opacity-100')}
+            title="다른 폴더 아래로 옮기기"
+          >
+            <FolderInput size={12} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" side="right" className="w-56 p-1">
+          <p className="px-2 pb-1 pt-0.5 text-[11px] font-medium text-faint">
+            이 폴더를 어디 아래로
+          </p>
+          {hasKids ? (
+            <p className="px-2 py-1.5 text-[12px] leading-relaxed text-muted">
+              하위 폴더가 있는 폴더는 다른 폴더 아래로 넣을 수 없어요 (2단계까지)
+            </p>
+          ) : (
+            <div className="no-scrollbar max-h-64 overflow-y-auto">
+              {tops.map((f) => (
+                <MoveItem
+                  key={f.id}
+                  current={folder.parentId === f.id}
+                  onClick={() => moveTo(f.id)}
+                >
+                  <Folder size={12} className="shrink-0 text-muted" />
+                  <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                </MoveItem>
+              ))}
+              {tops.length === 0 && (
+                <p className="px-2 py-1.5 text-[12px] text-faint">다른 폴더가 없어요</p>
+              )}
+            </div>
+          )}
+          {depth === 1 && (
+            <>
+              <div className="my-1 h-px bg-line" />
+              <MoveItem current={false} onClick={() => moveTo(null)}>
+                <CornerLeftUp size={12} className="shrink-0 text-muted" />
+                <span className="min-w-0 flex-1 truncate">맨 위 단계로 꺼내기</span>
+              </MoveItem>
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
       <button className={ICON_BTN} onClick={onRename} title="폴더 이름 변경">
         <Pencil size={12} />
       </button>
@@ -375,7 +490,7 @@ function DividerRow(): React.JSX.Element {
 
 function PresetRow({
   preset: p,
-  indent,
+  depth,
   active,
   folders,
   canDelete,
@@ -384,7 +499,7 @@ function PresetRow({
   onLater
 }: {
   preset: ScenePreset
-  indent: boolean
+  depth: 0 | 1 | 2
   active: boolean
   folders: ListFolder[]
   canDelete: boolean
@@ -402,7 +517,7 @@ function PresetRow({
   return (
     <SortableRow
       id={'i-' + p.id}
-      className={cn('group gap-0.5', indent && 'pl-5')}
+      className={cn('group gap-0.5', depth === 1 && 'pl-5', depth === 2 && 'pl-10')}
       onTap={onChoose}
     >
       <div
@@ -446,7 +561,10 @@ function PresetRow({
           <div className="no-scrollbar max-h-64 overflow-y-auto">
             {folders.map((f) => (
               <MoveItem key={f.id} current={p.folderId === f.id} onClick={() => moveTo(f.id)}>
-                <Folder size={12} className="shrink-0 text-muted" />
+                <Folder
+                  size={12}
+                  className={cn('shrink-0 text-muted', f.parentId != null && 'ml-4')}
+                />
                 <span className="min-w-0 flex-1 truncate">{f.name}</span>
               </MoveItem>
             ))}

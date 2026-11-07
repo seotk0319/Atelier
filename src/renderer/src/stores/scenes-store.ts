@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { recordNav } from '../lib/nav-history'
 import type { GenerationRequest, ListFolder, Scene, SceneImage, ScenePreset } from '@shared/types'
 import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
+import { moveFolderRow, orderFolders } from '../lib/preset-tree'
 import { joinPromptSections } from '@shared/char-sections'
 import { sceneSeedFrom } from '@shared/scene-seed'
 import { enabledCharacters, useCharactersStore } from './characters-store'
@@ -48,7 +49,13 @@ interface ScenesState {
   /** 폴더 목록 드래그 결과 반영 (rowKey: "f-1" | "i-3" | "divider") */
   movePresetRow: (activeKey: string, overKey: string) => Promise<void>
   movePresetsToFolder: (ids: number[], folderId: number | null) => Promise<void>
-  createPresetFolder: (name: string) => Promise<number>
+  /** parentId를 주면 그 폴더 아래 하위 폴더 (2단계까지) */
+  createPresetFolder: (name: string, parentId?: number | null) => Promise<number>
+  /** 폴더를 다른 폴더 아래로 넣거나 맨 위로 꺼낸다 */
+  setPresetFolderParent: (
+    id: number,
+    parentId: number | null
+  ) => Promise<{ ok: boolean; message: string }>
   renamePresetFolder: (id: number, name: string) => Promise<void>
   setPresetFolderCollapsed: (id: number, collapsed: boolean) => Promise<void>
   deletePresetFolder: (id: number) => Promise<void>
@@ -204,7 +211,10 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   favoritesOnly: false,
 
   loadPresets: async (loadScenes = true) => {
-    const { items, folders } = await window.nais.invoke('scenePresets:list', undefined)
+    const list = await window.nais.invoke('scenePresets:list', undefined)
+    const items = list.items
+    // 하위 폴더를 상위 폴더 바로 뒤에 둔 순서로 들고 있어야 공용 정렬·저장 규약이 맞는다
+    const folders = orderFolders(list.folders)
     set({ presets: canonicalize(folders, items), presetFolders: folders })
     if (!items.some((p) => p.id === get().activePresetId) && items[0]) {
       set({ activePresetId: items[0].id })
@@ -235,6 +245,16 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   },
   movePresetRow: async (activeKey, overKey) => {
     const { presetFolders, presets } = get()
+    if (activeKey.startsWith('f-')) {
+      // 폴더는 같은 단계 안에서만 순서를 바꾼다 (하위 폴더가 상위를 따라다닌다)
+      const folders = moveFolderRow(presetFolders, presets, activeKey, overKey)
+      if (!folders) return
+      set({ presetFolders: folders, presets: canonicalize(folders, presets) })
+      await window.nais.invoke('scenePresets:reorderTree', {
+        order: toOrderEntries(folders, get().presets)
+      })
+      return
+    }
     const next = moveRow(presetFolders, presets, activeKey, overKey)
     set({ presetFolders: next.folders, presets: canonicalize(next.folders, next.items) })
     await window.nais.invoke('scenePresets:reorderTree', {
@@ -250,10 +270,20 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     set({ presets: canonicalize(presetFolders, [...rest, ...moved]) })
     await window.nais.invoke('scenePresets:moveToFolder', { ids, folderId })
   },
-  createPresetFolder: async (name) => {
-    const { id } = await window.nais.invoke('scenePresetFolders:create', { name })
-    set({ presetFolders: [...get().presetFolders, { id, name, collapsed: false, color: null }] })
+  createPresetFolder: async (name, parentId = null) => {
+    const { id } = await window.nais.invoke('scenePresetFolders:create', { name, parentId })
+    set({
+      presetFolders: orderFolders([
+        ...get().presetFolders,
+        { id, name, collapsed: false, color: null, parentId }
+      ])
+    })
     return id
+  },
+  setPresetFolderParent: async (id, parentId) => {
+    const result = await window.nais.invoke('scenePresetFolders:setParent', { id, parentId })
+    if (result.ok) await get().loadPresets(false)
+    return result
   },
   renamePresetFolder: async (id, name) => {
     set({ presetFolders: get().presetFolders.map((f) => (f.id === id ? { ...f, name } : f)) })
@@ -266,7 +296,12 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     await window.nais.invoke('scenePresetFolders:setCollapsed', { id, collapsed })
   },
   deletePresetFolder: async (id) => {
-    const folders = get().presetFolders.filter((f) => f.id !== id)
+    // 하위 폴더는 맨 위 단계로 올라온다 (본체도 같게 처리)
+    const folders = orderFolders(
+      get()
+        .presetFolders.filter((f) => f.id !== id)
+        .map((f) => (f.parentId === id ? { ...f, parentId: null } : f))
+    )
     const items = get().presets.map((p) => (p.folderId === id ? { ...p, folderId: null } : p))
     set({ presetFolders: folders, presets: canonicalize(folders, items) })
     await window.nais.invoke('scenePresetFolders:delete', { id })

@@ -32,9 +32,25 @@ export interface AssistantContext {
   gpt: { size: string; count: number; model: string; hasPrompt: boolean } | null
 }
 
-/** AI가 내는 변경 계획의 한 단계. ref는 같은 계획 안에서 새로 만든 폴더를 가리킨다. */
+/**
+ * AI가 내는 변경 계획의 한 단계. ref는 같은 계획 안에서 새로 만든 폴더를 가리킨다.
+ * 폴더는 2단계까지: parentId/parentRef가 있으면 그 폴더 아래 하위 폴더.
+ */
 export type AssistantOp =
-  | { type: 'create_folder'; ref: string; name: string }
+  | {
+      type: 'create_folder'
+      ref: string
+      name: string
+      parentId?: number | null
+      parentRef?: string
+    }
+  | {
+      type: 'move_folder'
+      folderId?: number
+      folderRef?: string
+      parentId?: number | null
+      parentRef?: string
+    }
   | { type: 'move_presets'; presetIds: number[]; folderId?: number | null; folderRef?: string }
   | { type: 'rename_preset'; presetId: number; name: string }
   | { type: 'rename_folder'; folderId: number; name: string }

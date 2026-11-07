@@ -9,6 +9,8 @@ import type {
 import { useGptStore } from './gpt-store'
 import { useLayoutStore } from './layout-store'
 import { useScenesStore } from './scenes-store'
+import { canonicalize, toOrderEntries } from '../lib/folder-list'
+import { folderPath, orderFolders } from '../lib/preset-tree'
 import { toast } from './toast-store'
 
 /**
@@ -32,8 +34,11 @@ type Undo =
   | { t: 'move'; groups: { folderId: number | null; ids: number[] }[] }
   | { t: 'renamePreset'; id: number; name: string }
   | { t: 'renameFolder'; id: number; name: string }
+  | { t: 'folderParent'; id: number; parentId: number | null }
   | { t: 'reserve'; presetId: number; prev: { id: number; count: number }[] }
   | { t: 'prompt'; prompt: string }
+  /** 실행 전 폴더·프리셋 순서. 되돌리기 끝에 순서까지 되살린다 */
+  | { t: 'order'; folderIds: number[]; presetIds: number[] }
 
 export type AssistantItem =
   | { id: number; kind: 'user'; text: string }
@@ -108,12 +113,40 @@ function describe(plan: AssistantPlan | null): PlanRow[] {
   const s = useScenesStore.getState()
   const presetName = (id: number): string => s.presets.find((p) => p.id === id)?.name ?? '#' + id
   const folderName = (id: number | null | undefined): string =>
-    id == null ? '폴더 밖' : (s.presetFolders.find((f) => f.id === id)?.name ?? '#' + id)
+    id == null ? '폴더 밖' : folderPath(s.presetFolders, id) || '#' + id
   const refNames = new Map<string, string>()
   return plan.ops.map((op): PlanRow => {
     if (op.type === 'create_folder') {
       refNames.set(op.ref, op.name)
-      return { kind: 'folder', lead: '새 폴더', strong: op.name, tail: '', names: [] }
+      const parent = op.parentRef
+        ? (refNames.get(op.parentRef) ?? op.parentRef)
+        : op.parentId != null
+          ? folderName(op.parentId)
+          : ''
+      return {
+        kind: 'folder',
+        lead: '새 폴더',
+        strong: op.name,
+        tail: parent ? '(' + parent + ' 아래)' : '',
+        names: []
+      }
+    }
+    if (op.type === 'move_folder') {
+      const name = op.folderRef
+        ? (refNames.get(op.folderRef) ?? op.folderRef)
+        : folderName(op.folderId)
+      const parent = op.parentRef
+        ? (refNames.get(op.parentRef) ?? op.parentRef)
+        : op.parentId != null
+          ? folderName(op.parentId)
+          : null
+      return {
+        kind: 'move',
+        lead: '폴더 ' + name + ' →',
+        strong: parent ?? '맨 위 단계',
+        tail: parent ? '아래로' : '로',
+        names: []
+      }
     }
     if (op.type === 'move_presets')
       return {
@@ -163,14 +196,34 @@ async function execute(plan: AssistantPlan, undo: Undo[]): Promise<string> {
   let folders = 0
   let moved = 0
   let renamed = 0
+  let nested = 0
   let reserved = 0
   const touchedReserve = new Set<number>()
+  {
+    const s = scenes()
+    undo.push({
+      t: 'order',
+      folderIds: s.presetFolders.map((f) => f.id),
+      presetIds: s.presets.map((p) => p.id)
+    })
+  }
   for (const op of plan.ops) {
     if (op.type === 'create_folder') {
-      const id = await scenes().createPresetFolder(op.name)
+      const parent = op.parentRef ? refs.get(op.parentRef) : (op.parentId ?? null)
+      if (parent === undefined) throw new Error('상위 폴더를 찾지 못했어요: ' + op.parentRef)
+      const id = await scenes().createPresetFolder(op.name, parent)
       refs.set(op.ref, id)
       undo.push({ t: 'deleteFolder', id })
       folders++
+    } else if (op.type === 'move_folder') {
+      const id = op.folderRef ? refs.get(op.folderRef) : op.folderId
+      const parent = op.parentRef ? refs.get(op.parentRef) : (op.parentId ?? null)
+      if (id == null || parent === undefined) throw new Error('폴더를 찾지 못했어요')
+      const prev = scenes().presetFolders.find((f) => f.id === id)?.parentId ?? null
+      const result = await scenes().setPresetFolderParent(id, parent)
+      if (!result.ok) throw new Error(result.message)
+      undo.push({ t: 'folderParent', id, parentId: prev })
+      nested++
     } else if (op.type === 'move_presets') {
       const target = op.folderRef ? refs.get(op.folderRef) : (op.folderId ?? null)
       if (target === undefined) throw new Error('폴더를 찾지 못했어요: ' + op.folderRef)
@@ -217,6 +270,7 @@ async function execute(plan: AssistantPlan, undo: Undo[]): Promise<string> {
     parts.push(['폴더 ' + folders + '개를 만들고', '폴더 ' + folders + '개를 만들었어요'])
   if (moved) parts.push(['프리셋 ' + moved + '개를 옮기고', '프리셋 ' + moved + '개를 옮겼어요'])
   if (renamed) parts.push(['이름 ' + renamed + '개를 바꾸고', '이름 ' + renamed + '개를 바꿨어요'])
+  if (nested) parts.push(['폴더 ' + nested + '개를 옮기고', '폴더 ' + nested + '개를 옮겼어요'])
   if (reserved)
     parts.push(['씬 ' + reserved + '개의 예약을 정하고', '씬 ' + reserved + '개의 예약을 정했어요'])
   if (!parts.length) return '바꿀 것이 없었어요'
@@ -233,6 +287,8 @@ async function applyUndo(steps: Undo[]): Promise<void> {
       await scenes().renamePreset(step.id, step.name)
     } else if (step.t === 'renameFolder') {
       await scenes().renamePresetFolder(step.id, step.name)
+    } else if (step.t === 'folderParent') {
+      await scenes().setPresetFolderParent(step.id, step.parentId)
     } else if (step.t === 'deleteFolder') {
       await scenes().deletePresetFolder(step.id)
     } else if (step.t === 'reserve') {
@@ -241,6 +297,25 @@ async function applyUndo(steps: Undo[]): Promise<void> {
       touched.add(step.presetId)
     } else if (step.t === 'prompt') {
       useGptStore.getState().setForm({ prompt: step.prompt })
+    } else if (step.t === 'order') {
+      // 남은 폴더·프리셋을 실행 전 순서대로 다시 줄 세운다 (소속은 이미 되돌린 그대로)
+      await scenes().loadPresets(false)
+      const s = scenes()
+      const rank = (ids: number[], id: number): number => {
+        const i = ids.indexOf(id)
+        return i < 0 ? ids.length : i
+      }
+      const folders = orderFolders(
+        [...s.presetFolders].sort((a, b) => rank(step.folderIds, a.id) - rank(step.folderIds, b.id))
+      )
+      const presets = canonicalize(
+        folders,
+        [...s.presets].sort((a, b) => rank(step.presetIds, a.id) - rank(step.presetIds, b.id))
+      )
+      useScenesStore.setState({ presetFolders: folders, presets })
+      await window.nais.invoke('scenePresets:reorderTree', {
+        order: toOrderEntries(folders, presets)
+      })
     }
   }
   await scenes().loadPresets(touched.has(scenes().activePresetId))

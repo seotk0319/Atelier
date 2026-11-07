@@ -502,6 +502,12 @@ export const migrations: ((db: Database.Database) => void)[] = [
   (db) => {
     if (!hasColumn(db, 'gen_scenes', 'seed'))
       db.exec('ALTER TABLE gen_scenes ADD COLUMN seed INTEGER;')
+  },
+
+  // v22: 씬 프리셋 폴더 2단계 (작품 폴더 아래 캐릭터 폴더). null = 맨 위 단계
+  (db) => {
+    if (!hasColumn(db, 'scene_preset_folders', 'parent_id'))
+      db.exec('ALTER TABLE scene_preset_folders ADD COLUMN parent_id INTEGER;')
   }
 ]
 

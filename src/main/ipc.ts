@@ -128,6 +128,7 @@ import {
   reorderPresets,
   listPresetFolders,
   createPresetFolder,
+  setPresetFolderParent,
   renamePresetFolder,
   setPresetFolderCollapsed,
   deletePresetFolder,
@@ -492,7 +493,12 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('scenePresets:moveToFolder', ({ ids, folderId }) => {
     movePresetsToFolder(ids, folderId)
   })
-  handle('scenePresetFolders:create', ({ name }) => ({ id: createPresetFolder(name) }))
+  handle('scenePresetFolders:create', ({ name, parentId }) => ({
+    id: createPresetFolder(name, parentId ?? null)
+  }))
+  handle('scenePresetFolders:setParent', ({ id, parentId }) =>
+    setPresetFolderParent(Number(id), parentId == null ? null : Number(parentId))
+  )
   handle('scenePresetFolders:rename', ({ id, name }) => {
     renamePresetFolder(id, name)
   })

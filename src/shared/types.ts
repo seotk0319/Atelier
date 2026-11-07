@@ -223,6 +223,8 @@ export interface ListFolder {
   collapsed: boolean
   /** 구분용 색 (hex). null = 기본 (틴트 없음) */
   color: string | null
+  /** 상위 폴더 (씬 프리셋 폴더만 씀. 2단계까지). 없으면 맨 위 단계 */
+  parentId?: number | null
 }
 export type CharacterFolder = ListFolder
 
@@ -468,7 +470,12 @@ export interface IpcInvokeMap {
   'assistant:status': { req: void; res: AssistantStatus }
   'assistant:setKey': { req: { key: string }; res: { ok: boolean; message: string } }
   'assistant:setConfig': {
-    req: { model?: AssistantModel; guide?: string | null; guideName?: string | null; showDock?: boolean }
+    req: {
+      model?: AssistantModel
+      guide?: string | null
+      guideName?: string | null
+      showDock?: boolean
+    }
     res: AssistantStatus
   }
   'assistant:importGuide': { req: void; res: AssistantStatus & { message: string } }
@@ -707,7 +714,15 @@ export interface IpcInvokeMap {
   /** 폴더·프리셋 전체 순서 (미분류 먼저, 소속은 직전 폴더에서 파생) */
   'scenePresets:reorderTree': { req: { order: CharacterOrderEntry[] }; res: void }
   'scenePresets:moveToFolder': { req: { ids: number[]; folderId: number | null }; res: void }
-  'scenePresetFolders:create': { req: { name: string }; res: { id: number } }
+  'scenePresetFolders:create': {
+    req: { name: string; parentId?: number | null }
+    res: { id: number }
+  }
+  /** 폴더를 다른 폴더 아래로 넣거나(2단계까지) 맨 위 단계로 꺼낸다 */
+  'scenePresetFolders:setParent': {
+    req: { id: number; parentId: number | null }
+    res: { ok: boolean; message: string }
+  }
   'scenePresetFolders:rename': { req: { id: number; name: string }; res: void }
   'scenePresetFolders:setCollapsed': { req: { id: number; collapsed: boolean }; res: void }
   /** 폴더만 지우고 안의 프리셋은 폴더 없음으로 */

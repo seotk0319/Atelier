@@ -104,27 +104,77 @@ export function createPreset(name: string, folderId: number | null = null): numb
   )
 }
 
-// ── 프리셋 폴더 (작품별 묶음) ─────────────────────────────
+// ── 프리셋 폴더 (작품별 묶음, 2단계까지: 작품 폴더 아래 캐릭터 폴더) ──────
 export function listPresetFolders(): ListFolder[] {
-  return (
-    getDb()
-      .prepare(
-        'SELECT id, name, collapsed, color FROM scene_preset_folders ORDER BY sort_order, id'
-      )
-      .all() as { id: number; name: string; collapsed: number; color: string | null }[]
-  ).map((f) => ({ id: f.id, name: f.name, collapsed: f.collapsed === 1, color: f.color }))
+  const rows = getDb()
+    .prepare(
+      'SELECT id, name, collapsed, color, parent_id FROM scene_preset_folders ORDER BY sort_order, id'
+    )
+    .all() as {
+    id: number
+    name: string
+    collapsed: number
+    color: string | null
+    parent_id: number | null
+  }[]
+  const ids = new Set(rows.map((f) => f.id))
+  return rows.map((f) => ({
+    id: f.id,
+    name: f.name,
+    collapsed: f.collapsed === 1,
+    color: f.color,
+    // 상위 폴더가 사라졌으면 맨 위 단계로 본다
+    parentId: f.parent_id != null && ids.has(f.parent_id) ? f.parent_id : null
+  }))
 }
 
-export function createPresetFolder(name: string): number {
+/** 상위 폴더로 쓸 수 있는지: 있고, 그 자신이 맨 위 단계여야 한다 (2단계까지) */
+function topLevelFolder(id: number | null | undefined): number | null {
+  if (id == null) return null
+  const row = getDb().prepare('SELECT parent_id FROM scene_preset_folders WHERE id = ?').get(id) as
+    { parent_id: number | null } | undefined
+  return row && row.parent_id == null ? id : null
+}
+
+export function createPresetFolder(name: string, parentId: number | null = null): number {
   const db = getDb()
   const max = db
     .prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM scene_preset_folders')
     .get() as { m: number }
   return Number(
     db
-      .prepare('INSERT INTO scene_preset_folders (name, sort_order) VALUES (?, ?)')
-      .run(name, max.m + 1).lastInsertRowid
+      .prepare('INSERT INTO scene_preset_folders (name, sort_order, parent_id) VALUES (?, ?, ?)')
+      .run(name, max.m + 1, topLevelFolder(parentId)).lastInsertRowid
   )
+}
+
+/** 폴더를 다른 폴더 아래로 넣거나 맨 위 단계로 꺼낸다. 옮긴 폴더는 새 자리의 끝에 붙는다 */
+export function setPresetFolderParent(
+  id: number,
+  parentId: number | null
+): { ok: boolean; message: string } {
+  const db = getDb()
+  if (!db.prepare('SELECT 1 FROM scene_preset_folders WHERE id = ?').get(id))
+    return { ok: false, message: '폴더를 찾지 못했어요.' }
+  if (parentId != null) {
+    if (parentId === id) return { ok: false, message: '자기 자신 아래로는 넣을 수 없어요.' }
+    if (topLevelFolder(parentId) == null)
+      return { ok: false, message: '폴더는 2단계까지만 만들 수 있어요.' }
+    const kids = db
+      .prepare('SELECT COUNT(*) AS n FROM scene_preset_folders WHERE parent_id = ?')
+      .get(id) as { n: number }
+    if (kids.n > 0)
+      return { ok: false, message: '하위 폴더가 있는 폴더는 다른 폴더 아래로 넣을 수 없어요.' }
+  }
+  const max = db
+    .prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM scene_preset_folders')
+    .get() as { m: number }
+  db.prepare('UPDATE scene_preset_folders SET parent_id = ?, sort_order = ? WHERE id = ?').run(
+    parentId,
+    max.m + 1,
+    id
+  )
+  return { ok: true, message: '' }
 }
 
 export function renamePresetFolder(id: number, name: string): void {
@@ -137,10 +187,11 @@ export function setPresetFolderCollapsed(id: number, collapsed: boolean): void {
     .run(collapsed ? 1 : 0, id)
 }
 
-/** 폴더만 지운다. 안의 프리셋·씬·이미지는 그대로 두고 "폴더 없음"으로 */
+/** 폴더만 지운다. 안의 프리셋·씬·이미지는 그대로 두고 "폴더 없음"으로. 하위 폴더는 맨 위 단계로 */
 export function deletePresetFolder(id: number): void {
   const db = getDb()
   db.transaction(() => {
+    db.prepare('UPDATE scene_preset_folders SET parent_id = NULL WHERE parent_id = ?').run(id)
     db.prepare('UPDATE scene_presets SET folder_id = NULL WHERE folder_id = ?').run(id)
     db.prepare('DELETE FROM scene_preset_folders WHERE id = ?').run(id)
   })()

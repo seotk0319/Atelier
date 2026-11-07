@@ -51,6 +51,7 @@ import { useResolutionsStore } from '../stores/resolutions-store'
 import { askConfirm, askText } from '../stores/dialog-store'
 import { toast } from '../stores/toast-store'
 import { cn } from '../lib/utils'
+import { folderPath } from '../lib/preset-tree'
 import { SceneCuration } from './scene-curation'
 import { SceneDetail } from './scene-detail'
 import { SceneCardImage } from './scene-card-image'
@@ -852,7 +853,7 @@ function BulkBar(): React.JSX.Element {
           {/* 작품 폴더별로 묶어서 (폴더 없는 프리셋은 맨 아래) */}
           <div className="no-scrollbar max-h-[min(60vh,420px)] overflow-y-auto">
             {[
-              ...presetFolders.map((f) => ({ id: f.id, name: f.name })),
+              ...presetFolders.map((f) => ({ id: f.id, name: folderPath(presetFolders, f.id) })),
               { id: null, name: '' }
             ].map((g) => {
               const list = presets.filter((p) => p.folderId === g.id && p.id !== activePresetId)

@@ -145,6 +145,7 @@ const TOOLS = [
                 type: 'string',
                 enum: [
                   'create_folder',
+                  'move_folder',
                   'move_presets',
                   'rename_preset',
                   'rename_folder',
@@ -165,6 +166,16 @@ const TOOLS = [
               folderRef: {
                 type: 'string',
                 description: 'move_presets: 이 계획에서 만든 폴더의 ref'
+              },
+              parentId: {
+                type: ['integer', 'null'],
+                description:
+                  'create_folder / move_folder: 상위로 삼을 기존 맨 위 폴더 id. move_folder에서 null이면 맨 위 단계로 꺼낸다'
+              },
+              parentRef: {
+                type: 'string',
+                description:
+                  'create_folder / move_folder: 이 계획에서 만든 맨 위 폴더의 ref를 상위로'
               },
               presetId: { type: 'integer', description: 'rename_preset / set_reserve 대상' },
               count: { type: 'integer', description: 'set_reserve: 씬마다 예약할 장수 (0~100)' },
@@ -219,7 +230,8 @@ const SYSTEM = [
   '',
   '규칙',
   '- 앱 데이터는 도구로 읽은 것만 근거로 쓴다. id·이름·개수를 지어내지 않는다. 계획을 내기 전에 list_scene_presets를 먼저 읽는다.',
-  '- 프리셋 폴더는 한 단계뿐이다. 폴더 안에 폴더를 만들 수 없다. 작품 안에서 캐릭터별로 나누고 싶으면 "작품 · 캐릭터" 같은 이름의 폴더를 만든다.',
+  '- 프리셋 폴더는 2단계까지다: 맨 위 작품 폴더 아래에 캐릭터 같은 하위 폴더를 둘 수 있고, 하위 폴더 안에는 또 폴더를 만들 수 없다. 작품 안에서 캐릭터별로 나눌 때는 작품 폴더 아래 하위 폴더(예: sm1, na1)를 만든다(create_folder의 parentId/parentRef). 하위 폴더가 있는 폴더는 다른 폴더 아래로 넣을 수 없다.',
+  '- 예전 방식의 "작품 · 캐릭터" 이름 폴더는 move_folder로 작품 폴더 아래에 넣고 rename_folder로 캐릭터 이름만 남기면 2단계로 바뀐다. 폴더는 지울 수 없으니 빈 폴더가 남으면 note에 알려 준다.',
   '- 에셋 프리셋 이름은 보통 작품접두_캐릭터코드번호_상황... 모양이다(예: off_sm1_emotion15_..., off_na1_life45_...). 캐릭터별로 정리할 때는 캐릭터코드(sm1, na1처럼 영문+숫자)로 묶는다. 코드가 누구인지 모르면 코드를 그대로 폴더 이름에 쓴다.',
   '- 지금 화면 정보가 질문 앞에 붙어 온다. "이 프리셋", "여기"는 그 정보를 가리킨다.',
   '- 요청이 모호하면 계획을 내기 전에 한 문장으로 물어본다.'
@@ -255,7 +267,11 @@ function runReadTool(name: string, input: Record<string, unknown>): unknown {
       .all() as { p: number; n: number; r: number }[])
       counts.set(row.p, { n: row.n, r: row.r })
     return {
-      folders: listPresetFolders().map((f) => ({ id: f.id, name: f.name })),
+      folders: listPresetFolders().map((f) => ({
+        id: f.id,
+        name: f.name,
+        parentId: f.parentId ?? null
+      })),
       presets: listPresets().map((p) => ({
         id: p.id,
         name: p.name,
@@ -297,6 +313,29 @@ export function checkPlan(
   const presets = new Map(listPresets().map((p) => [p.id, p]))
   const folders = new Set(listPresetFolders().map((f) => f.id))
   const refs = new Set<string>()
+  // 폴더 2단계 검사용: 'id:5' / 'ref:f1' → 상위 키 (계획을 따라가며 바뀐다)
+  const tree = new Map<string, string | null>(
+    listPresetFolders().map((f) => ['id:' + f.id, f.parentId != null ? 'id:' + f.parentId : null])
+  )
+  const kids = (key: string): number => [...tree.values()].filter((p) => p === key).length
+  const parentKey = (op: Record<string, unknown>): { key: string | null; error?: string } => {
+    const pRef = op.parentRef == null ? '' : String(op.parentRef).trim()
+    if (pRef)
+      return refs.has(pRef)
+        ? { key: 'ref:' + pRef }
+        : { key: null, error: '앞에서 만들지 않은 parentRef: ' + pRef }
+    if (op.parentId == null) return { key: null }
+    const pId = Number(op.parentId)
+    return folders.has(pId)
+      ? { key: 'id:' + pId }
+      : { key: null, error: '없는 상위 폴더 id: ' + op.parentId }
+  }
+  const parentOp = (key: string | null): { parentId?: number | null; parentRef?: string } =>
+    key == null
+      ? { parentId: null }
+      : key.startsWith('ref:')
+        ? { parentRef: key.slice(4) }
+        : { parentId: Number(key.slice(3)) }
   const ops: AssistantOp[] = []
   const list = Array.isArray(raw.ops) ? (raw.ops as Record<string, unknown>[]) : []
   if (!list.length) return { error: '단계가 비어 있어요.' }
@@ -310,7 +349,31 @@ export function checkPlan(
       if (!ref || refs.has(ref)) return { error: at + 'ref가 비었거나 겹쳐요.' }
       if (!name) return { error: at + '폴더 이름이 비었어요.' }
       refs.add(ref)
-      ops.push({ type, ref, name })
+      const p = parentKey(op)
+      if (p.error) return { error: at + p.error }
+      if (p.key && tree.get(p.key) != null)
+        return { error: at + '하위 폴더 안에는 폴더를 만들 수 없어요 (2단계까지).' }
+      tree.set('ref:' + ref, p.key)
+      ops.push(p.key ? { type, ref, name, ...parentOp(p.key) } : { type, ref, name })
+    } else if (type === 'move_folder') {
+      const fRef = op.folderRef == null ? '' : String(op.folderRef).trim()
+      const self = fRef ? 'ref:' + fRef : op.folderId == null ? '' : 'id:' + Number(op.folderId)
+      if (!self || !tree.has(self)) return { error: at + '옮길 폴더를 찾지 못했어요.' }
+      const p = parentKey(op)
+      if (p.error) return { error: at + p.error }
+      if (p.key) {
+        if (p.key === self) return { error: at + '자기 자신 아래로는 넣을 수 없어요.' }
+        if (tree.get(p.key) != null)
+          return { error: at + '하위 폴더 아래로는 넣을 수 없어요 (2단계까지).' }
+        if (kids(self) > 0)
+          return { error: at + '하위 폴더가 있는 폴더는 다른 폴더 아래로 넣을 수 없어요.' }
+      }
+      tree.set(self, p.key)
+      ops.push({
+        type,
+        ...(fRef ? { folderRef: fRef } : { folderId: Number(op.folderId) }),
+        ...parentOp(p.key)
+      })
     } else if (type === 'move_presets') {
       const ids = Array.isArray(op.presetIds) ? op.presetIds.map(Number) : []
       if (!ids.length) return { error: at + '옮길 프리셋이 없어요.' }
