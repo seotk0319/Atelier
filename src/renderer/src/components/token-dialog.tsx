@@ -1,4 +1,5 @@
 import {
+  Bot,
   Coins,
   Download,
   Eye,
@@ -50,6 +51,7 @@ import { Segmented, SegmentedItem } from './ui/segmented'
 import { TranslateSection } from './translate-settings'
 import { OpenRouterSection } from './openrouter-settings'
 import { AiReplySection } from './ai-reply-settings'
+import { AssistantSection } from './assistant/assistant-settings'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import { Input } from './ui/input'
@@ -65,6 +67,7 @@ type SectionId =
   | 'privacy'
   | 'translate'
   | 'ai-helper'
+  | 'assistant'
   | 'ai'
   | 'shortcuts'
   | 'account'
@@ -79,6 +82,7 @@ const NAV: { id: SectionId; label: string; icon: typeof Info }[] = [
   { id: 'translate', label: '번역', icon: Languages },
   // OpenRouter 키 — 댓글 번역과 태그 도우미가 같이 쓰므로 모든 프로필에 보인다
   { id: 'ai-helper', label: 'AI 도우미', icon: Wand2 },
+  { id: 'assistant', label: 'AI 비서', icon: Bot },
   { id: 'ai', label: 'AI 답글', icon: Sparkles },
   { id: 'shortcuts', label: '단축키', icon: Keyboard },
   { id: 'account', label: 'NAI 계정', icon: KeyRound },
@@ -1167,6 +1171,9 @@ export function SettingsDialog({
               </TabsContent>
               <TabsContent value="ai" className="m-0">
                 <AiReplySection />
+              </TabsContent>
+              <TabsContent value="assistant" className="m-0">
+                <AssistantSection />
               </TabsContent>
               <TabsContent value="shortcuts" className="m-0">
                 <ShortcutsSection />

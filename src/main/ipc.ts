@@ -45,6 +45,13 @@ import {
   stopBacklog
 } from './ai-reply/service'
 import {
+  askAssistant,
+  assistantStatus,
+  importAssistantGuide,
+  saveAssistantKey,
+  setAssistantConfig
+} from './assistant/service'
+import {
   createCharacter,
   createFolder,
   deleteCharacter,
@@ -259,6 +266,11 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   const censorFolderFiles = new Set<string>()
   const censorPathKey = (filePath: string): string => resolve(filePath).toLowerCase()
   handle('db:status', () => ({ version: ctx.dbVersion, path: getDbPath() }))
+  handle('assistant:status', () => assistantStatus())
+  handle('assistant:setKey', ({ key }) => saveAssistantKey(String(key || '')))
+  handle('assistant:setConfig', (patch) => setAssistantConfig(patch || {}))
+  handle('assistant:importGuide', () => importAssistantGuide())
+  handle('assistant:ask', (req) => askAssistant(req))
   handle('openrouter:status', () => openRouterStatus())
   handle('openrouter:setKey', ({ key }) => saveOpenRouterKey(String(key || '')))
   handle('openrouter:deleteKey', () => removeOpenRouterKey())

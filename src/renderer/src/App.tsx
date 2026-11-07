@@ -21,6 +21,8 @@ import { Titlebar } from './components/titlebar'
 import { SettingsDialog } from './components/token-dialog'
 import { TextPromptHost } from './components/text-prompt-host'
 import { PrivacyLock } from './components/privacy-lock'
+import { AssistantDock } from './components/assistant/assistant-dock'
+import { bindAssistantKeys } from './stores/assistant-store'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useCharactersStore } from './stores/characters-store'
 import { useFragmentsStore } from './stores/fragments-store'
@@ -145,6 +147,7 @@ export default function App(): React.JSX.Element {
     const unbindKeys = bindShortcuts()
     const unbindUpdate = bindUpdateEvents()
     const unbindNav = bindNavMouse() // 마우스 4/5번 버튼 뒤로/앞으로
+    const unbindAssistant = bindAssistantKeys() // Ctrl+K: AI 비서
     // Ctrl/Cmd+R은 브라우저 기본 리로드 대신 작업 새로고침으로 처리한다.
     // F5는 재설정 가능한 단축키 시스템(refreshWork)이 처리한다.
     const onReloadKey = (e: KeyboardEvent): void => {
@@ -163,6 +166,7 @@ export default function App(): React.JSX.Element {
       unbindKeys()
       unbindUpdate()
       unbindNav()
+      unbindAssistant()
       window.removeEventListener('keydown', onReloadKey)
     }
   }, [])
@@ -190,14 +194,18 @@ export default function App(): React.JSX.Element {
               />
             </div>
           )}
-          {views.map(({ mode, node }) => (
-            <div
-              key={mode}
-              className={mode === centerMode ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}
-            >
-              {node}
-            </div>
-          ))}
+          {/* 가운데 화면 + 그 아래 가운데에 떠 있는 AI 비서 명령 바 */}
+          <div className="relative flex min-h-0 min-w-0 flex-1">
+            {views.map(({ mode, node }) => (
+              <div
+                key={mode}
+                className={mode === centerMode ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}
+              >
+                {node}
+              </div>
+            ))}
+            {ready && <AssistantDock />}
+          </div>
           {rightMounted && (
             <div
               className={

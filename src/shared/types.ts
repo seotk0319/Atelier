@@ -18,6 +18,7 @@ import type {
   TranslateUsage
 } from './translate'
 import type { OpenRouterKeyResult, OpenRouterStatus } from './llm'
+import type { AssistantContext, AssistantModel, AssistantReply, AssistantStatus } from './assistant'
 import type { TagHelperImageRequest, TagHelperResult, TagHelperTextRequest } from './tag-helper'
 import type {
   AiBacklogPreview,
@@ -463,6 +464,23 @@ export interface IpcInvokeMap {
   /** AI 태그 도우미: 한글 설명 / 그림 → NAI 태그 한 줄 (모든 프로필) */
   'tagHelper:fromText': { req: TagHelperTextRequest; res: TagHelperResult }
   'tagHelper:fromImage': { req: TagHelperImageRequest; res: TagHelperResult }
+  /** AI 비서 (명령 바) */
+  'assistant:status': { req: void; res: AssistantStatus }
+  'assistant:setKey': { req: { key: string }; res: { ok: boolean; message: string } }
+  'assistant:setConfig': {
+    req: { model?: AssistantModel; guide?: string | null; guideName?: string | null; showDock?: boolean }
+    res: AssistantStatus
+  }
+  'assistant:importGuide': { req: void; res: AssistantStatus & { message: string } }
+  'assistant:ask': {
+    req: {
+      messages: unknown[]
+      text: string
+      context: AssistantContext | null
+      toolResults?: { id: string; content: string }[]
+    }
+    res: AssistantReply
+  }
   /** AI 답글 (Custom 1만) */
   'aiReply:status': { req: void; res: AiReplyStatus }
   'aiReply:setKey': { req: { key: string }; res: { ok: boolean; message: string } }
