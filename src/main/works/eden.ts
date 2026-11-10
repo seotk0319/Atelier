@@ -257,6 +257,13 @@ export const edenWorks: WorkAdapter = {
         entries[at(patch.index, entries.length)] = loreRaw(entries[patch.index], patch)
       work.lorebook = entries
     }
+    if (changes.lorebookRemove?.length) {
+      const entries = list(work.lorebook)
+      const gone = new Set(changes.lorebookRemove.map((i) => at(i, entries.length)))
+      work.lorebook = entries.filter((_, i) => !gone.has(i))
+    }
+    if (changes.lorebookAdd?.length)
+      work.lorebook = [...list(work.lorebook), ...changes.lorebookAdd.map((e) => loreRaw({}, e))]
     // 편집기는 내용이 빈 항목과 키워드 없는 키워드 항목을 저장할 때 버린다. 조용히 사라지지 않게 막는다.
     for (const e of list(work.lorebook))
       if (!text(e.value).trim() || (e.triggerMode !== 'always' && !text(e.key).trim()))

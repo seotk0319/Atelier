@@ -228,6 +228,42 @@ describe('베이비챗 작품', () => {
     expect((s.sent[0].startingScenarios as Obj[])[0].initialMessage).toBe('새 둘째 대사')
   })
 
+  it('로어북 추가·삭제·전체 교체: 새 항목은 번호 없이, 남는 항목은 번호 그대로 보낸다', async () => {
+    const s = site()
+    const run = tools(s)
+    const add = await run('work_plan', {
+      site: 'babe',
+      work_id: W,
+      lorebook_add: [{ title: '새 로어', keys: '바다, 모래', content: '새 본문' }]
+    })
+    expect((add.changes as Obj[])[0]).toMatchObject({ where: 'lorebook[1] 새 로어', kind: 'added' })
+    expect(await run('work_save', { plan_id: add.plan_id })).toMatchObject({ verified: true })
+    expect(s.sent[0].keywordBooks).toEqual([
+      { id: 7, title: '로어북 1', content: '로어 본문', keywords: ['학교', '교실'], order: 0 },
+      { title: '새 로어', content: '새 본문', keywords: ['바다', '모래'], order: 1 }
+    ])
+
+    const remove = await run('work_plan', { site: 'babe', work_id: W, lorebook_remove: [0] })
+    expect((remove.changes as Obj[]).some((c) => c.kind === 'removed')).toBe(true)
+    await run('work_save', { plan_id: remove.plan_id })
+    expect((s.sent[1].keywordBooks as Obj[]).map((b) => b.title)).toEqual(['새 로어'])
+
+    const replace = await run('work_plan', {
+      site: 'babe',
+      work_id: W,
+      lorebook: [
+        { title: '하나', keys: 'a', content: '1' },
+        { title: '둘', keys: 'b', content: '2' }
+      ]
+    })
+    await run('work_save', { plan_id: replace.plan_id })
+    const sent = s.sent[2].keywordBooks as Obj[]
+    expect(sent.map((b) => [b.title, b.order, 'id' in b])).toEqual([
+      ['하나', 0, false],
+      ['둘', 1, false]
+    ])
+  })
+
   it('미리보기에서 버전이 다르면 저장하지 않는다', async () => {
     const s = site()
     const raw = (await babeWorks.readRaw(s.read, W)) as { id: string; edit: Obj }
@@ -249,9 +285,11 @@ describe('베이비챗 작품', () => {
     const run = tools(s)
     const plan = (args: Obj): Promise<Obj> =>
       run('work_plan', { site: 'babe', work_id: W, ...args })
-    await expect(plan({ lorebook: [{ title: 'a', keys: 'k', content: 'c' }] })).rejects.toThrow(
-      'NO_LOREBOOK_REPLACE'
+    await expect(plan({ lorebook_add: [{ title: 'a', keys: '', content: 'c' }] })).rejects.toThrow(
+      'BAD_LOREBOOK'
     )
+    await expect(plan({ lorebook_remove: [0, 0] })).rejects.toThrow('BAD_INDEX')
+    await expect(plan({ lorebook_remove: [3] })).rejects.toThrow('BAD_INDEX')
     await expect(plan({ characters: [{ index: 0, details: 'x' }] })).rejects.toThrow('BAD_CHANGES')
     await expect(plan({ fields: { subtitle: 'x' } })).rejects.toThrow('BAD_FIELD')
     await expect(plan({ lorebook_patch: [{ index: 0, keys: ' , ' }] })).rejects.toThrow(

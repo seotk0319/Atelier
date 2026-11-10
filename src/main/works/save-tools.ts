@@ -172,9 +172,9 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
       throw error instanceof Error && error.message === 'BAD_FILE' ? error : new Error('BAD_FILE')
     }
   }
-  if (lorebook !== undefined) {
-    if (!Array.isArray(lorebook)) throw new Error('BAD_CHANGES')
-    changes.lorebook = lorebook.map((e) => ({
+  const whole = (v: unknown): LoreEntry[] => {
+    if (!Array.isArray(v)) throw new Error('BAD_CHANGES')
+    return v.map((e) => ({
       title: '',
       keys: '',
       content: '',
@@ -185,9 +185,21 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
       ...loreEntry(e, false)
     }))
   }
+  if (lorebook !== undefined) changes.lorebook = whole(lorebook)
   if (args.lorebook_patch !== undefined) {
     if (changes.lorebook) throw new Error('BAD_CHANGES')
     changes.lorebookPatch = patches(args.lorebook_patch, (item) => loreEntry(item, true))
+  }
+  if (args.lorebook_remove !== undefined) {
+    const gone = args.lorebook_remove
+    if (changes.lorebook || !Array.isArray(gone)) throw new Error('BAD_CHANGES')
+    if (gone.some((i) => !Number.isInteger(i)) || new Set(gone).size !== gone.length)
+      throw new Error('BAD_INDEX')
+    changes.lorebookRemove = gone as number[]
+  }
+  if (args.lorebook_add !== undefined) {
+    if (changes.lorebook) throw new Error('BAD_CHANGES')
+    changes.lorebookAdd = whole(args.lorebook_add)
   }
   if (args.start_scenarios !== undefined)
     changes.startScenarios = patches(args.start_scenarios, (item) =>
@@ -285,6 +297,16 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
             type: 'array',
             items: withIndex(lorebookItem.properties),
             description: '로어북 일부 항목만 고친다'
+          },
+          lorebook_remove: {
+            type: 'array',
+            items: { type: 'integer' },
+            description: '지울 로어북 항목 번호들 (work_read의 index, 고치기 전 번호)'
+          },
+          lorebook_add: {
+            type: 'array',
+            items: lorebookItem,
+            description: '로어북 끝에 더할 새 항목들 (title·keys·content)'
           },
           start_scenarios: {
             type: 'array',

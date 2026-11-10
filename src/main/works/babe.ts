@@ -68,6 +68,12 @@ const START_KEYS = {
   description: 'playGuide'
 } as const
 
+const keywords = (keys: string): string[] =>
+  keys
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+
 function at(index: unknown, length: number): number {
   if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
     throw new Error('BAD_INDEX')
@@ -159,8 +165,20 @@ export const babeWorks: WorkAdapter = {
       e[key] = value
     }
 
-    // 새 항목에 어떤 번호를 붙여 보내야 하는지 확인하지 못해 전체 교체는 아직 막아 둔다.
-    if (changes.lorebook) throw new Error('NO_LOREBOOK_REPLACE')
+    // 새 항목은 편집기처럼 번호(id) 없이 {title, content, keywords}로 보낸다
+    // (2026-11-10 사이트 코드: 로어북 추가 버튼이 번호 없는 항목을 덧붙인다).
+    const fresh = (entry: LoreEntry): Obj => ({
+      title: entry.title,
+      content: entry.content,
+      keywords: keywords(entry.keys)
+    })
+    if (changes.lorebook) {
+      // 전체 교체: 자리가 같은 항목은 기존 번호를 물려받아 고친 것으로 보낸다
+      const old = list(e.keywordBooks)
+      e.keywordBooks = changes.lorebook.map((entry, i) =>
+        old[i] ? { ...old[i], ...fresh(entry) } : fresh(entry)
+      )
+    }
     if (changes.lorebookPatch?.length) {
       const books = list(e.keywordBooks)
       for (const patch of changes.lorebookPatch) {
@@ -168,11 +186,7 @@ export const babeWorks: WorkAdapter = {
         const p: Partial<LoreEntry> = patch
         if (p.title !== undefined) book.title = p.title
         if (p.content !== undefined) book.content = p.content
-        if (p.keys !== undefined)
-          book.keywords = p.keys
-            .split(',')
-            .map((k) => k.trim())
-            .filter(Boolean)
+        if (p.keys !== undefined) book.keywords = keywords(p.keys)
         if (
           p.mode !== undefined ||
           p.offKeys !== undefined ||
@@ -180,11 +194,19 @@ export const babeWorks: WorkAdapter = {
           p.offTurnRange !== undefined
         )
           throw new Error('BAD_CHANGES')
-        if (!text(book.content).trim() || !strings(book.keywords).length)
-          throw new Error('BAD_LOREBOOK')
       }
       e.keywordBooks = books
     }
+    if (changes.lorebookRemove?.length) {
+      const books = list(e.keywordBooks)
+      const gone = new Set(changes.lorebookRemove.map((i) => at(i, books.length)))
+      e.keywordBooks = books.filter((_, i) => !gone.has(i))
+    }
+    if (changes.lorebookAdd?.length)
+      e.keywordBooks = [...list(e.keywordBooks), ...changes.lorebookAdd.map(fresh)]
+    for (const book of list(e.keywordBooks))
+      if (!text(book.content).trim() || !strings(book.keywords).length)
+        throw new Error('BAD_LOREBOOK')
 
     if (changes.startScenarios?.length) {
       const extra = list(e.startingScenarios)

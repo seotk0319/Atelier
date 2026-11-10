@@ -391,6 +391,48 @@ describe('작품 계획·저장', () => {
     expect((done.mismatches as { where: string }[])[0].where).toBe('main')
   })
 
+  it('로어북 추가·삭제: 고치기 → 지우기 → 더하기 순서로 얹는다', async () => {
+    const s = site()
+    const t = tools(s)
+    const plan = await t.run('work_plan', {
+      site: 'eden',
+      work_id: W,
+      lorebook_patch: [{ index: 1, title: '늘 켜짐 2' }],
+      lorebook_remove: [0],
+      lorebook_add: [{ title: '새 로어', keys: '바다', content: '새 본문', mode: 'keyword' }]
+    })
+    const saved = await t.run('work_save', { plan_id: plan.plan_id })
+    expect(saved).toMatchObject({ saved: true, verified: true })
+    expect(s.puts[0].lorebook).toEqual([
+      {
+        key: '',
+        title: '늘 켜짐 2',
+        value: '로어 둘',
+        triggerMode: 'always',
+        offKeywords: [],
+        turnRange: 5,
+        offTurnRange: 5
+      },
+      {
+        title: '새 로어',
+        key: '바다',
+        value: '새 본문',
+        triggerMode: 'keyword',
+        offKeywords: [],
+        turnRange: 5,
+        offTurnRange: 5
+      }
+    ])
+    await expect(
+      t.run('work_plan', {
+        site: 'eden',
+        work_id: W,
+        lorebook: [{ title: 'a', keys: 'k', content: 'c' }],
+        lorebook_add: [{ title: 'b', keys: 'k', content: 'c' }]
+      })
+    ).rejects.toThrow('BAD_CHANGES')
+  })
+
   it('diffBodies: 로어북 추가·삭제를 알린다', async () => {
     const s = site()
     const before = edenWorks.normalize(await edenWorks.readRaw(s.read, W))

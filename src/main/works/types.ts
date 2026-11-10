@@ -104,6 +104,10 @@ export interface WorkChanges {
   lorebook?: LoreEntry[]
   /** 로어북 일부 항목만 고치기 (index는 work_read의 번호) */
   lorebookPatch?: ({ index: number } & Partial<LoreEntry>)[]
+  /** 로어북 항목 지우기 (index는 고치기 전 번호) */
+  lorebookRemove?: number[]
+  /** 로어북 끝에 새 항목 더하기 */
+  lorebookAdd?: LoreEntry[]
   /** 시작 상황 일부만 고치기 */
   startScenarios?: ({ index: number } & Partial<
     Pick<
