@@ -2,7 +2,7 @@ import {readFile,mkdir,writeFile,rename,copyFile} from 'node:fs/promises';
 import path from 'node:path';
 import {refineNotification,refineNotifications} from './api/model.mjs';
 import {initializeSchedule, scheduleView, advanceSchedule, validateInterval} from './schedule.mjs';
-export const platformIds=['eden','babe','luna','elyn','neko','teapot','crack','rplay','genit'];
+export const platformIds=['eden','babe','luna','elyn','neko','teapot','crack','rplay','genit','uumai','chatple'];
 function displayItem(item){
   if(item.schemaVersion===1)return refineNotification(item);
   if(item.platform==='crack'&&item.kind==='other'&&item.sourceType==='social'&&/^(?:내 스토리에 댓글이 달렸어요|내 댓글에 답글이 달렸어요)[.!]?$/.test(item.title))return {...item,kind:'comment'};

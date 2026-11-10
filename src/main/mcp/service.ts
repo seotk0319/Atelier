@@ -4,14 +4,23 @@ import { app } from 'electron'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getSetting } from '../db/settings'
-import { workRead, workSend, workWrite } from '../notifications/service'
+import { workAccount, workRead, workSend, workWrite } from '../notifications/service'
 import { createWorkTools } from '../works/tools'
+import type { WorkReadInit, WorkRequest } from '../works/types'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
 
 let running: ReturnType<typeof createMcpServer> | null = null
 
 // 저장 직전 백업과 저장 뒤 확인본이 같은 초에 생겨도 서로 덮어쓰지 않게 밀리초까지 넣는다
 const stamp = (): string => new Date().toISOString().replace(/[-:.]/g, '').replace(/Z$/, '')
+
+function withAccount<F extends (...args: never[]) => Promise<Response>>(
+  platform: string,
+  fn: F
+): F {
+  const account = (): Promise<unknown> => workAccount(platform)
+  return Object.assign(fn, { rplayAccount: account, teapotAccount: account })
+}
 
 export async function startMcp(): Promise<void> {
   if (running || getSetting('mcp_enabled') === '0') return
@@ -25,9 +34,17 @@ export async function startMcp(): Promise<void> {
       token,
       info: { name: 'nais3-works', version: app.getVersion() },
       tools: createWorkTools({
-        reader: (platform) => (url, init) => workRead(platform, url, init),
-        writer: (platform) => (method, url, body) => workWrite(platform, method, url, body),
-        sender: (platform) => (request) => workSend(platform, request),
+        // 통로 함수에 계정 번호 꺼내는 함수를 붙여 둔다 (알플레이·티팟은 주소에 내 계정 번호가 들어간다)
+        reader: (platform) =>
+          withAccount(platform, (url: string, init?: WorkReadInit) =>
+            workRead(platform, url, init)
+          ),
+        writer: (platform) =>
+          withAccount(platform, (method: string, url: string, body?: unknown) =>
+            workWrite(platform, method, url, body)
+          ),
+        sender: (platform) =>
+          withAccount(platform, (request: WorkRequest) => workSend(platform, request)),
         readFile: (path) => readFile(path, 'utf8'),
         // 이미지 파일은 크기를 먼저 보고, 한도 안일 때만 읽는다
         async readBinary(path, maxBytes) {

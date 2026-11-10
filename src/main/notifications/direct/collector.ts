@@ -98,6 +98,20 @@ export interface DirectPlatformState {
   windowOpen: boolean
 }
 
+/** 작품 연결부에 넘기는 로그인 계정 번호 (토큰은 담지 않는다) */
+export type WorkAccount = { uid: string } | { oid: string; loginType: string }
+
+/** 작품 통로의 요청이 로그인 만료로 거절된 것인지. 알플레이는 만료를 500 {"error":"jwt expired"} 로도 알린다 */
+async function workExpired(platform: string, response: Response): Promise<boolean> {
+  if (response.ok) return false
+  if (await renewable(response.clone())) return true
+  return (
+    platform === 'rplay' &&
+    response.status === 500 &&
+    /jwt expired/i.test(await response.clone().text())
+  )
+}
+
 export function createDirectCollector(options: {
   directory: string
   profileDir: string
@@ -141,6 +155,11 @@ export function createDirectCollector(options: {
    * 주소·본문 종류·헤더 이름이 그 플랫폼 연결부의 규칙과 맞을 때만 나가고, 규칙이 정한 로그인 정보만 붙는다.
    */
   workSend(platform: string, request: WorkRequest): Promise<Response>
+  /**
+   * 작품 연결부가 주소에 넣어야 하는 로그인 계정 번호 (알플레이 계정 번호·로그인 종류, 티팟 사용자 번호).
+   * 저장된 로그인 정보에서 번호만 꺼내고 토큰은 돌려주지 않는다. 없으면 null.
+   */
+  workAccount(platform: string): Promise<WorkAccount | null>
   /** 에덴 댓글 번호 → 사이트에서 내가 그 뒤에 단 답글 (읽기만 한다). */
   edenReplies(commentIds: string[]): Promise<Record<string, FoundReply>>
   status(): Promise<{
@@ -221,10 +240,12 @@ export function createDirectCollector(options: {
         const current = state?.platforms[platform]
         if (!state || !current) return false
         const headersByOrigin = { ...current.profile.headersByOrigin }
+        // 챗플은 Login-At 헤더로 로그인한다. 나머지는 Authorization.
+        const header = result.header || 'authorization'
         for (const origin of result.origins)
           headersByOrigin[origin] = {
             ...headersByOrigin[origin],
-            authorization: result.authorization
+            [header]: result.authorization
           }
         const primary =
           platform === 'teapot' ? 'https://firestore.googleapis.com' : allowed[platform]?.origin
@@ -232,7 +253,7 @@ export function createDirectCollector(options: {
           ...current.profile,
           headersByOrigin,
           headers: result.origins.includes(primary)
-            ? { ...current.profile.headers, authorization: result.authorization }
+            ? { ...current.profile.headers, [header]: result.authorization }
             : current.profile.headers,
           renewal: result.renewal,
           renewedAt: new Date().toISOString()
@@ -831,6 +852,30 @@ export function createDirectCollector(options: {
       }
       return readMyWorks(platform, read, { teapotUid, rplayOid })
     },
+    async workAccount(platform) {
+      const s = await ready()
+      const profile = s.platforms[platform as DirectPlatformId]?.profile
+      if (!profile) return null
+      if (platform === 'teapot') {
+        const uid = firebaseUid(
+          profile.headersByOrigin?.['https://firestore.googleapis.com']?.authorization
+        )
+        return uid ? { uid } : null
+      }
+      if (platform === 'rplay') {
+        const route = (profile.routes as Record<string, unknown> | undefined)?.['/account/getuser']
+        try {
+          const q = typeof route === 'string' ? new URL(route).searchParams : null
+          const oid = q?.get('requestorOid') || q?.get('userOid') || ''
+          return /^[a-f0-9]{24}$/.test(oid)
+            ? { oid, loginType: q?.get('loginType') || 'rplay' }
+            : null
+        } catch {
+          return null
+        }
+      }
+      return null
+    },
     async workRead(platform, url, init) {
       if (!workReadAllowed(platform, url, init)) throw new Error('UNAPPROVED_READ_ROUTE')
       const s = await ready()
@@ -852,8 +897,7 @@ export function createDirectCollector(options: {
         })
       const response = await call()
       if (
-        !response.ok &&
-        (await renewable(response.clone())) &&
+        (await workExpired(platform, response)) &&
         (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false))
       )
         return call()
@@ -883,8 +927,7 @@ export function createDirectCollector(options: {
       const response = await call()
       // 로그인 만료로 거절된 요청은 저장되지 않았으므로 로그인을 이어 붙인 뒤 한 번만 다시 보낸다.
       if (
-        !response.ok &&
-        (await renewable(response.clone())) &&
+        (await workExpired(platform, response)) &&
         (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false))
       )
         return call()
@@ -980,7 +1023,7 @@ export function createDirectCollector(options: {
       // 저장소(origin·none)는 플랫폼 로그인과 상관없어 다시 보내지 않는다.
       const expired =
         rule.auth === 'session'
-          ? !response.ok && (await renewable(response.clone()))
+          ? await workExpired(platform, response)
           : rule.auth === 'cookie' && (response.status === 401 || response.status === 403)
       if (expired && (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false)))
         return call()

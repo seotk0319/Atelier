@@ -16,7 +16,18 @@ import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
 
 /** 원작은 에덴. 나머지는 이식 대상 (늘 이 순서로 보여 준다) */
 const ORIGIN = 'eden'
-const PORTS = ['babe', 'luna', 'elyn', 'neko', 'teapot', 'crack', 'genit', 'rplay']
+const PORTS = [
+  'babe',
+  'luna',
+  'elyn',
+  'neko',
+  'teapot',
+  'crack',
+  'genit',
+  'rplay',
+  'uumai',
+  'chatple'
+]
 
 const norm = (s: string): string =>
   s

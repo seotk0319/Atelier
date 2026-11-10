@@ -1,7 +1,7 @@
 // MCP로 내놓는 작품 도구. 여기는 화면·Electron을 모르고, 읽기 통로와 스냅샷 저장만 받아서 쓴다.
 // 읽기 도구는 여기, 계획·저장 도구는 save-tools.ts, 언어 판본 저장은 edition-tools.ts,
 // 이미지·표지는 media-tools.ts에 있다.
-import { WORK_ADAPTERS, workAdapter } from './adapters'
+import { WORK_ADAPTERS, workAdapter, workKey } from './adapters'
 import { createEditionTools } from './edition-tools'
 import { createMediaTools } from './media-tools'
 import { createSaveTools } from './save-tools'
@@ -127,14 +127,43 @@ const MESSAGES: [RegExp, string][] = [
   [
     /LOREBOOK_EMPTY/,
     '이 플랫폼은 로어북을 전부 비우는 저장을 편집기도 보내지 않아요. 항목을 하나 이상 남겨 주세요.'
-  ]
+  ],
+  [
+    /JSX_UNSUPPORTED/,
+    '이 작품의 JSX 컴포넌트는 편집기가 저장할 때 브라우저에서 다시 컴파일해야 해서 여기서 저장하지 않아요.'
+  ],
+  [
+    /PUBLISH_REQUIREMENTS/,
+    '공개 상태를 바꾸려면 발행해야 하는데, 발행에 필요한 칸이 비어 있어요(괄호 안 칸).'
+  ],
+  [
+    /START_STRUCTURE_UNSUPPORTED|CHARACTER_STRUCTURE_UNSUPPORTED/,
+    '이 플랫폼은 시작 상황·캐릭터를 더하거나 빼면 캐릭터 이미지도 같이 맞춰야 해서 여기서는 고치기만 돼요.'
+  ],
+  [/IN_REVIEW/, '수정본이 심사 중이라 저장하지 않았어요. 심사가 끝난 뒤 다시 해 주세요.'],
+  [/COVER_NOT_CHANGED/, '표지를 올렸지만 작품에 반영되지 않았어요.'],
+  [/NOT_SUPPORTED/, '이 플랫폼에서는 아직 여기서 할 수 없는 일이에요. 사이트에서 직접 해 주세요.'],
+  [/BAD_IMAGE_RATIO/, '이미지 비율이 맞지 않아요. 크랙 대표 이미지는 2:3이어야 해요.'],
+  [
+    /RPLAY_ACCOUNT_REQUIRED|TEAPOT_UID_REQUIRED/,
+    '로그인 계정 번호를 찾지 못했어요. NAIS3 연결 관리에서 그 플랫폼을 다시 로그인해 주세요.'
+  ],
+  [/NOT_PUBLISHED/, '아직 공개한 적이 없는 작품이라 이 공개 전환은 여기서 하지 않아요.'],
+  [/ORIGINAL_STORY_LOCK/, '원작 잠금이 걸린 작품이라 바꿀 수 없어요.'],
+  [/TEAPOT_NO_CHECKPOINT/, '이 작품에는 저장 파일(체크포인트)이 없어 읽을 수 없어요.'],
+  [
+    /TEAPOT_VISIBILITY_NEEDS_SUBMIT/,
+    '티팟의 공개 상태는 등록(심사)할 때만 반영돼요. 사이트에서 등록해 주세요.'
+  ],
+  [/CHECKPOINT_LIMIT/, '저장 파일 수가 한도에 찼어요. 사이트에서 오래된 저장 파일을 지워 주세요.'],
+  [/NOT_OWNER/, '내 계정의 작품이 아니에요.']
 ]
 export function toolMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
   for (const [re, message] of MESSAGES)
     if (re.test(code))
       // 플랫폼이 거절한 경우는 받은 상태 코드도 같이 알려 준다
-      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS /.test(code)
+      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS |PUBLISH_REQUIREMENTS /.test(code)
         ? message + ' (' + code.slice(0, 90) + ')'
         : message
   return '요청을 처리하지 못했어요. (' + code.slice(0, 80) + ')'
@@ -186,12 +215,12 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
     snapshot: string | null
   }> {
     const adapter = workAdapter(str(siteName))
-    const key = adapter.id + ':' + str(id).toLowerCase()
+    const key = adapter.id + ':' + workKey(adapter, str(id))
     const held = cache.get(key)
     if (!fresh && held) return { body: held, snapshot: null }
     const raw = await adapter.readRaw(deps.reader(adapter.id), str(id))
     const body = adapter.normalize(raw)
-    const snapshot = await deps.snapshot(adapter.id, str(id).toLowerCase(), raw)
+    const snapshot = await deps.snapshot(adapter.id, workKey(adapter, str(id)), raw)
     cache.set(key, body)
     return { body, snapshot }
   }

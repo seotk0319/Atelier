@@ -3,7 +3,7 @@
 //  - work_save는 계획 번호가 있어야 하고, 계획을 세운 뒤 플랫폼 내용이 바뀌었으면 저장하지 않는다.
 //  - 저장 직전 원본을 스냅샷으로 남기고, 저장 뒤 다시 읽어 뜻대로 들어갔는지 견준다.
 import { randomBytes } from 'node:crypto'
-import { workAdapter } from './adapters'
+import { workAdapter, workKey } from './adapters'
 import { loadImage } from './media-tools'
 import type { ToolDef, WorkToolDeps } from './tools'
 import {
@@ -315,11 +315,15 @@ export const CHANGE_PROPERTIES = {
     type: 'string',
     description:
       '공개 상태 바꾸기. 플랫폼마다 받는 값이 다르다 (sites_list의 visibilities). ' +
-      '공개로 바꾸면 독자에게 바로 보이므로 사용자가 분명히 요청했을 때만 쓴다.'
+      '공개로 바꾸면 독자에게 바로 보이므로 사용자가 분명히 요청했을 때만 쓴다. ' +
+      '우마이는 평소 저장이 임시저장(초안)이고, visibility를 주면 그 초안까지 발행한다. ' +
+      '챗플은 공개(public)로 저장하면 수정본이 다시 심사를 받는다.'
   },
   fields: {
     type: 'object',
-    description: '통째로 바꿀 글 칸. title / subtitle / description / main / creator_comment',
+    description:
+      '통째로 바꿀 글 칸. title / subtitle / description / main / creator_comment ' +
+      '(플랫폼 전용 칸: 네코챗 persistent_context, 우마이 play_guide — work_read의 field_lengths 참고)',
     additionalProperties: text
   },
   field_files: {
@@ -437,7 +441,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
       async run(args) {
         const adapter = workAdapter(str(args.site))
         if (!adapter.applyChanges || !adapter.save) throw new Error('NO_SAVE')
-        const id = str(args.work_id).toLowerCase()
+        const id = workKey(adapter, str(args.work_id))
         const changes = await parseChanges(args, deps)
         const raw = await adapter.readRaw(deps.reader(adapter.id), id)
         const before = adapter.normalize(raw)
@@ -538,7 +542,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
       async run(args) {
         const adapter = workAdapter(str(args.site))
         if (!adapter.remove) throw new Error('NO_DELETE')
-        const id = str(args.work_id).toLowerCase()
+        const id = workKey(adapter, str(args.work_id))
         const body = adapter.normalize(await adapter.readRaw(deps.reader(adapter.id), id))
         const now = Date.now()
         for (const [key, plan] of deletions) if (plan.expires < now) deletions.delete(key)
@@ -604,7 +608,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         // 그럴 때는 내 작품 목록에서 사라졌는지로 확인한다.
         if (!gone)
           gone = await adapter.list(read).then(
-            (works) => !works.some((w) => w.id.toLowerCase() === plan.workId),
+            (works) => !works.some((w) => workKey(adapter, w.id) === plan.workId),
             () => false
           )
         return { deleted: true, verified: gone, id: plan.workId, title: plan.title, backup }

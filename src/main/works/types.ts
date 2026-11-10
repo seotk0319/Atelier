@@ -79,6 +79,8 @@ export interface WorkAdapter {
   id: string
   label: string
   capabilities: string[]
+  /** 작품 번호가 대소문자를 구분한다 (공용 도구가 소문자로 바꾸지 않는다) */
+  caseSensitiveIds?: boolean
   /** 이 연결부가 읽어도 되는 주소인지 (이 밖으로는 요청하지 않는다) */
   readAllowed(url: string): boolean
   /** 읽기를 POST로 해야 하는 주소인지. 주소·본문 종류·본문 모양까지 본다 (없으면 POST 읽기는 막는다) */

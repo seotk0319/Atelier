@@ -7,7 +7,9 @@ export const INBOX_PLATFORMS = {
   teapot: '티팟',
   crack: '크랙',
   rplay: '알플레이',
-  genit: '젠잇'
+  genit: '젠잇',
+  uumai: '우마이',
+  chatple: '챗플'
 } as const
 export const INBOX_EVENTS = {
   comment: '댓글',

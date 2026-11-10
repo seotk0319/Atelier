@@ -3,7 +3,7 @@
 // 저장하면 그 겹친 내용이 통째로 판본에 들어간다 (편집기의 '번역 저장'과 같다).
 // 사이트의 자동 번역은 부르지 않는다. 번역문은 부르는 쪽이 직접 준다.
 import { randomBytes } from 'node:crypto'
-import { workAdapter } from './adapters'
+import { workAdapter, workKey } from './adapters'
 import { CHANGE_PROPERTIES, diffBodies, parseChanges, PLAN_TTL } from './save-tools'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type { WorkAdapter, WorkBody, WorkChanges, WorkFetch } from './types'
@@ -94,7 +94,7 @@ export function createEditionTools(deps: WorkToolDeps): ToolDef[] {
       },
       async run(args) {
         const adapter = editionAdapter(str(args.site))
-        const id = str(args.work_id).toLowerCase()
+        const id = workKey(adapter, str(args.work_id))
         const read = deps.reader(adapter.id)
         // 원문 언어나 목록에 없는 언어에는 쓰지 않는다
         const wanted = str(args.language).toLowerCase()

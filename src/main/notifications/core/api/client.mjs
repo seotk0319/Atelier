@@ -6,6 +6,9 @@ export const endpoints={
   crack:'https://crack-api.wrtn.ai/crack-api/alarm?page=1&limit=20',
   genit:'https://api.genit.ai/api/notifications/?lang=ko',
   babe:'https://api.babechatapi.com/ko/api/notifications',
+  // Read from each site's own client code on 2026-11-10 (not yet called with a real account).
+  uumai:'https://api.uumm.ai/v1/me/notification',
+  chatple:'https://api.chatple.live/v1/alarm/list?category=member&page=1&rows=20',
 };
 export const allowed={
   eden:{origin:'https://jhbfalszdxacwjnrrvms.supabase.co',paths:['/rest/v1/notifications','/rest/v1/notification_deliveries','/rest/v1/global_notifications','/rest/v1/notification_content','/rest/v1/user_read_tracking'],alternates:[{origin:'https://www.eden-chat.com',paths:['/api/notifications']}]},
@@ -16,6 +19,8 @@ export const allowed={
   genit:{origin:'https://api.genit.ai',paths:['/api/notifications/']},
   rplay:{origin:'https://api.rplay.live',paths:['/account/getuser','/account/popup-notifications/active']},
   luna:{origin:'https://lunatalk.chat',paths:['/member/alarm']},
+  uumai:{origin:'https://api.uumm.ai',paths:['/v1/me/notification']},
+  chatple:{origin:'https://api.chatple.live',paths:['/v1/alarm/list']},
 };
 export function readRoute(platform,value){const u=new URL(value),rule=allowed[platform];if(!rule||![rule,...rule.alternates||[]].some(r=>u.origin===r.origin&&r.paths.includes(u.pathname))||u.username||u.password||u.hash)throw Error('UNAPPROVED_READ_ROUTE');return u.href}
 // Failure context a person can act on, carrying no credential material: host and
@@ -38,8 +43,18 @@ export class SessionExpired extends Error{constructor(platform,trace={}){super(`
 // listed one by one: a renewal may be worth trying, but the failure is still reported
 // as a server error, never as a logged-out account.
 export const authInvalidCodes=new Set(['AUTH_TOKEN_INVALID']);
+// Chatple answers an expired Login-At with {result:{name:'AUTH_ERROR',code:'0001'|'0004'}} and
+// refreshes only on those two codes (its own fetch_fn, read 2026-11-10); the HTTP status is not known.
+export async function authErrorBody(response){
+  try{
+    if(!/json/i.test(response.headers.get('content-type')||''))return false;
+    const data=JSON.parse((await response.clone().text()).slice(0,4000)),r=data?.result;
+    return r?.name==='AUTH_ERROR'&&(r.code==='0001'||r.code==='0004');
+  }catch{return false}
+}
 export async function renewable(response,hint){
   if(response.status===401||response.status===403)return true;
+  if(!response.ok&&await authErrorBody(response))return true;
   if(response.status<500)return false;
   const code=(hint||await failureHint(response)).code;
   return typeof code==='string'&&authInvalidCodes.has(code.replace(/^"|"$/g,''));
@@ -47,7 +62,7 @@ export async function renewable(response,hint){
 // One place separates 401/403 from every other status, so no caller can blur them.
 export async function readError(platform,response,url,stage){
   const trace=requestTrace(url,{stage,status:response.status,...await failureHint(response)});
-  if(response.status===401||response.status===403)return new SessionExpired(platform,trace);
+  if(response.status===401||response.status===403||await authErrorBody(response))return new SessionExpired(platform,trace);
   const error=Error(`${platform}: HTTP_${response.status} · ${traceText(trace)}`);
   error.platform=platform;error.trace=trace;return error;
 }
@@ -57,6 +72,8 @@ export function nextPage(platform,body,current){
   if(platform==='elyn'){const total=body.total_count??body.data?.total_count,page=Number(u.searchParams.get('page')||1),size=Number(u.searchParams.get('page_size')||20);if(typeof total==='number'&&rows.length&&page*size<total){u.searchParams.set('page',String(page+1));return u.href}}
   if(platform==='neko'&&body.pagination?.hasMore===true&&body.pagination.nextCursor){u.searchParams.set('before',body.pagination.nextCursor);return u.href}
   if(platform==='crack'&&body.data?.hasNext===true){u.searchParams.set('page',String(Number(u.searchParams.get('page')||1)+1));return u.href}
+  if(platform==='uumai'){const next=body?.meta?.next;if((typeof next==='string'&&next)||typeof next==='number'){u.searchParams.set('after',String(next));return u.href}}
+  if(platform==='chatple'){const got=Array.isArray(body?.result?.list)?body.result.list.length:0,rows=Number(u.searchParams.get('rows')||20);if(got>=rows&&got>0){u.searchParams.set('page',String(Number(u.searchParams.get('page')||1)+1));return u.href}}
   if(platform==='genit'&&body.next){const next=readRoute(platform,new URL(body.next,current).href);if(new URL(next).pathname!==u.pathname)throw Error('INVALID_NEXT_PAGE');return next}
   return null;
 }
@@ -69,7 +86,7 @@ export async function collectPages({platform,transport,commit,startUrl=endpoints
     signal?.throwIfAborted();if(visited.has(url))throw Error('PAGINATION_CYCLE');visited.add(url);
     const response=await transport({platform,url,method:'GET',signal});
     if(!response.ok)throw await readError(platform,response,url,`${stage}:p${pages+1}`);
-    const body=await response.json(),result=normalize(platform,platform==='rplay'?{notifications:body.notifications}:body),next=nextPage(platform,body,url);
+    const body=await response.json(),result=normalize(platform,platform==='rplay'?{notifications:body.notifications}:platform==='chatple'?{list:body?.result?.list}:body),next=nextPage(platform,body,url);
     if(next)readRoute(platform,next);
     const progress={next,complete:!next,pages:(checkpoint?.pages||0)+pages+1,scope:platform==='babe'?'returned-window':'list'};
     // Advance only after the consumer has durably committed this batch.

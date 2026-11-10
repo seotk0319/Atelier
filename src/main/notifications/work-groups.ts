@@ -3,7 +3,18 @@ import type { InboxWork, InboxWorkGroup } from '../../shared/inbox'
 import { normTitle, safeImage, thumbUrl } from './work-images'
 
 // 썸네일은 1:1 베이비챗 이미지를 먼저 쓴다 (알림 썸네일과 같은 기준)
-const THUMB_ORDER = ['babe', 'eden', 'genit', 'crack', 'elyn', 'neko', 'teapot', 'luna']
+const THUMB_ORDER = [
+  'babe',
+  'eden',
+  'genit',
+  'crack',
+  'elyn',
+  'neko',
+  'teapot',
+  'luna',
+  'uumai',
+  'chatple'
+]
 
 /**
  * 끝 글자가 잘린 제목(티팟 「과외생 길들이」 ↔ 「과외생 길들이기」)을 같은 작품으로 본다.

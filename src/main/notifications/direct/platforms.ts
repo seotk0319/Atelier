@@ -10,7 +10,9 @@ export const DIRECT_PLATFORMS = [
   'teapot',
   'crack',
   'rplay',
-  'genit'
+  'genit',
+  'uumai',
+  'chatple'
 ] as const
 export type DirectPlatformId = (typeof DIRECT_PLATFORMS)[number]
 export const isDirectPlatform = (value: unknown): value is DirectPlatformId =>
@@ -27,7 +29,11 @@ export const SITES: Record<DirectPlatformId, string> = {
   teapot: 'https://teapotchat.com/notifications',
   crack: 'https://crack.wrtn.ai/',
   rplay: 'https://rplay.live/story',
-  genit: 'https://genit.ai/ko'
+  genit: 'https://genit.ai/ko',
+  // 공지사항 화면이 "내 소식" 표시를 위해 /v1/me/notification을 읽는다 (2026-11-10 사이트 코드)
+  uumai: 'https://uumm.ai/notices',
+  // 알림 화면이 열리자마자 /v1/alarm/list를 읽는다 (2026-11-10 사이트 코드)
+  chatple: 'https://ko.chatple.live/notification'
 }
 // Only these cookies leave the sign-in browser, and only for their own platform.
 export const COOKIE_DOMAINS: Record<DirectPlatformId, string[]> = {
@@ -39,14 +45,16 @@ export const COOKIE_DOMAINS: Record<DirectPlatformId, string[]> = {
   teapot: ['teapotchat.com'],
   crack: ['wrtn.ai'],
   rplay: ['rplay.live'],
-  genit: ['genit.ai']
+  genit: ['genit.ai'],
+  uumai: ['uumm.ai'],
+  chatple: ['chatple.live']
 }
 export function cookieBelongs(platform: DirectPlatformId, domain: string): boolean {
   const host = domain.replace(/^\./, '').toLowerCase()
   return COOKIE_DOMAINS[platform].some((root) => host === root || host.endsWith('.' + root))
 }
 
-type Need = 'auth' | 'renewal' | 'route' | 'queries'
+type Need = 'auth' | 'renewal' | 'route' | 'queries' | 'login-at'
 // What a finished capture holds. A site that stops short of these after 25 seconds
 // is still tried: the first collection decides whether the account is signed in.
 const NEEDS: Record<DirectPlatformId, Need[]> = {
@@ -58,7 +66,10 @@ const NEEDS: Record<DirectPlatformId, Need[]> = {
   elyn: ['auth', 'renewal'],
   genit: [],
   neko: [],
-  luna: []
+  luna: [],
+  // 우마이는 Bearer, 챗플은 Login-At 헤더로 로그인한다. 연장은 둘 다 사이트 쿠키로 한다.
+  uumai: ['auth', 'renewal'],
+  chatple: ['login-at', 'renewal']
 }
 export function captureComplete(
   platform: DirectPlatformId,
@@ -68,11 +79,13 @@ export function captureComplete(
   return NEEDS[platform].every((need) =>
     need === 'auth'
       ? !!profile.headers?.authorization
-      : need === 'renewal'
-        ? !!profile.renewal
-        : need === 'route'
-          ? !!profile.routes?.['/account/getuser']
-          : teapotQueries(profile).length > 0
+      : need === 'login-at'
+        ? !!profile.headers?.['login-at']
+        : need === 'renewal'
+          ? !!profile.renewal
+          : need === 'route'
+            ? !!profile.routes?.['/account/getuser']
+            : teapotQueries(profile).length > 0
   )
 }
 export function sessionReady(
@@ -82,7 +95,10 @@ export function sessionReady(
   return (
     !!profile &&
     (platform !== 'teapot' || teapotQueries(profile).length > 0) &&
-    (platform !== 'rplay' || !!profile.routes?.['/account/getuser'])
+    (platform !== 'rplay' || !!profile.routes?.['/account/getuser']) &&
+    // 로그인 헤더가 없으면 알림 API가 비로그인으로 답한다
+    (platform !== 'uumai' || !!profile.headers?.authorization) &&
+    (platform !== 'chatple' || !!profile.headers?.['login-at'])
   )
 }
 // Luna has no API session: its alarm page is read with the site's cookies alone.
@@ -94,7 +110,7 @@ export const cookieOnly = (): SessionProfile => ({
 })
 
 const HOSTS =
-  /^(?:www\.eden-chat\.com|babechat\.ai|lunatalk\.chat|elyn\.ai|www\.nekochat\.xyz|teapotchat\.com|crack\.wrtn\.ai|rplay\.live|genit\.ai)$/
+  /^(?:www\.eden-chat\.com|babechat\.ai|lunatalk\.chat|elyn\.ai|www\.nekochat\.xyz|teapotchat\.com|crack\.wrtn\.ai|rplay\.live|genit\.ai|uumm\.ai|ko\.chatple\.live|chatple\.live)$/
 // The capture script runs inside the platform's own page and relays what the page sends
 // into a queue the app polls. It does nothing on any other host, sign-in pages included.
 export const CAPTURE_SCRIPT = [

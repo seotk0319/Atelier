@@ -53,6 +53,23 @@ export const renewalKinds={
     endpoint:renewal=>`https://api.babechatapi.com/ko/api/auth/token/refresh?refresh_token=${encodeURIComponent(renewal.refreshToken)}`,
     request:()=>({headers:{}}),
     read:data=>({token:data.access_token,refreshToken:data.refresh_token})
+  },
+  // The next two keep their refresh secret in an httpOnly cookie the page cannot read. The
+  // cookie travels with the platform's imported cookies (jar), never through the page.
+  uumai:{
+    platforms:['uumai'],applyTo:['https://api.uumm.ai'],jar:true,
+    // Uumai's axios client posts to /auth/refresh withCredentials and reads accessToken (read 2026-11-10).
+    endpoint:()=>'https://api.uumm.ai/v1/auth/refresh',
+    request:()=>({headers:{}}),
+    read:data=>({token:data?.accessToken})
+  },
+  chatple:{
+    platforms:['chatple'],applyTo:['https://api.chatple.live'],jar:true,method:'GET',header:'login-at',
+    // Chatple's fetch_fn calls GET /v1/login/refresh with credentials and reads result.LOGINAT,
+    // which it then sends as the Login-At header (read 2026-11-10).
+    endpoint:()=>'https://api.chatple.live/v1/login/refresh',
+    request:()=>({headers:{}}),
+    read:data=>({token:data?.result?.LOGINAT})
   }
 };
 // The page supplies the secret, never the shape: an unknown kind, a wrong platform
@@ -60,6 +77,8 @@ export const renewalKinds={
 export function renewalRecord(platform,renewal){
   const kind=renewalKinds[renewal?.kind];
   if(!kind||!kind.platforms.includes(platform))throw Error('UNAPPROVED_RENEWAL_KIND');
+  // A cookie-jar renewal stores no secret at all: the session cookie already lives in the app session.
+  if(kind.jar)return {kind:renewal.kind,jar:true,capturedAt:new Date().toISOString()};
   const refreshToken=renewal.refreshToken;
   // Supabase-style sessions (Eden, and Elyn's session endpoint) use opaque refresh tokens,
   // including Eden's observed 12-character values. Other providers keep their existing
@@ -79,12 +98,14 @@ export async function renewSession({platform,profile,fetchImpl=globalThis.fetch}
   const renewal=profile?.renewal,kind=renewalKinds[renewal?.kind];
   if(!kind||!kind.platforms.includes(platform))throw new RenewalFailed(platform,'RENEWAL_UNAVAILABLE');
   const url=kind.endpoint(renewal),{headers,body}=kind.request({renewal,profile});
-  const response=await fetchImpl(url,{method:'POST',headers,body,credentials:'omit',redirect:'error',signal:AbortSignal.timeout(15000)});
+  const response=await fetchImpl(url,{method:kind.method||'POST',headers,body,credentials:kind.jar?'include':'omit',redirect:'error',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw new RenewalFailed(platform,'RENEWAL_REJECTED',requestTrace(url,{kind:renewal.kind,status:response.status,...await failureHint(response)}));
   const data=await response.json().catch(()=>null),{token,refreshToken}=kind.read(data||{});
   if(typeof token!=='string'||!token)throw new RenewalFailed(platform,'RENEWAL_NO_TOKEN',requestTrace(url,{kind:renewal.kind,status:response.status}));
-  const previous=profile.headersByOrigin?.[kind.applyTo[0]]?.authorization;
+  const header=kind.header||'authorization',previous=profile.headersByOrigin?.[kind.applyTo[0]]?.[header];
   // A rotated refresh token replaces the old one; a server that omits one keeps it in use.
+  // A cookie-jar session rotates its own cookie inside the app session; nothing is stored here.
+  if(kind.jar)return {authorization:header==='authorization'?bearerOf(previous,token):String(token),header,origins:kind.applyTo,renewal:{...renewal,renewedAt:new Date().toISOString()}};
   const rotated=typeof refreshToken==='string'&&refreshToken?refreshToken:renewal.refreshToken;
-  return {authorization:bearerOf(previous,token),origins:kind.applyTo,renewal:{...renewal,refreshToken:rotated,renewedAt:new Date().toISOString()}};
+  return {authorization:bearerOf(previous,token),header,origins:kind.applyTo,renewal:{...renewal,refreshToken:rotated,renewedAt:new Date().toISOString()}};
 }

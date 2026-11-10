@@ -157,6 +157,12 @@ export async function workSend(platform: string, request: WorkRequest): Promise<
   return direct.workSend(platform, request)
 }
 
+/** 작품 연결부가 주소에 넣는 로그인 계정 번호 (알플레이·티팟). 연결 안 됐으면 null. */
+export async function workAccount(platform: string): Promise<unknown> {
+  await startInbox().catch(() => undefined)
+  return direct ? direct.workAccount(platform) : null
+}
+
 let error: string | null = null
 
 // 썸네일 기준표(베이비챗 작품 이름·이미지). 파일로 남겨 두고 6시간마다 새로 읽는다.

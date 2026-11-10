@@ -1,5 +1,5 @@
-// Nine separated hues. The previous palette repeated blue, teal and lilac, so three
-// pairs of platforms were not distinguishable at any dot size.
+// Separated hues, one per platform. The previous palette repeated blue, teal and lilac, so three
+// pairs of platforms were not distinguishable at any dot size. Uumai and Chatple take brown and slate.
 export const PLATFORM_COLORS: Record<string, string> = {
   crack: '#d95d3e',
   neko: '#d99b1f',
@@ -9,7 +9,9 @@ export const PLATFORM_COLORS: Record<string, string> = {
   eden: '#3f8fd6',
   rplay: '#3b4fb8',
   teapot: '#8a5fd6',
-  luna: '#d65b9e'
+  luna: '#d65b9e',
+  uumai: '#a6683c',
+  chatple: '#6b7f99'
 }
 // The raw hues are fine as bars but too light to read as small text. Mixing toward the
 // theme's ink darkens them on light themes and lightens them on dark ones, so the label

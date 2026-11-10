@@ -4,7 +4,8 @@ export interface SessionProfile {
   headersByOrigin?: Record<string, Record<string, string>>
   routes?: Record<string, string>
   queries?: unknown[]
-  renewal?: { kind: string; refreshToken: string; [key: string]: unknown }
+  /** 쿠키로 연장하는 플랫폼(우마이·챗플)은 refreshToken 없이 jar: true만 둔다 */
+  renewal?: { kind: string; refreshToken?: string; jar?: boolean; [key: string]: unknown }
   capturedAt?: string
   renewedAt?: string
   [key: string]: unknown
@@ -93,7 +94,10 @@ export function renewSession(options: {
   profile: SessionProfile
   fetchImpl?: typeof fetch
 }): Promise<{
+  /** 새 로그인 값 (header 이름으로 붙인다) */
   authorization: string
+  /** authorization 또는 login-at (챗플) */
+  header: string
   origins: string[]
   renewal: SessionProfile['renewal']
 }>

@@ -21,7 +21,9 @@ export const MY_WORK_ORIGINS: Record<string, string[]> = {
   crack: ['https://crack-api.wrtn.ai'],
   genit: ['https://api.genit.ai'],
   // 목록은 로그인 API, 제목·공개일은 공개 작품 API
-  rplay: ['https://api.rplay.live', 'https://chat-api.rplay.live']
+  rplay: ['https://api.rplay.live', 'https://chat-api.rplay.live'],
+  uumai: ['https://api.uumm.ai'],
+  chatple: ['https://api.chatple.live']
 }
 
 export function myWorksReadAllowed(platform: string, url: string): boolean {
@@ -94,6 +96,7 @@ function work(
 }
 
 const enc = encodeURIComponent
+const CHATPLE_SITE = 'https://ko.chatple.live/'
 
 export interface WorkContext {
   /** 티팟 파이어베이스 사용자 번호 */
@@ -361,6 +364,76 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
       if (!body.has_more || rows.length < 20) break
     }
     return out
+  },
+
+  // 우마이 스튜디오 "작품" 탭과 같은 목록 (2026-11-10 사이트 코드, 실제 호출 전):
+  //   GET /v1/creator/work?sort=latest[&after=다음 표시] → {data:[{id,title,thumbnail,publishedAt,draftSavedAt,publishStatus}], meta:{next}}
+  // publishStatus 1 공개 / 2 비공개 / 3 링크공개. publishedAt이 없으면 한 번도 발행하지 않은 초안이다.
+  async uumai(read) {
+    const out: (InboxWork | null)[] = []
+    let after: string | null = null
+    const seen = new Set<string>()
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const body = await json(
+        await read(
+          'https://api.uumm.ai/v1/creator/work?sort=latest' + (after ? '&after=' + enc(after) : '')
+        )
+      )
+      const rows = list(isObj(body) ? body.data : null)
+      for (const w of rows) {
+        const id = str(w.id)
+        out.push(
+          work(
+            'uumai',
+            id,
+            w.title,
+            id ? 'https://uumm.ai/works/' + enc(id) : null,
+            w.publishedAt,
+            w.draftSavedAt,
+            !!str(w.publishedAt) && w.publishStatus === 1,
+            https(w.thumbnail)
+          )
+        )
+      }
+      const meta = isObj(body) && isObj(body.meta) ? body.meta : {}
+      const next = typeof meta.next === 'number' ? String(meta.next) : str(meta.next)
+      // 같은 표시가 다시 오면 멈춘다 (목록이 돌지 않게)
+      if (!next || !rows.length || seen.has(next)) break
+      seen.add(next)
+      after = next
+    }
+    return out
+  },
+
+  // 챗플 프로필 "제작 캐릭터"와 같은 목록 (2026-11-10 사이트 코드, 실제 호출 전):
+  //   GET /v1/login/me → result.login.mem_no,  GET /v1/contents/creator/{mem_no} → result.contents[]
+  // flag_use 0 공개 / 1 비공개 / 2 링크공개. 공개는 심사 통과(review_status 2 또는 flag_public 1) 뒤에 보인다.
+  async chatple(read) {
+    const me = await json(await read('https://api.chatple.live/v1/login/me'))
+    const result = isObj(me) && isObj(me.result) ? me.result : {}
+    const login = isObj(result.login) ? result.login : {}
+    const memNo = typeof login.mem_no === 'number' ? login.mem_no : Number(str(login.mem_no))
+    if (!Number.isInteger(memNo) || memNo <= 0) throw new Error('LOGIN_REQUIRED')
+    const body = await json(await read('https://api.chatple.live/v1/contents/creator/' + memNo))
+    const res = isObj(body) && isObj(body.result) ? body.result : {}
+    const video = (v: unknown): boolean => /\.(?:mp4|webm|mov)(?:[?#]|$)/i.test(str(v) ?? '')
+    return list(res.contents).map((w) => {
+      const id = typeof w.idx === 'number' ? String(w.idx) : str(w.idx)
+      return work(
+        'chatple',
+        id,
+        w.title,
+        id && /^\d+$/.test(id) ? 'https://ko.chatple.live/content/' + id : null,
+        null,
+        w.reg_dt,
+        Number(w.flag_use ?? 0) === 0 &&
+          (Number(w.flag_public) === 1 || Number(w.review_status) === 2),
+        // 주소가 //로 시작할 수 있다 (NP_CDN_DOMAIN_IMG "//images.novelpia.com")
+        video(w.avatar_url)
+          ? https(w.poster_url, CHATPLE_SITE)
+          : https(w.avatar_url, CHATPLE_SITE) || https(w.poster_url, CHATPLE_SITE)
+      )
+    })
   },
 
   async teapot(read, ctx) {

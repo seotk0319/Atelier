@@ -3,7 +3,7 @@
 //  - 적용 단계는 계획 뒤 플랫폼 내용이 바뀌었으면 멈추고, 직전 원본을 스냅샷으로 남긴 뒤 다시 읽어 견준다.
 // 로컬 파일은 이미지 확장자와 크기 한도 안에서만 읽는다 (글 파일의 readText와 같은 제한).
 import { randomBytes } from 'node:crypto'
-import { workAdapter } from './adapters'
+import { workAdapter, workKey } from './adapters'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type {
   FileRules,
@@ -213,7 +213,10 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
       async run(args) {
         const adapter = workAdapter(str(args.site))
         if (!adapter.imageGroups) throw new Error('NO_IMAGES')
-        const raw = await adapter.readRaw(deps.reader(adapter.id), str(args.work_id).toLowerCase())
+        const raw = await adapter.readRaw(
+          deps.reader(adapter.id),
+          workKey(adapter, str(args.work_id))
+        )
         return {
           site: adapter.id,
           rules: adapter.imageRules,
@@ -236,6 +239,9 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         'visibility public / partial / private). 공개 작품은 적용하면 검수 요청이 된다. ' +
         '네코챗: main_file로 아바타를 바꾸고, add로 이미지 슬롯을 더한다(label = 영문·숫자 1~20자 slug, ' +
         'visibility public / hidden). ' +
+        '우마이: main_file로 표지를 바꾸고, add로 작품 이미지를 더한다(label = 영문 소문자·숫자 5자 slug, 비우면 자동, ' +
+        'description = 키워드 30자, visibility public / hidden). 우마이는 임시저장(초안)으로 저장돼, 발행한 작품은 ' +
+        '사이트에서 작품 등록을 눌러야 독자에게 보인다. 챗플은 이미지 바꾸기를 지원하지 않는다. ' +
         '파일 한도는 images_list의 rules(확장자·바이트)를 따른다.',
       inputSchema: {
         type: 'object',
@@ -282,7 +288,7 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         const adapter = workAdapter(str(args.site))
         if (!adapter.imageGroups || !adapter.planImages || !adapter.applyImages)
           throw new Error('NO_IMAGES')
-        const id = str(args.work_id).toLowerCase()
+        const id = workKey(adapter, str(args.work_id))
         const { changes, sizes } = await imageChanges(adapter, args)
         const raw = await adapter.readRaw(deps.reader(adapter.id), id)
         const groups = adapter.imageGroups(raw)
@@ -390,7 +396,7 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         const adapter = workAdapter(str(args.site))
         const rules = adapter.coverRules
         if (!adapter.uploadCover || !adapter.coverUrl || !rules) throw new Error('NO_COVER')
-        const id = str(args.work_id).toLowerCase()
+        const id = workKey(adapter, str(args.work_id))
         const read = deps.reader(adapter.id)
         const raw = await adapter.readRaw(read, id)
         const editions = adapter.editions ? await adapter.editions(read, id) : []

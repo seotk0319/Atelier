@@ -1,9 +1,10 @@
 // Session handoff only. Request bodies and account responses are never exported.
 (() => {
-  const origins={eden:'https://jhbfalszdxacwjnrrvms.supabase.co',babe:'https://api.babechatapi.com',elyn:'https://api.seoul.elyn.ai',neko:'https://www.nekochat.xyz',crack:'https://crack-api.wrtn.ai',rplay:'https://api.rplay.live',genit:'https://api.genit.ai',teapot:'https://firestore.googleapis.com'};
-  const hosts={'www.eden-chat.com':'eden','babechat.ai':'babe','elyn.ai':'elyn','www.nekochat.xyz':'neko','crack.wrtn.ai':'crack','rplay.live':'rplay','genit.ai':'genit','teapotchat.com':'teapot'};
+  const origins={eden:'https://jhbfalszdxacwjnrrvms.supabase.co',babe:'https://api.babechatapi.com',elyn:'https://api.seoul.elyn.ai',neko:'https://www.nekochat.xyz',crack:'https://crack-api.wrtn.ai',rplay:'https://api.rplay.live',genit:'https://api.genit.ai',teapot:'https://firestore.googleapis.com',uumai:'https://api.uumm.ai',chatple:'https://api.chatple.live'};
+  const hosts={'www.eden-chat.com':'eden','babechat.ai':'babe','elyn.ai':'elyn','www.nekochat.xyz':'neko','crack.wrtn.ai':'crack','rplay.live':'rplay','genit.ai':'genit','teapotchat.com':'teapot','uumm.ai':'uumai','ko.chatple.live':'chatple','chatple.live':'chatple'};
   const platform=hosts[location.hostname];if(!platform)return;let active=false;const pending=[];
-  const allowedHeaders=new Set(['authorization','apikey','x-api-key','platform-type','refresh-token']);
+  // Chatple sends its session as Login-At (read from its own client code on 2026-11-10).
+  const allowedHeaders=new Set(['authorization','apikey','x-api-key','platform-type','refresh-token','login-at']);
   const emit=profile=>{if(active)window.postMessage({source:'moa-api-profile',platform,profile},location.origin);else if(pending.length<50)pending.push(profile)};
   function capture(raw,headers,method,body){
     let url;try{url=new URL(raw,location.href)}catch{return}if(url.origin!==origins[platform]&&!(platform==='eden'&&url.origin==='https://www.eden-chat.com'))return;

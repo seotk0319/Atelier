@@ -1,10 +1,15 @@
 // 작품 본문을 읽을 수 있는 플랫폼 연결부 등록부. 새 플랫폼은 여기 한 줄을 더한다.
 import { babeWorks } from './babe'
+import { chatpleWorks } from './chatple'
+import { crackWorks } from './crack'
+import { rplayWorks } from './rplay'
+import { teapotWorks } from './teapot'
 import { edenWorks } from './eden'
 import { elynWorks } from './elyn'
 import { genitWorks } from './genit'
 import { lunaWorks } from './luna'
 import { nekoWorks } from './neko'
+import { uumaiWorks } from './uumai'
 import type { SendRule, WorkAdapter, WorkReadInit, WorkRequest } from './types'
 
 export const WORK_ADAPTERS: Record<string, WorkAdapter> = {
@@ -13,7 +18,12 @@ export const WORK_ADAPTERS: Record<string, WorkAdapter> = {
   genit: genitWorks,
   luna: lunaWorks,
   elyn: elynWorks,
-  neko: nekoWorks
+  neko: nekoWorks,
+  teapot: teapotWorks,
+  crack: crackWorks,
+  rplay: rplayWorks,
+  uumai: uumaiWorks,
+  chatple: chatpleWorks
 }
 
 // 사람이 부르는 이름 → 연결부 이름
@@ -35,8 +45,26 @@ const ALIASES: Record<string, string> = {
   'elyn.ai': 'elyn',
   네코: 'neko',
   네코챗: 'neko',
-  nekochat: 'neko'
+  nekochat: 'neko',
+  크랙: 'crack',
+  뤼튼: 'crack',
+  wrtn: 'crack',
+  'crack.wrtn.ai': 'crack',
+  알플: 'rplay',
+  알플레이: 'rplay',
+  'rplay.live': 'rplay',
+  티팟: 'teapot',
+  teapotchat: 'teapot',
+  우마이: 'uumai',
+  우우마이: 'uumai',
+  'uumm.ai': 'uumai',
+  챗플: 'chatple',
+  'chatple.live': 'chatple'
 }
+
+/** 작품 번호를 견주거나 저장 이름으로 쓸 때의 모양. 번호가 대소문자를 구분하는 플랫폼(티팟)은 그대로 둔다 */
+export const workKey = (adapter: WorkAdapter, id: string): string =>
+  adapter.caseSensitiveIds ? id : id.toLowerCase()
 
 export function workAdapter(site: string): WorkAdapter {
   const key = String(site || '')

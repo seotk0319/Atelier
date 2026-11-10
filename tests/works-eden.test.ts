@@ -184,7 +184,9 @@ describe('작품 도구', () => {
   it('사람이 부르는 이름으로도 찾는다', () => {
     expect(workAdapter('에덴').id).toBe('eden')
     expect(workAdapter(' Eden ').id).toBe('eden')
-    expect(() => workAdapter('우마이')).toThrow('UNKNOWN_SITE')
+    // 우마이·챗플은 2026-11-10에 연결부가 생겼다. 없는 곳은 여전히 거절한다
+    expect(workAdapter('우마이').id).toBe('uumai')
+    expect(() => workAdapter('없는사이트')).toThrow('UNKNOWN_SITE')
   })
 
   it('works_list: 제목 검색', async () => {

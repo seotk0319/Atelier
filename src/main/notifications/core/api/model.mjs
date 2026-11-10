@@ -1,5 +1,5 @@
 // Consumer-independent notification contract. No DOM, credentials or storage.
-export const PLATFORMS=['eden','babe','luna','elyn','neko','teapot','crack','rplay','genit'];
+export const PLATFORMS=['eden','babe','luna','elyn','neko','teapot','crack','rplay','genit','uumai','chatple'];
 const text=v=>typeof v==='string'?v:typeof v==='number'?String(v):'';
 const pick=(o,keys)=>keys.map(k=>o?.[k]).find(v=>v!==undefined&&v!==null);
 export function instant(value){if(value==null||value==='')return null;if(typeof value==='object'&&typeof value.seconds==='number')value=value.seconds*1000;const d=new Date(value);return Number.isFinite(+d)?d.toISOString():null}
@@ -11,8 +11,20 @@ const types={
   genit:{creator_character_comment:'comment',creator_character_comment_reply:'reply',comment_reply:'reply',comment_liked:'like',creator_character_liked:'like',creator_character_like:'like',character_like:'like',creator_follow:'follow',user_follow:'follow',new_follower:'follow',customer_inquiry_answered:'admin',inquiry_notice:'admin'},
   rplay:{storychatsCommentByUser:'comment'},
   teapot:{'관리자':'admin','댓글':'comment','팔로우':'follow','좋아요':'like','업데이트':'admin','이벤트':'admin','서비스공지':'admin'},
+  // Uumai NotificationType enum (site code 2026-11-10): System 1, Follow 2, WorkCommented 3,
+  // FeedCommented 4, CommentReplied 5, Follower 6, Liked 7. 8~11 (following feed, gift, BGM, achievement) stay unmapped.
+  uumai:{'1':'admin','2':'follow','3':'comment','4':'comment','5':'reply','6':'follow','7':'like'},
+  // Chatple type_str groups from its alarm page (comment / like / follow / review), read 2026-11-10.
+  chatple:{comment:'comment',comment_reply:'reply',comment_reply_owner:'reply',comment_good:'like',like:'like',follow:'follow',content_reject:'admin',content_approve:'admin'},
 };
 export function classify(platform,raw){
+  if(platform==='chatple'){
+    // type_str carries the activity kind; notices, events and system rows (flag_type 0/1/3) have none.
+    const kind=text(raw.type_str||raw.type),flag=Number(raw.flag_type);
+    if(types.chatple[kind])return {event:types.chatple[kind],type:kind,evidence:'source-type'};
+    if(!kind&&[0,1,3].includes(flag))return {event:'admin',type:'flag_type:'+flag,evidence:'source-category'};
+    return {event:'other',type:kind||(Number.isFinite(flag)?'flag_type:'+flag:''),evidence:'unmapped'};
+  }
   const type=text(platform==='teapot'&&raw.tag||pick(raw,['notification_type','event_type','type','category','kind','noti_type']));
   if(types[platform]?.[type])return {event:platform==='rplay'&&raw.isReply===true?'reply':types[platform][type],type,evidence:'source-type'};
   if(platform==='elyn'){
@@ -73,8 +85,25 @@ export function notification(platform,raw,{channel='personal',sourceId,sourceTyp
   if(platform==='genit'){body=text(payload.comment_snippet)||body;title=title||(work.title?`「${work.title}」 ${classificationResult.event}`:actor.name?`${actor.name} · ${classificationResult.event}`:'');}
   if(platform==='neko')title=title||(work.title?`「${work.title}」 ${classificationResult.event}`:actor.name?`${actor.name} · ${classificationResult.event}`:'');
   if(platform==='rplay'&&channel==='personal'){work.title=text(raw.remark)||null;body=text(raw.commentText);title=work.title?`「${work.title}」 ${raw.isReply?'답글':'댓글'}`:'스토리챗 알림';work.url=work.id?`https://rplay.live/story/${encodeURIComponent(work.id)}`:null;}
+  if(platform==='uumai'){
+    actor.name=text(raw.nickname)||actor.name;
+    // linkUrl may be a site path; a work page link carries the work id.
+    const link=siteLink(raw.linkUrl,'https://uumm.ai/');
+    // A link off the platform's own site is dropped rather than shown.
+    raw={...raw,linkUrl:link||undefined};
+    if(link){const m=new URL(link).pathname.match(/^\/works\/([0-9a-f-]{36})(?:\/|$)/i);if(m){work.id=m[1];work.url='https://uumm.ai/works/'+m[1];}}
+    title=title||actor.name||(classificationResult.event==='admin'?'우마이 공지':'');
+  }
+  if(platform==='chatple'){
+    // The alarm page renders content as HTML; only its text is kept.
+    body=text(raw.content||raw.subtitle).replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/[ \t]+/g,' ').trim();
+    const link=siteLink(raw.link,'https://ko.chatple.live/');
+    raw={...raw,url:link||undefined};
+    if(link){const m=new URL(link).pathname.match(/^\/content\/(\d+)(?:\/|$)/);if(m){work.id=m[1];work.url='https://ko.chatple.live/content/'+m[1];}}
+  }
   let sourceRead=typeof raw.isRead==='boolean'?raw.isRead:typeof raw.is_read==='boolean'?raw.is_read:null;
-  const at=instant(pick(raw,['created_at','createdAt','created','time_created','noti_date','date']));
+  // Chatple's reg_dt has no zone; the service runs on Korean time.
+  const at=platform==='chatple'?instant(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(text(raw.reg_dt))?text(raw.reg_dt).replace(' ','T')+'+09:00':raw.reg_dt):instant(pick(raw,['created_at','createdAt','created','time_created','noti_date','date']));
   if(!work.url)work.url=workLink(platform,work.id);
   const link=https(pick(raw,['webLink','link_url','linkUrl','url','noti_url']))||work.url;
   const type=sourceType??(platform==='teapot'&&text(raw.tag)||classificationResult.type);
@@ -95,6 +124,8 @@ export function normalize(platform,body,options={}){
 // The work page of a platform whose own response carries no link. Each shape was read
 // from that site's own public pages on 2026-09-22, and an id that does not match its
 // platform's shape builds nothing rather than a guessed address.
+// A site path or an https link on the platform's own site; anything else is dropped.
+function siteLink(value,base){if(typeof value!=='string'||!value.trim())return null;try{const u=new URL(value.trim(),base),root=new URL(base).hostname.replace(/^ko\./,'');return u.protocol==='https:'&&(u.hostname===root||u.hostname.endsWith('.'+root))&&!u.username&&!u.password?u.href:null}catch{return null}}
 const uuid=value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const workPages={
   neko:id=>/^char_\d+_[a-z0-9]+$/i.test(id)?`https://www.nekochat.xyz/character/${id}`:null,

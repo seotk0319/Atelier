@@ -1,7 +1,7 @@
 import {allowed,readRoute} from './client.mjs';
 import {renewalRecord,renewalKinds} from './renewal.mjs';
 const apiOrigins=new Set([...Object.values(allowed).flatMap(r=>[r.origin,...(r.alternates||[]).map(a=>a.origin)]),'https://firestore.googleapis.com']);
-export const headerNames=['authorization','apikey','x-api-key','platform-type','refresh-token'];
+export const headerNames=['authorization','apikey','x-api-key','platform-type','refresh-token','login-at'];
 // The API still validates the token. Decoding here only selects its own user's
 // observed notice collection; never accept an arbitrary UID or collection.
 export function teapotQueries(profile){
@@ -25,7 +25,8 @@ export function profileUpdate(platform,message,previous={headers:{},routes:{},qu
   const next=structuredClone(previous);next.headers={...next.headers};next.routes={...next.routes};next.queries=[...(next.queries||[])];
   next.headersByOrigin={...next.headersByOrigin,[message.origin]:{...next.headersByOrigin?.[message.origin]}};
   for(const [key,value] of Object.entries(message.headers||{}))if(headerNames.includes(key.toLowerCase())&&typeof value==='string'&&value.length<20000){next.headersByOrigin[message.origin][key.toLowerCase()]=value;if(origin===message.origin)next.headers[key.toLowerCase()]=value;}
-  if(message.url&&platform!=='teapot'){try{const route=readRoute(platform,message.url);next.routes[new URL(route).pathname]=route}catch{/* A session header may come from another GET on the same API. */}}
+  // Uumai and Chatple always start from their fixed first page; a page's own scroll or tab query is not kept.
+  if(message.url&&platform!=='teapot'&&platform!=='uumai'&&platform!=='chatple'){try{const route=readRoute(platform,message.url);next.routes[new URL(route).pathname]=route}catch{/* A session header may come from another GET on the same API. */}}
   if(platform==='teapot'&&message.query){const q=message.query,parent=String(q.parent||''),query=q.structuredQuery,collections=query?.from?.map(x=>x.collectionId)||[];
     if(!/^projects\/chat-ai-7a275\/databases\/\(default\)\/documents(?:\/users\/[^/]+|\/notice\/v1)?$/.test(parent))throw Error('UNAPPROVED_QUERY_PARENT');
     if(!collections.length||!collections.every(x=>x==='notice'||x==='data'&&parent.endsWith('/notice/v1'))||query.from.some(x=>x.allDescendants===true))throw Error('UNAPPROVED_QUERY_COLLECTION');
@@ -36,6 +37,9 @@ export function profileUpdate(platform,message,previous={headers:{},routes:{},qu
   // rplay sends its refresh token as an ordinary request header, so the capture already holds it.
   const rplayToken=platform==='rplay'&&next.headersByOrigin['https://api.rplay.live']?.['refresh-token'];
   if(rplayToken&&rplayToken!==next.renewal?.refreshToken)next.renewal=renewalRecord('rplay',{kind:'rplay',refreshToken:rplayToken});
+  // Uumai and Chatple renew from the site's own session cookie (httpOnly, imported with the
+  // rest of the platform's cookies), so a captured header on the main API is all that is needed.
+  if((platform==='uumai'&&next.headers.authorization||platform==='chatple'&&next.headers['login-at'])&&!next.renewal)next.renewal=renewalRecord(platform,{kind:platform});
   next.capturedAt=new Date().toISOString();return next;
 }
 // Only the token's own expiry claim, so a stale credential is visible without
@@ -53,9 +57,9 @@ export function tokenExpiry(value){
 // Every origin the platform authenticates against, so one leg's expiry cannot hide behind another's.
 export function expiryByOrigin(profile){
   return Object.fromEntries(Object.entries(profile?.headersByOrigin||{})
-    .map(([origin,headers])=>[origin,tokenExpiry(headers?.authorization)]).filter(([,exp])=>exp));
+    .map(([origin,headers])=>[origin,tokenExpiry(headers?.authorization||headers?.['login-at'])]).filter(([,exp])=>exp));
 }
-export function safeSessionSummary(profile){const expiry=expiryByOrigin(profile);return {connected:!!profile,capturedAt:profile?.capturedAt||null,routeCount:Object.keys(profile?.routes||{}).length,queryCount:teapotQueries(profile).length,hasAuthorization:!!profile?.headers?.authorization,expiresAt:tokenExpiry(profile?.headers?.authorization),expiresAtByOrigin:expiry,expired:Object.values(expiry).some(x=>Date.parse(x)<=Date.now()),canRenew:!!profile?.renewal}}
+export function safeSessionSummary(profile){const expiry=expiryByOrigin(profile);return {connected:!!profile,capturedAt:profile?.capturedAt||null,routeCount:Object.keys(profile?.routes||{}).length,queryCount:teapotQueries(profile).length,hasAuthorization:!!(profile?.headers?.authorization||profile?.headers?.['login-at']),expiresAt:tokenExpiry(profile?.headers?.authorization||profile?.headers?.['login-at']),expiresAtByOrigin:expiry,expired:Object.values(expiry).some(x=>Date.parse(x)<=Date.now()),canRenew:!!profile?.renewal}}
 // The soonest expiry among the origins this profile can actually renew; null when
 // nothing is renewable, so a platform is never renewed on another leg's clock.
 export function renewableExpiry(profile){const kind=renewalKinds[profile?.renewal?.kind];if(!kind)return null;
