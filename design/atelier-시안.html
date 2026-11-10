@@ -5,248 +5,176 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atelier 시안</title>
 <style>
-:root{
-  --paper:#f5f4f1; --surface:#ffffff; --surface-2:#ecebe7; --ink:#1f1e1c; --muted:#5d5a54; --faint:#726e66; --line:#dfddd7;
-  --red:#c8372d; --on-red:#ffffff; --red-text:#ad2a21; --red-soft:#f8e1dc;
-  --blue:#2a5a88; --blue-soft:#dde7f0; --green:#2f6a47; --green-soft:#dfeae1; --amber:#855e10; --amber-soft:#f3e7c8;
-  --image-bg:#e3e3e3; color-scheme:light;
-}
-:root[data-theme="dark"]{
-  --paper:#151514; --surface:#1d1d1b; --surface-2:#292826; --ink:#ecebe7; --muted:#a9a69f; --faint:#86837b; --line:#363532;
-  --red:#e8594c; --on-red:#1d0906; --red-text:#f0776b; --red-soft:#3b1a16;
-  --blue:#8fb6dc; --blue-soft:#17283a; --green:#8fc29d; --green-soft:#18291d; --amber:#dab45e; --amber-soft:#33290f;
-  --image-bg:#1b1b1b; color-scheme:dark;
-}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0}
+:root{--paper:#f3f3f7;--surface:#fff;--surface-2:#ececf2;--ink:#191f28;--muted:#6b7280;--faint:#8b919c;--line:#e4e4ec;--accent:#5b5bd6;--accent-soft:rgba(91,91,214,.13);--on-accent:#fff;--danger:#d93a40;
+ --ok:#1f8f5c;--ok-soft:#e3f4ea;--warn:#96640a;--warn-soft:#fbefd0;--info:#3d63c9;--info-soft:#e4ebfb;--bad-soft:#fde6e7;--image:#e6e6ea;color-scheme:light}
+:root[data-theme=dark]{--paper:#0d0d11;--surface:#16161c;--surface-2:#202029;--ink:#e8e8ee;--muted:#8e8e9a;--faint:#6f6f7c;--line:#2a2a34;--accent:#8b8cf5;--accent-soft:rgba(139,140,245,.18);--on-accent:#0d0d11;--danger:#ef6f78;
+ --ok:#5cc896;--ok-soft:#14291f;--warn:#e0b25a;--warn-soft:#2e2510;--info:#8fa4f0;--info-soft:#1a2140;--bad-soft:#3a171a;--image:#1c1c22;color-scheme:dark}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
 body{background:var(--paper);color:var(--ink);font:13px/1.5 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
-:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .num{font-variant-numeric:tabular-nums}.muted{color:var(--muted)}.faint{color:var(--faint)}.sp{flex:1}
-kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--muted);background:var(--surface)}
-.app{display:grid;grid-template-rows:46px 1fr 34px;height:100vh}
-
-.top{display:flex;align-items:center;gap:4px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface)}
-.crumb{height:30px;padding:0 10px;border-radius:6px;color:var(--muted);font-weight:600}
-.crumb:hover{background:var(--surface-2);color:var(--ink)}.crumb.here{color:var(--ink)}
-.sep{color:var(--faint)}
-.tabs{display:none;margin-left:16px;gap:2px}.tabs.on{display:flex}
-.tab{height:30px;padding:0 12px;border-radius:6px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.tab:hover{background:var(--surface-2);color:var(--ink)}
-.tab.on{background:var(--surface-2);color:var(--ink);font-weight:650}
-.cnt{min-width:18px;height:18px;border-radius:9px;padding:0 5px;background:var(--red);color:var(--on-red);font-size:11px;font-weight:700;display:inline-grid;place-items:center}
-.tool{height:30px;padding:0 10px;border-radius:6px;color:var(--muted)}.tool:hover{color:var(--ink);background:var(--surface-2)}
-
-.main{min-height:0;overflow:auto}
-.view{display:none;padding:20px 24px;max-width:1500px;margin:0 auto}.view.on{display:block}
-.btn{height:32px;padding:0 13px;border-radius:6px;background:var(--surface-2);font-weight:600;white-space:nowrap}
-.btn:hover{filter:brightness(.96)}:root[data-theme=dark] .btn:hover{filter:brightness(1.2)}
-.btn.primary{background:var(--ink);color:var(--paper)}
-.btn.red{background:var(--red);color:var(--on-red)}
-.btn.ghost{background:none;color:var(--muted)}.btn.ghost:hover{background:var(--surface-2);color:var(--ink)}
+kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--muted);background:var(--surface)}
+.app{display:grid;grid-template-rows:56px 1fr 30px;height:100vh}
+/* 제목줄: 지금 앱 그대로 */
+.title{display:flex;align-items:center;gap:10px;padding:0 14px}
+.brand{font-weight:700;display:flex;gap:8px;align-items:center}.brand i{width:20px;height:20px;border-radius:6px;background:var(--ink);display:block}
+.pillbox{background:var(--surface);border-radius:12px;padding:0 12px;height:34px;display:flex;align-items:center;gap:10px;font-weight:600}
+.nav{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:2px;background:var(--surface-2);border-radius:12px;padding:3px}
+.nav button{height:30px;padding:0 13px;border-radius:9px;color:var(--muted);font-weight:600;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.nav button.on{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.nav .new{color:var(--ink)}
+.cnt{min-width:17px;height:17px;border-radius:9px;padding:0 5px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:inline-grid;place-items:center}
+.ic{height:32px;padding:0 9px;border-radius:8px;color:var(--muted)}.ic:hover{background:var(--surface-2);color:var(--ink)}
+.body{min-height:0;padding:0 12px 12px}
+.view{display:none;height:100%;gap:12px}.view.on{display:grid}
+.card{background:var(--surface);border-radius:14px;min-height:0;min-width:0}
+.btn{height:32px;padding:0 12px;border-radius:8px;background:var(--surface-2);font-weight:600;white-space:nowrap}
+.btn.accent{background:var(--accent);color:var(--on-accent)}.btn.ghost{background:none;color:var(--muted)}.btn.ghost:hover{background:var(--surface-2);color:var(--ink)}
 .btn.sm{height:28px;font-size:12px;padding:0 10px}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px}
-.panel>h3{margin:0;padding:10px 14px;font-size:13px;font-weight:650;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
-.seg{display:inline-flex;background:var(--surface-2);border-radius:6px;padding:2px}
-.seg button{height:24px;padding:0 10px;border-radius:4px;font-size:12px;color:var(--muted)}
-.seg button.on{background:var(--surface);color:var(--ink);font-weight:600}
-
-/* 할 일 */
-.todo{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.todo h1{margin:0 6px 0 0;font-size:20px;font-weight:650}
-.chip{height:32px;padding:0 12px;border-radius:16px;border:1px solid var(--line);background:var(--surface);display:inline-flex;align-items:center;gap:8px}
-.chip:hover{border-color:var(--faint)}
-.chip b{font-weight:700}.chip.hot b{color:var(--red-text)}
-
-/* 상태 배지 */
-.st{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:5px;font-size:12px;font-weight:600;white-space:nowrap}
-.st svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-.st.ok{color:var(--green);background:var(--green-soft)}.st.stale{color:var(--amber);background:var(--amber-soft)}
-.st.run{color:var(--blue);background:var(--blue-soft)}.st.me{color:var(--on-red);background:var(--red)}
-.st.err{color:var(--red-text);background:var(--red-soft)}.st.none{color:var(--faint);padding:0 4px}
-button.st{cursor:pointer}button.st:hover{outline:1px solid currentColor}
-
-.board{width:100%;border-collapse:collapse}
-.board th{font-size:11px;font-weight:600;color:var(--faint);text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
-.board td{padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
-.board tr:last-child td{border-bottom:0}.board tbody tr:hover{background:var(--surface-2)}
-.board td:first-child,.board th:first-child{padding-left:14px}
-.wname{font-weight:650;max-width:240px;overflow:hidden;text-overflow:ellipsis;display:block;text-align:left}
-.wname:hover{text-decoration:underline}
-.scroll{overflow:auto}
-.log{list-style:none;margin:0;padding:2px 0}
-.log li{display:grid;grid-template-columns:52px 1fr auto;gap:10px;padding:8px 14px;align-items:center}
-.log li+li{border-top:1px solid var(--line)}
-.two{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-
+/* 씬 화면 */
+#v-scene{grid-template-columns:330px minmax(0,1fr) 200px}
+.left{padding:14px;display:flex;flex-direction:column;gap:8px}
+.fld{background:var(--paper);border-radius:10px;padding:9px 11px;color:var(--faint);font-size:12px}
+.gen{margin-top:auto;display:flex;gap:8px}.gen .btn{flex:1;height:40px;border-radius:10px;font-size:14px}
+.center{display:flex;flex-direction:column}
+.bar{display:flex;align-items:center;gap:8px;padding:12px 14px}
+.bar h2{margin:0 4px 0 0;font-size:15px}
+.grid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:0 14px 14px;align-content:start}
+.sc .th{aspect-ratio:1;border-radius:8px;background:var(--image);position:relative}
+.sc .nm{display:flex;align-items:center;gap:6px;padding:6px 2px 0;font-weight:600;font-size:12px}
+.tag{position:absolute;left:6px;top:6px;height:20px;padding:0 7px;border-radius:5px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;background:var(--surface);color:var(--ink)}
+.tag.run{background:var(--accent);color:var(--on-accent)}
+.right{padding:12px;overflow:auto}.right .th{aspect-ratio:1;border-radius:8px;background:var(--image);margin-bottom:8px}
 /* 선별 */
-.pick{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;height:calc(100vh - 46px - 34px - 40px)}
-.stage{background:var(--image-bg);border-radius:8px;display:grid;place-items:center;color:var(--faint);position:relative}
-.keys{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px}
-.keys button{height:30px;padding:0 10px;border-radius:5px;display:flex;gap:6px;align-items:center;white-space:nowrap}
-.keys button:hover{background:var(--surface-2)}
-.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:10px}
-.strip div{aspect-ratio:1;background:var(--image-bg);border-radius:4px;position:relative}
-.strip .cur{outline:2px solid var(--ink);outline-offset:1px}
-.strip .kept::after{content:"✓";position:absolute;right:3px;top:1px;color:var(--green);font-weight:800}
-.strip .out{opacity:.25}
-.bar{height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}.bar i{display:block;height:100%;background:var(--ink)}
-
-/* 판본 */
-.up{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;height:calc(100vh - 46px - 34px - 40px)}
-.plist{overflow:auto}
-.plist button{display:flex;align-items:center;gap:10px;width:100%;height:38px;padding:0 12px;text-align:left;border-bottom:1px solid var(--line)}
-.plist button:hover{background:var(--surface-2)}.plist button.on{background:var(--surface-2);font-weight:650}
-.sheet{display:flex;flex-direction:column;min-height:0}
-.parts{display:flex;gap:4px;align-items:center}
-.parts button{height:26px;padding:0 10px;border-radius:13px;font-size:12px;color:var(--muted);background:var(--surface-2)}
-.parts button.on{background:var(--ink);color:var(--paper);font-weight:600}
-.parts button.seen::after{content:" ✓"}
-.diff{flex:1;overflow:auto;padding:12px 0;font:12.5px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
-.diff div{padding:0 16px;white-space:pre-wrap}
-.diff .add{background:var(--green-soft)}.diff .del{background:var(--red-soft)}.diff .at{color:var(--faint);padding-top:8px}
-.sign{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line)}
-
+#v-cull{grid-template-columns:minmax(0,1fr)}
+.cull{display:grid;grid-template-rows:auto 1fr auto 96px;height:100%}
+.stage{background:var(--image);margin:0 14px;border-radius:10px;display:grid;place-items:center;color:var(--faint)}
+.acts{display:flex;justify-content:center;gap:6px;padding:10px}
+.acts .btn{display:flex;gap:7px;align-items:center}
+.film{display:flex;gap:6px;padding:0 14px 12px;overflow:auto}
+.film div{height:84px;aspect-ratio:1;border-radius:6px;background:var(--image);flex:none;position:relative;border:2px solid transparent}
+.film .cur{border-color:var(--accent)}.film .keep::after{content:"✓";position:absolute;right:4px;top:0;color:var(--ok);font-weight:800}.film .drop{opacity:.3}
+/* 작품 */
+#v-works{grid-template-columns:minmax(0,1fr)}
+.works{overflow:auto;padding-bottom:6px}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;font-weight:600;color:var(--faint);text-align:left;padding:8px 6px;white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td:first-child,th:first-child{padding-left:16px}tbody tr:hover{background:var(--paper)}
+.st{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:600}
+.st.ok{color:var(--ok);background:var(--ok-soft)}.st.old{color:var(--warn);background:var(--warn-soft)}.st.run{color:var(--info);background:var(--info-soft)}
+.st.me{color:#fff;background:var(--danger)}.st.err{color:var(--danger);background:var(--bad-soft)}.st.no{color:var(--faint)}
+button.st:hover{filter:brightness(.95)}
+.log{display:grid;grid-template-columns:54px 1fr auto;gap:10px;padding:8px 16px;border-top:1px solid var(--line);align-items:center}
+/* 승인 창 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;place-items:center;z-index:5}.modal.on{display:grid}
+.dlg{width:min(880px,92vw);height:min(600px,84vh);background:var(--surface);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+.dlg header,.dlg footer{display:flex;align-items:center;gap:8px;padding:12px 16px}
+.dlg header{border-bottom:1px solid var(--line)}.dlg footer{border-top:1px solid var(--line)}
+.diff{flex:1;overflow:auto;padding:10px 0;font:12.5px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
+.diff div{padding:0 16px;white-space:pre-wrap}.diff .a{background:var(--ok-soft)}.diff .d{background:var(--bad-soft)}.diff .at{color:var(--faint);padding-top:6px}
 /* 아래 줄 */
-.foot{display:flex;align-items:center;gap:6px;padding:0 10px;border-top:1px solid var(--line);background:var(--surface);font-size:12px;color:var(--muted);min-width:0}
-.foot button{display:flex;align-items:center;gap:8px;height:26px;padding:0 8px;border-radius:5px;white-space:nowrap}
-.foot button:hover{background:var(--surface-2);color:var(--ink)}
-.foot .bar{width:120px}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block}.dot.bad{background:var(--red)}
-.queue{position:fixed;left:0;right:0;bottom:34px;background:var(--surface);border-top:1px solid var(--line);display:none;padding:12px 24px 16px}
-.queue.on{display:block}
-.qrow{display:grid;grid-template-columns:160px minmax(0,1fr) 100px auto;gap:14px;align-items:center;height:36px;border-bottom:1px solid var(--line)}
-@media (max-width:900px){.pick,.up{grid-template-columns:1fr}.pick>.panel,.plist{display:none}}
+.status{display:flex;align-items:center;gap:4px;padding:0 10px;font-size:12px;color:var(--muted)}
+.status button{height:24px;padding:0 8px;border-radius:6px;display:flex;gap:8px;align-items:center;white-space:nowrap}.status button:hover{background:var(--surface-2);color:var(--ink)}
+.pg{width:110px;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}.pg i{display:block;height:100%;background:var(--accent)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}.dot.bad{background:var(--danger)}
+.pop{position:fixed;left:12px;bottom:36px;width:440px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:none;padding:12px 14px;z-index:4}.pop.on{display:block}
+.q{display:grid;grid-template-columns:70px 1fr 78px 44px;gap:10px;align-items:center;height:34px}.q .pg{width:100%}
+.pal{position:fixed;left:50%;top:90px;transform:translateX(-50%);width:520px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:none;z-index:6;overflow:hidden}.pal.on{display:block}
+.pal input{width:100%;height:44px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);font:inherit;font-size:14px;padding:0 14px;outline:0}
+.pal div{padding:8px 14px;display:flex;gap:10px}.pal div.on{background:var(--accent-soft)}
+@media(max-width:1000px){#v-scene{grid-template-columns:minmax(0,1fr)}.left,.right{display:none}.nav{position:static;transform:none}}
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute"><defs>
-<symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
-<symbol id="i-stale" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
-<symbol id="i-run" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
-<symbol id="i-me" viewBox="0 0 24 24"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></symbol>
-<symbol id="i-err" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/></symbol>
-</defs></svg>
 <div class="app">
-<header class="top">
-  <button class="crumb here" data-go="home" id="cHome">작품</button>
-  <span class="sep" id="cSep" hidden>›</span>
-  <button class="crumb here" id="cWork" hidden>대나무숲의 빌런이 되었다.</button>
-  <nav class="tabs" id="tabs">
-    <button class="tab" data-go="pick">생성</button>
-    <button class="tab" data-go="pick">선별 <span class="faint num">139</span></button>
-    <button class="tab" data-go="pick">반입</button>
-    <button class="tab" data-go="up">판본 <span class="cnt">1</span></button>
-    <button class="tab" data-go="up">댓글 <span class="cnt">3</span></button>
+<header class="title">
+  <span class="brand"><i></i>Atelier</span>
+  <span class="pillbox num"><span>19,620</span><span class="muted">V5 76%</span></span>
+  <nav class="nav">
+    <button data-go="scene">메인</button><button class="on" data-go="scene">씬</button><button data-go="cull">선별</button><button>디렉터</button><button>라이브러리</button><button>표지</button>
+    <button data-go="works">알림 <span class="cnt">7</span></button><button class="new" data-go="works">작품 <span class="cnt">1</span></button>
   </nav>
   <span class="sp"></span>
-  <button class="tool">디렉터</button><button class="tool">표지</button><button class="tool">라이브러리</button><button class="tool">설정</button>
-  <button class="tool" id="theme">밝게 / 어둡게</button>
+  <button class="ic" id="palBtn">찾기 <kbd>Ctrl K</kbd></button><button class="ic" id="theme">밝게/어둡게</button><button class="ic">설정</button>
 </header>
 
-<main class="main">
-<section class="view on" id="v-home">
-  <div class="todo">
-    <h1>할 일</h1>
-    <button class="chip hot" data-go="up"><b class="num">1</b> 승인 대기</button>
-    <button class="chip hot" data-go="up"><b class="num">7</b> 답글 안 단 댓글</button>
-    <button class="chip" data-go="pick"><b class="num">139</b> 선별할 씬</button>
-    <button class="chip hot"><b class="num">1</b> 로그인 풀림 · 티팟</button>
-    <span class="sp"></span>
-    <button class="btn primary" data-go="up">다음 할 일 열기 <kbd style="background:none;border-color:transparent;color:inherit">Enter</kbd></button>
+<main class="body">
+<section class="view on" id="v-scene">
+  <div class="card left">
+    <div class="fld">생성 모델 · V4.5 / V5</div><div class="fld">프롬프트 프리셋</div>
+    <div class="fld" style="height:120px">프롬프트</div><div class="fld" style="height:120px">네거티브</div>
+    <div class="fld">캐릭터 · 조각 · 바이브 · 레퍼런스 · AI 태그</div><div class="fld">1024 × 1024 · 28스텝 · 시드 무작위</div>
+    <div class="faint" style="font-size:12px;padding:4px 2px">왼쪽 생성 칸은 지금 앱과 같아요.</div>
+    <div class="gen"><button class="btn accent" id="genBtn">씬 생성 420장</button></div>
   </div>
-  <div class="two">
-    <div class="panel">
-      <h3>작품별 플랫폼 상태<span class="sp"></span>
-        <span class="seg"><button class="on">전체</button><button>낡은 것만</button><button>내 차례만</button></span>
-        <button class="btn sm">+ 새 작품</button></h3>
-      <div class="scroll"><table class="board"><thead><tr><th>작품</th><th>에덴</th><th>바베</th><th>젠잇</th><th>루나</th><th>엘린</th><th>네코</th><th>티팟</th><th>크랙</th><th>알플</th><th>우마이</th><th>챗플</th><th style="text-align:right;padding-right:14px">이미지</th></tr></thead><tbody id="board"></tbody></table></div>
-      <div style="padding:9px 14px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;align-items:center" class="faint" id="legend"></div>
-    </div>
-    <div class="panel">
-      <h3>AI가 한 일<span class="sp"></span><button class="btn sm ghost">전체 보기</button></h3>
-      <ul class="log" id="log"></ul>
-    </div>
+  <div class="card center">
+    <div class="bar"><h2>씬</h2><button class="btn">대나무숲 › 은비 ▾</button><span class="sp"></span>
+      <button class="btn" data-go="cull">선별</button><button class="btn">불러오기</button><button class="btn">폴더 열기</button></div>
+    <div class="grid" id="grid"></div>
   </div>
+  <div class="card right"><div class="muted" style="font-weight:600;margin-bottom:8px">히스토리</div><div class="th"></div><div class="th"></div><div class="th"></div><div class="th"></div></div>
 </section>
 
-<section class="view" id="v-pick"><div class="pick">
-  <div class="stage">이미지
-    <div class="keys"><button><kbd>F</kbd> 고르기</button><button><kbd>X</kbd> 버리기</button><button><kbd>G</kbd> 1장 더</button><button><kbd>Z</kbd> 되돌리기</button><button><kbd>↑</kbd><kbd>↓</kbd> 씬 이동</button></div></div>
-  <div class="panel" style="display:flex;flex-direction:column;min-height:0">
-    <h3>은비 · 놀람<span class="sp"></span><span class="muted num" style="font-weight:400">3 / 15장</span></h3>
-    <div style="padding:10px 14px 0"><div class="muted num" style="margin-bottom:6px">씬 12 / 139</div><div class="bar"><i style="width:9%"></i></div></div>
-    <div class="strip" id="strip"></div>
-    <div style="padding:0 14px 12px;font-size:12px" class="faint">고르거나 버리면 다음 장으로 넘어가요. 버린 그림은 씬을 넘길 때 지워져요.</div>
-    <div style="margin-top:auto;padding:12px 14px;border-top:1px solid var(--line)"><button class="btn primary" style="width:100%">고른 96장 반입하기</button></div>
-  </div>
+<section class="view" id="v-cull"><div class="card cull">
+  <div class="bar"><h2>선별</h2><button class="btn">대나무숲 › 은비 ▾</button><span class="muted num">씬 12 / 139 · 놀람 · 3 / 15장 · 고른 것 96장</span><span class="sp"></span><button class="btn accent">고른 그림 반입</button></div>
+  <div class="stage">이미지</div>
+  <div class="acts"><button class="btn"><kbd>F</kbd>고르기</button><button class="btn"><kbd>X</kbd>버리기</button><button class="btn"><kbd>G</kbd>1장 더 뽑기</button><button class="btn ghost"><kbd>Z</kbd>되돌리기</button><button class="btn ghost"><kbd>↑</kbd><kbd>↓</kbd>씬 이동</button></div>
+  <div class="film" id="film"></div>
 </div></section>
 
-<section class="view" id="v-up"><div class="up">
-  <div class="panel plist" id="plist"></div>
-  <div class="panel sheet">
-    <h3>바베 저장 내용<span class="muted" style="font-weight:400">3곳이 바뀌어요 · AI가 01:40에 올림</span><span class="sp"></span>
-      <span class="parts"><button class="on seen">본문</button><button>로어북</button><button>소개</button></span></h3>
-    <div class="diff">
-<div class="at">관계 엔진 · 218줄</div>
-<div>  호감도는 장면의 결과로만 움직인다.</div>
-<div class="del">- 상태창은 매 응답 끝에 출력한다.</div>
-<div class="add">+ 상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div>
-<div class="add">+ 응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div>
-<div class="at">글자 수</div>
-<div>  9,812 → 9,871 (한도 10,000)</div>
-    </div>
-    <div class="sign">
-      <span class="muted" id="signmsg">공개작이라 저장하면 독자에게 바로 보여요. 저장 전 상태는 백업해 둬요.</span><span class="sp"></span>
-      <button class="btn ghost">돌려보내기</button>
-      <button class="btn red" id="approve">승인하고 저장</button>
-    </div>
-  </div>
+<section class="view" id="v-works"><div class="card works">
+  <div class="bar"><h2>작품</h2><span class="muted">에덴 정식판과 견줘서, 플랫폼마다 지금 상태예요.</span><span class="sp"></span><button class="btn sm">낡은 것만</button><button class="btn sm">내 차례만</button></div>
+  <table><thead><tr><th>작품</th><th>에덴</th><th>바베</th><th>젠잇</th><th>루나</th><th>엘린</th><th>네코</th><th>티팟</th><th>크랙</th><th>알플</th><th>우마이</th><th>챗플</th><th>댓글</th></tr></thead><tbody id="tb"></tbody></table>
+  <div class="bar" style="padding-bottom:6px"><h2>AI가 한 일</h2><span class="sp"></span><button class="btn sm ghost">전체 보기</button></div>
+  <div id="logs"></div>
 </div></section>
 </main>
 
-<div class="queue" id="queue">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>생성 대기열</b><span class="muted num">132 / 420장 · 46분 남음</span><span class="sp"></span><button class="btn sm">일시정지</button><button class="btn sm ghost" style="color:var(--red-text)">전부 취소</button></div>
-  <div class="qrow"><span><b>은비</b> <span class="st run"><svg><use href="#i-run"/></svg>생성 중</span></span><span class="bar"><i style="width:94%"></i></span><span class="num muted">132 / 140장</span><button class="btn sm ghost">취소</button></div>
-  <div class="qrow"><span><b>유라</b> <span class="faint">대기</span></span><span class="bar"><i style="width:0"></i></span><span class="num muted">0 / 140장</span><button class="btn sm ghost">취소</button></div>
-  <div class="qrow"><span><b>서진</b> <span class="faint">대기</span></span><span class="bar"><i style="width:0"></i></span><span class="num muted">0 / 140장</span><button class="btn sm ghost">취소</button></div>
-</div>
-
-<footer class="foot">
-  <button id="qBtn"><span class="st run" style="height:20px"><svg><use href="#i-run"/></svg>생성 중</span><span class="bar"><i style="width:31%"></i></span><span class="num">132 / 420장 · 46분 남음</span></button>
-  <button><span class="num">Anlas 19,620</span></button>
+<footer class="status">
+  <button id="qBtn"><span class="pg"><i style="width:31%"></i></span><span class="num">생성 132 / 420장 · 46분 남음</span></button>
   <span class="sp"></span>
+  <button data-go="works"><span class="cnt">1</span> 승인 대기</button>
   <button><i class="dot bad"></i>로그인 10 / 11</button>
   <button><i class="dot"></i>MCP 켜짐</button>
 </footer>
 </div>
 
+<div class="pop" id="pop">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b>생성 대기열</b><span class="sp"></span><button class="btn sm">일시정지</button><button class="btn sm ghost" style="color:var(--danger)">전부 취소</button></div>
+  <div class="q"><b>은비</b><span class="pg"><i style="width:94%"></i></span><span class="num muted">132 / 140</span><button class="btn sm ghost">취소</button></div>
+  <div class="q"><b>유라</b><span class="pg"><i style="width:0"></i></span><span class="num muted">0 / 140</span><button class="btn sm ghost">취소</button></div>
+  <div class="q"><b>서진</b><span class="pg"><i style="width:0"></i></span><span class="num muted">0 / 140</span><button class="btn sm ghost">취소</button></div>
+</div>
+
+<div class="pal" id="pal"><input placeholder="화면, 작품, 프리셋 이름으로 찾기">
+  <div class="on">씬 › 대나무숲 › 은비<span class="sp"></span><span class="faint">프리셋</span></div><div>비 오는 날, 여고생을 줍다.<span class="sp"></span><span class="faint">작품</span></div><div>선별 열기<span class="sp"></span><span class="faint">화면</span></div></div>
+
+<div class="modal" id="modal"><div class="dlg">
+  <header><b>바베 · 비 오는 날, 여고생을 줍다.</b><span class="muted">공개작 저장 · 3곳 바뀜</span><span class="sp"></span><button class="btn sm accent">본문</button><button class="btn sm">로어북</button><button class="btn sm">소개</button></header>
+  <div class="diff"><div class="at">관계 엔진 · 218줄</div><div>  호감도는 장면의 결과로만 움직인다.</div><div class="d">- 상태창은 매 응답 끝에 출력한다.</div><div class="a">+ 상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div><div class="a">+ 응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div><div class="at">글자 수</div><div>  9,812 → 9,871 (한도 10,000)</div></div>
+  <footer><span class="muted">저장하면 독자에게 바로 보여요. 저장 전 상태는 백업돼요.</span><span class="sp"></span><button class="btn ghost" id="mClose">닫기</button><button class="btn">돌려보내기</button><button class="btn accent" id="mOk">승인하고 저장</button></footer>
+</div></div>
+
 <script>
-const $=(s)=>document.querySelector(s),$$=(s)=>[...document.querySelectorAll(s)];
-const ST={ok:['i-ok','최신'],stale:['i-stale','낡음'],run:['i-run','진행 중'],me:['i-me','승인'],err:['i-err','오류'],none:['','—']};
-const badge=(k,tag='span',label)=>{const[i,t]=ST[k];return `<${tag} class="st ${k}"${tag==='button'?' data-go="up"':''}>${i?`<svg><use href="#${i}"/></svg>`:''}${label||t}</${tag}>`};
-const W=[
- ['대나무숲의 빌런이 되었다.','ok stale stale stale stale none stale stale stale ok none','2,530'],
- ['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok err ok ok none none','1,204'],
- ['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok none none','884'],
- ['오프파코','ok ok ok none ok none ok ok run none none','1,960'],
- ['생활비','ok ok none none none none none none none none none','310']];
-$('#board').innerHTML=W.map(([t,s,n])=>`<tr><td><button class="wname" data-go="pick">${t}</button></td>${s.split(' ').map(k=>`<td>${badge(k,k==='me'||k==='stale'||k==='err'?'button':'span')}</td>`).join('')}<td class="num muted" style="text-align:right;padding-right:14px">${n}</td></tr>`).join('');
-$('#legend').innerHTML=[['ok','에덴과 같음'],['stale','에덴이 그 뒤에 바뀜'],['run','AI가 작업 중'],['me','내 승인 필요'],['err','로그인·저장 실패']].map(([k,d])=>`<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px">${badge(k)}${d}</span>`).join('');
-$('#log').innerHTML=[['02:14','우마이 「대나무숲…」 로어북 4개 저장','ok','확인됨'],['02:09','우마이 표지 교체','ok','확인됨'],['01:40','바베 「비 오는 날…」 공개작 저장안','me','승인 필요'],['01:22','에덴 「대나무숲…」 읽음 — 로컬과 같음','',''],['어제','티팟 읽기 실패','err','로그인 풀림']].map(([t,m,k,l])=>`<li><span class="faint num">${t}</span><span>${m}</span>${k?badge(k,k==='me'?'button':'span',l):'<span></span>'}</li>`).join('');
-$('#strip').innerHTML=Array.from({length:15},(_,i)=>`<div class="${i===2?'cur':i===0?'kept':i===1?'out':''}"></div>`).join('');
-$('#plist').innerHTML=[['에덴','ok','정본'],['바베','me','승인 필요'],['젠잇','stale'],['루나','stale'],['엘린','stale'],['티팟','stale'],['크랙','stale'],['알플','stale'],['우마이','ok'],['네코','none','안 올림'],['챗플','none','안 올림']].map(([n,k,l])=>`<button class="${n==='바베'?'on':''}">${n}<span class="sp"></span>${badge(k,'span',l)}</button>`).join('');
-function go(v){const home=v==='home';$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));
- $('#cSep').hidden=$('#cWork').hidden=home;$('#tabs').classList.toggle('on',!home);$('#cHome').classList.toggle('here',home);
- const i={pick:1,up:3}[v];$$('.tab').forEach((b,j)=>b.classList.toggle('on',j===i));$('.main').scrollTop=0}
-document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);
- const p=e.target.closest('.parts button');if(p){$$('.parts button').forEach(x=>x.classList.remove('on'));p.classList.add('on','seen')}
- const s=e.target.closest('.seg button');if(s){[...s.parentElement.children].forEach(x=>x.classList.remove('on'));s.classList.add('on')}});
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+$('#grid').innerHTML=Array.from({length:14},(_,i)=>`<div class="sc"><div class="th">${i===5?'<span class="tag run">생성 중 3 / 5</span>':i>5?'<span class="tag">예약 5</span>':''}</div><div class="nm">은비-${i+1}<span class="sp"></span><span class="faint num">${i<6?15:0}장</span></div></div>`).join('');
+$('#film').innerHTML=Array.from({length:15},(_,i)=>`<div class="${i===2?'cur':i===0?'keep':i===1?'drop':''}"></div>`).join('');
+const L={ok:'최신',old:'낡음',run:'진행 중',me:'승인 필요',err:'로그인 풀림',no:'—'};
+const W=[['대나무숲의 빌런이 되었다.','ok old old old old no old old old ok no',3],['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok err ok ok no no',4],['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok no no',0],['오프파코','ok ok ok no ok no ok ok run no no',0],['생활비','ok ok no no no no no no no no no',0]];
+$('#tb').innerHTML=W.map(([t,s,c])=>`<tr><td><b>${t}</b></td>${s.split(' ').map(k=>`<td>${k==='me'?`<button class="st me" data-open>${L[k]}</button>`:`<span class="st ${k}">${L[k]}</span>`}</td>`).join('')}<td>${c?`<span class="cnt">${c}</span>`:'<span class="faint">—</span>'}</td></tr>`).join('');
+$('#logs').innerHTML=[['02:14','우마이 「대나무숲…」 로어북 4개 저장','ok','저장 확인'],['01:40','바베 「비 오는 날…」 공개작 저장안','me','승인 필요'],['01:22','에덴 「대나무숲…」 읽음 · 로컬과 같음','',''],['어제','티팟 읽기 실패','err','로그인 풀림']].map(([t,m,k,l])=>`<div class="log"><span class="faint num">${t}</span><span>${m}</span>${k==='me'?`<button class="st me" data-open>${l}</button>`:k?`<span class="st ${k}">${l}</span>`:'<span></span>'}</div>`).join('');
+const idx={scene:1,cull:2,works:7};
+function go(v){$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));$$('.nav button').forEach((b,i)=>b.classList.toggle('on',i===idx[v]))}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);if(e.target.closest('[data-open]'))$('#modal').classList.add('on')});
 $('#theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'};
-$('#qBtn').onclick=()=>$('#queue').classList.toggle('on');
-$('#approve').onclick=e=>{e.target.disabled=true;e.target.textContent='저장됨';e.target.className='btn';$('#signmsg').textContent='저장했어요. 다시 읽어 보니 보낸 내용과 같아요.'};
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#queue').classList.remove('on')}if(e.key==='Enter'&&$('#v-home').classList.contains('on')&&document.activeElement===document.body)go('up')});
-if(location.hash)go(location.hash.slice(1));if(location.search.includes('dark'))document.documentElement.dataset.theme='dark';if(location.search.includes('q'))$('#queue').classList.add('on');
+$('#qBtn').onclick=$('#genBtn').onclick=()=>$('#pop').classList.toggle('on');
+$('#palBtn').onclick=()=>{$('#pal').classList.toggle('on');$('#pal input').focus()};
+$('#mClose').onclick=()=>$('#modal').classList.remove('on');
+$('#mOk').onclick=()=>{$('#modal').classList.remove('on');$$('.st.me').forEach(b=>{b.className='st ok';b.textContent='최신'})};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')['#pop','#pal','#modal'].forEach(s=>$(s).classList.remove('on'));if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();$('#palBtn').click()}});
+if(location.hash)go(location.hash.slice(1));if(location.search.includes('dark'))document.documentElement.dataset.theme='dark';if(location.search.includes('q'))$('#pop').classList.add('on');if(location.search.includes('m'))$('#modal').classList.add('on');
 </script>
 </body>
 </html>
