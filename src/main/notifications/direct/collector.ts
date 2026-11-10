@@ -855,13 +855,14 @@ export function createDirectCollector(options: {
       if (!current) throw new ReplyError('LOGIN_REQUIRED')
       const holder = { profile: current.profile }
       const origin = new URL(url).origin
-      const payload = JSON.stringify(body)
+      // 본문 없는 요청(삭제)은 본문과 content-type을 붙이지 않는다
+      const payload = body === undefined ? undefined : JSON.stringify(body)
       const call = (): Promise<Response> =>
         ses.fetch(url, {
           method,
           headers: {
             ...(holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}),
-            'content-type': 'application/json'
+            ...(payload === undefined ? {} : { 'content-type': 'application/json' })
           },
           body: payload,
           credentials: 'include',

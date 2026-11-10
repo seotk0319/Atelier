@@ -49,7 +49,14 @@ export function diffBodies(before: WorkBody, after: WorkBody): DiffItem[] {
   for (const name of new Set([...Object.keys(before.fields), ...Object.keys(after.fields)]))
     out.push(...textDiff(name, before.fields[name] ?? '', after.fields[name] ?? ''))
   if (before.visibility !== after.visibility || before.status !== after.status)
-    out.push({ where: 'visibility/status', kind: 'changed' })
+    out.push({
+      where: '공개 상태',
+      kind: 'changed',
+      preview: {
+        before: [before.visibility, before.status].filter(Boolean).join('/'),
+        after: [after.visibility, after.status].filter(Boolean).join('/')
+      }
+    })
 
   const lore = Math.max(before.lorebook.length, after.lorebook.length)
   for (let i = 0; i < lore; i++) {
@@ -146,6 +153,10 @@ async function readText(path: string, deps: WorkToolDeps, kinds: RegExp): Promis
 
 export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkChanges> {
   const changes: WorkChanges = {}
+  if (args.visibility !== undefined) {
+    if (typeof args.visibility !== 'string') throw new Error('BAD_VISIBILITY')
+    changes.visibility = args.visibility
+  }
   const fields: Record<string, string> = {}
   if (args.fields !== undefined) {
     if (!isObj(args.fields)) throw new Error('BAD_CHANGES')
@@ -290,6 +301,10 @@ const text = { type: 'string' }
 
 export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => void): ToolDef[] {
   const plans = new Map<string, Plan>()
+  const deletions = new Map<
+    string,
+    { site: string; workId: string; title: string; expires: number }
+  >()
   const frozen = (body: WorkBody): string => JSON.stringify({ ...body, updatedAt: null })
 
   return [
@@ -305,6 +320,12 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         properties: {
           site,
           work_id: workId,
+          visibility: {
+            type: 'string',
+            description:
+              '공개 상태 바꾸기. 플랫폼마다 받는 값이 다르다 (sites_list의 visibilities). ' +
+              '공개로 바꾸면 독자에게 바로 보이므로 사용자가 분명히 요청했을 때만 쓴다.'
+          },
           fields: {
             type: 'object',
             description:
@@ -482,6 +503,182 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
           status: after.status,
           updated_at: after.updatedAt,
           backup
+        }
+      }
+    },
+    {
+      name: 'work_delete_plan',
+      description:
+        '작품을 통째로 지우기 전 확인 단계. 아무것도 지우지 않고, 지워질 작품의 제목·공개 상태·분량과 ' +
+        'plan_id를 돌려준다. 삭제는 되돌릴 수 없다. 결과를 사용자에게 보여 주고, 사용자가 그 작품을 ' +
+        '지우라고 분명히 말한 뒤에만 work_delete를 부른다.',
+      inputSchema: {
+        type: 'object',
+        properties: { site, work_id: workId },
+        required: ['site', 'work_id']
+      },
+      async run(args) {
+        const adapter = workAdapter(str(args.site))
+        if (!adapter.remove) throw new Error('NO_DELETE')
+        const id = str(args.work_id).toLowerCase()
+        const body = adapter.normalize(await adapter.readRaw(deps.reader(adapter.id), id))
+        const now = Date.now()
+        for (const [key, plan] of deletions) if (plan.expires < now) deletions.delete(key)
+        const planId = randomBytes(4).toString('hex')
+        deletions.set(planId, {
+          site: adapter.id,
+          workId: id,
+          title: body.title,
+          expires: now + PLAN_TTL
+        })
+        return {
+          plan_id: planId,
+          id: body.id,
+          title: body.title,
+          visibility: body.visibility,
+          status: body.status,
+          main_length: textLength(body.fields.main ?? ''),
+          lorebook_count: body.lorebook.length,
+          start_scenario_count: body.startScenarios.length,
+          character_count: body.characters.length,
+          note: '아직 지우지 않았어요. 지우면 되돌릴 수 없어요. 사용자가 확인한 뒤 work_delete에 plan_id와 작품 제목을 그대로 넣어 불러 주세요.'
+        }
+      }
+    },
+    {
+      name: 'work_delete',
+      description:
+        'work_delete_plan으로 확인한 작품을 통째로 지운다. 되돌릴 수 없다. plan_id와 함께 그 작품의 ' +
+        '제목을 글자 그대로 넣어야 한다. 지우기 직전 원본을 backup 경로에 남긴다.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          plan_id: { type: 'string', description: 'work_delete_plan이 돌려준 plan_id' },
+          title: { type: 'string', description: '지울 작품의 제목 (글자 그대로)' }
+        },
+        required: ['plan_id', 'title']
+      },
+      async run(args) {
+        const planId = str(args.plan_id)
+        const plan = deletions.get(planId)
+        if (!plan || plan.expires < Date.now()) {
+          deletions.delete(planId)
+          throw new Error('PLAN_NOT_FOUND')
+        }
+        const adapter = workAdapter(plan.site)
+        if (!adapter.remove) throw new Error('NO_DELETE')
+        const read = deps.reader(adapter.id)
+        const raw = await adapter.readRaw(read, plan.workId)
+        const body = adapter.normalize(raw)
+        // 계획 때와 같은 작품인지, 사용자가 말한 제목과 같은지 둘 다 본다
+        if (body.title !== plan.title || str(args.title) !== plan.title)
+          throw new Error('TITLE_MISMATCH')
+        const backup = await deps.snapshot(adapter.id, plan.workId, raw)
+        deletions.delete(planId)
+        forget(adapter.id + ':' + plan.workId)
+        await adapter.remove(deps.writer(adapter.id), plan.workId)
+        // 지워졌으면 다시 읽을 수 없어야 한다
+        const gone = await adapter.readRaw(read, plan.workId).then(
+          () => false,
+          (error: unknown) => error instanceof Error && /WORK_NOT_FOUND/.test(error.message)
+        )
+        return { deleted: true, verified: gone, id: plan.workId, title: plan.title, backup }
+      }
+    },
+    {
+      name: 'work_create',
+      description:
+        '새 작품을 만든다. 만들어지는 작품은 항상 비공개(임시저장)이고, 공개하려면 만든 뒤 work_plan의 ' +
+        'visibility로 바꾼다. 표지와 이미지는 만든 뒤 따로 올린다. 긴 본문은 main 대신 main_file에 ' +
+        '로컬 파일 경로(.md / .txt)를 준다. characters의 첫 번째가 주연이다.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          site,
+          title: text,
+          main: { type: 'string', description: '메인 프롬프트' },
+          main_file: { type: 'string', description: '메인 프롬프트가 담긴 로컬 파일 경로' },
+          adult: { type: 'boolean', description: '성인 작품 여부' },
+          subtitle: text,
+          description: text,
+          categories: { type: 'array', items: text },
+          hashtags: { type: 'array', items: text },
+          characters: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { name: text, details: text, info: text },
+              required: ['name']
+            },
+            description: '캐릭터들. 첫 번째가 주연'
+          },
+          lorebook: { type: 'array', items: lorebookItem },
+          start_scenarios: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: text,
+                content: text,
+                sub_prompt: text,
+                dialogue: text,
+                situation: text,
+                description: text
+              }
+            },
+            description: '시작 상황들. 첫 번째가 기본'
+          }
+        },
+        required: ['site', 'title', 'adult', 'characters']
+      },
+      async run(args) {
+        const adapter = workAdapter(str(args.site))
+        if (!adapter.create) throw new Error('NO_CREATE')
+        if (typeof args.adult !== 'boolean') throw new Error('BAD_CHANGES')
+        if (args.main !== undefined && args.main_file !== undefined) throw new Error('BAD_CHANGES')
+        const main =
+          args.main_file !== undefined
+            ? await readText(str(args.main_file), deps, /\.(md|txt)$/i)
+            : str(args.main)
+        // 바꾸기 도구와 같은 읽기 규칙으로 로어북·시작 상황·캐릭터를 받는다
+        const parts = await parseChanges(
+          {
+            ...(args.lorebook !== undefined ? { lorebook_add: args.lorebook } : {}),
+            ...(args.start_scenarios !== undefined
+              ? { start_scenarios_add: args.start_scenarios }
+              : {}),
+            characters_add: args.characters
+          },
+          deps
+        )
+        const strings = (v: unknown): string[] | undefined =>
+          Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : undefined
+        const id = await adapter.create(deps.writer(adapter.id), {
+          title: str(args.title),
+          main,
+          adult: args.adult,
+          ...(typeof args.subtitle === 'string' ? { subtitle: args.subtitle } : {}),
+          ...(typeof args.description === 'string' ? { description: args.description } : {}),
+          categories: strings(args.categories),
+          hashtags: strings(args.hashtags),
+          characters: parts.charactersAdd ?? [],
+          lorebook: parts.lorebookAdd,
+          startScenarios: parts.startScenariosAdd
+        })
+        const raw = await adapter.readRaw(deps.reader(adapter.id), id)
+        const body = adapter.normalize(raw)
+        const snapshot = await deps.snapshot(adapter.id, id, raw)
+        return {
+          created: true,
+          id,
+          title: body.title,
+          visibility: body.visibility,
+          status: body.status,
+          main_length: textLength(body.fields.main ?? ''),
+          lorebook_count: body.lorebook.length,
+          start_scenario_count: body.startScenarios.length,
+          characters: body.characters.map((c) => c.name),
+          snapshot
         }
       }
     }

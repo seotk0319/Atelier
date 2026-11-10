@@ -13,6 +13,7 @@ import type {
   LoreEntry,
   WorkAdapter,
   WorkBody,
+  WorkDraft,
   WorkFetch,
   WorkListItem
 } from './types'
@@ -225,13 +226,14 @@ export const edenWorks: WorkAdapter = {
     try {
       const u = new URL(url)
       return (
-        method === 'PUT' &&
         u.origin === ORIGIN &&
         !u.username &&
         !u.password &&
         !u.search &&
         !u.hash &&
-        WRITE_PATH.test(u.pathname)
+        // 통째 저장·삭제는 작품 주소로, 새 작품(임시저장)은 /api/works/new 로만 보낸다
+        (((method === 'PUT' || method === 'DELETE') && WRITE_PATH.test(u.pathname)) ||
+          (method === 'PUT' && u.pathname === '/api/works/new'))
       )
     } catch {
       return false
@@ -242,6 +244,13 @@ export const edenWorks: WorkAdapter = {
     if (!isObj(raw) || !isObj(raw.work)) throw new Error('WORK_SHAPE')
     const next = structuredClone(raw) as Obj
     const work = next.work as Obj
+
+    if (changes.visibility !== undefined) {
+      if (!VISIBILITIES.includes(changes.visibility)) throw new Error('BAD_VISIBILITY')
+      work.visibility = changes.visibility
+      // 공개·링크 공개는 게시된 상태여야 한다 (편집기도 게시할 때 status를 active로 보낸다)
+      if (changes.visibility !== 'private') work.status = 'active'
+    }
 
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
       const key = FIELDS[name]
@@ -368,10 +377,100 @@ export const edenWorks: WorkAdapter = {
     const reply: unknown = await res.json().catch(() => null)
     if (!res.ok || !isObj(reply) || reply.success !== true)
       throw new Error('SAVE_FAILED ' + res.status)
+  },
+
+  visibilities: ['public', 'link', 'private'],
+
+  async remove(write, id) {
+    const res = await write('DELETE', ORIGIN + '/api/works/' + workId(id))
+    if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
+    if (res.status === 404) throw new Error('WORK_NOT_FOUND')
+    if (!res.ok) throw new Error('DELETE_FAILED ' + res.status)
+  },
+
+  async create(write, draft) {
+    const res = await write('PUT', ORIGIN + '/api/works/new', edenCreateBody(draft))
+    if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
+    const reply: unknown = await res.json().catch(() => null)
+    if (!res.ok || !isObj(reply) || reply.success !== true || !isObj(reply.work))
+      throw new Error(
+        'CREATE_FAILED ' + res.status + ' ' + text(isObj(reply) ? reply.error : '').slice(0, 60)
+      )
+    const made = isObj(reply.work.to_jsonb) ? reply.work.to_jsonb : reply.work
+    const id = strOrNull(made.id)
+    if (!id || !UUID_RE.test(id)) throw new Error('CREATE_FAILED response')
+    return id.toLowerCase()
   }
 }
 
+const VISIBILITIES = ['public', 'link', 'private']
 const WRITE_PATH = new RegExp('^/api/works/' + UUID + '$', 'i')
+
+/**
+ * 새 작품 본문 (임시저장, 항상 비공개). 편집기의 새 작품 기본값과 같은 모양으로 채운다
+ * (2026-11-10 사이트 코드: 기본 work_type original, prompt_version v1, image_source_mode mixed,
+ * 시작 상황 하나, 캐릭터마다 새 uuid). 표지와 이미지는 만든 뒤 따로 올린다.
+ */
+export function edenCreateBody(draft: WorkDraft): Obj {
+  if (!draft.title.trim() || !draft.main.trim()) throw new Error('EMPTY_FIELD')
+  if (!draft.characters.length || draft.characters.some((c) => !c.name.trim()))
+    throw new Error('EMPTY_FIELD')
+  const starts = (draft.startScenarios?.length ? draft.startScenarios : [{}]).map((s, i) => ({
+    id: i + 1,
+    title: s.title ?? '',
+    description: s.description ?? '',
+    detailedSettings: s.content ?? '',
+    isDefault: i === 0,
+    situation: s.situation ?? '',
+    dialogue: s.dialogue ?? '',
+    subPrompt: s.subPrompt ?? '',
+    imageCode: '',
+    imageCodes: [],
+    elementOrder: ['image', 'situation', 'dialogue']
+  }))
+  const lorebook = (draft.lorebook ?? []).map((e) => loreRaw({}, e))
+  for (const e of lorebook)
+    if (!text(e.value).trim() || (e.triggerMode !== 'always' && !text(e.key).trim()))
+      throw new Error('BAD_LOREBOOK')
+  const body = edenSaveBody({
+    work: {
+      title: draft.title,
+      subtitle: draft.subtitle ?? '',
+      description: draft.description ?? '',
+      scenario_settings: draft.main,
+      work_type: 'original',
+      genre: [],
+      tags: [],
+      categories: draft.categories ?? [],
+      hashtags: draft.hashtags ?? [],
+      template_type: 'default',
+      prompt_version: 'v1',
+      image_source_mode: 'mixed',
+      lorebook,
+      start_scenarios: starts,
+      selected_scenario_id: 1,
+      character_presets: [],
+      selected_preset_id: null,
+      recommended_personas: [],
+      creator_comment: null,
+      is_nsfw: draft.adult,
+      visibility: 'private',
+      status: 'draft'
+    },
+    characters: draft.characters.map((c, i) => ({
+      id: randomUUID(),
+      character_name: c.name,
+      character_details: c.details ?? '',
+      character_info: c.info ?? '',
+      is_main_character: i === 0,
+      start_scenario: null
+    })),
+    images: {}
+  })
+  // 편집기는 표지가 없으면 이 칸을 아예 보내지 않는다
+  delete body.cover_image_url
+  return body
+}
 
 function at(index: unknown, length: number): number {
   if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)

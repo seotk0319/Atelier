@@ -18,8 +18,11 @@ const READ_PATHS = [
 ]
 const WRITE_PATHS: Record<string, RegExp> = {
   POST: new RegExp('^/ko/api/characters/' + UUID + '/edit/preview$', 'i'),
-  PUT: new RegExp('^/ko/api/characters/' + UUID + '/edit$', 'i')
+  PUT: new RegExp('^/ko/api/characters/' + UUID + '/edit$', 'i'),
+  DELETE: new RegExp('^/ko/api/characters/' + UUID + '$', 'i')
 }
+// 사이트 코드에서 확인된 값만 받는다 (링크 공개가 있는지는 미확인)
+const VISIBILITIES = ['public', 'private']
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -159,6 +162,11 @@ export const babeWorks: WorkAdapter = {
     const next = structuredClone(raw) as Obj
     const e = next.edit as Obj
 
+    if (changes.visibility !== undefined) {
+      if (!VISIBILITIES.includes(changes.visibility)) throw new Error('BAD_VISIBILITY')
+      e.visibility = changes.visibility
+    }
+
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
       const key = FIELDS[name]
       if (!key || typeof value !== 'string') throw new Error('BAD_FIELD')
@@ -280,6 +288,15 @@ export const babeWorks: WorkAdapter = {
     if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
     if (res.status === 409) throw new Error('PLAN_STALE')
     if (!res.ok) throw new Error('SAVE_FAILED ' + res.status)
+  },
+
+  visibilities: VISIBILITIES,
+
+  async remove(write, id) {
+    const res = await write('DELETE', BASE + workId(id))
+    if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
+    if (res.status === 404) throw new Error('WORK_NOT_FOUND')
+    if (!res.ok) throw new Error('DELETE_FAILED ' + res.status)
   }
 }
 

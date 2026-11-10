@@ -126,7 +126,7 @@ function tools(s: ReturnType<typeof site>): (name: string, args?: Obj) => Promis
 }
 
 describe('베이비챗 작품', () => {
-  it('허용 주소: 읽기 둘, 쓰기는 미리보기(POST)와 저장(PUT)뿐이다', () => {
+  it('허용 주소: 읽기 둘, 쓰기는 미리보기(POST)·저장(PUT)·삭제(DELETE)뿐이다', () => {
     expect(workReadAllowed('babe', API + 'my')).toBe(true)
     expect(workReadAllowed('babe', API + W + '/edit')).toBe(true)
     expect(workReadAllowed('babe', API + W)).toBe(false)
@@ -136,7 +136,7 @@ describe('베이비챗 작품', () => {
     expect(workWriteAllowed('babe', 'POST', API + W + '/edit/preview')).toBe(true)
     expect(workWriteAllowed('babe', 'POST', API + W + '/edit')).toBe(false)
     expect(workWriteAllowed('babe', 'PUT', API + W + '/edit/preview')).toBe(false)
-    expect(workWriteAllowed('babe', 'DELETE', API + W)).toBe(false)
+    expect(workWriteAllowed('babe', 'DELETE', API + W)).toBe(true)
     expect(workWriteAllowed('babe', 'PUT', API + 'edit/draft')).toBe(false)
     expect(workWriteAllowed('babe', 'POST', API + 'create')).toBe(false)
     expect(workAdapter('바베').id).toBe('babe')

@@ -43,6 +43,18 @@ const MESSAGES: [RegExp, string][] = [
   [/NO_EDITIONS/, '언어 판본이 없는 플랫폼이에요.'],
   [/UNAPPROVED_(READ|WRITE)_ROUTE/, '허용되지 않은 주소라 요청하지 않았어요.'],
   [/NO_SAVE/, '이 플랫폼은 아직 저장을 지원하지 않아요.'],
+  [/NO_DELETE/, '이 플랫폼은 아직 작품 삭제를 지원하지 않아요.'],
+  [/NO_CREATE/, '이 플랫폼은 아직 새 작품 만들기를 지원하지 않아요.'],
+  [
+    /BAD_VISIBILITY/,
+    '그 플랫폼이 받지 않는 공개 상태예요. sites_list의 visibilities를 확인해 주세요.'
+  ],
+  [
+    /TITLE_MISMATCH/,
+    '제목이 맞지 않아서 지우지 않았어요. work_delete_plan이 돌려준 제목을 그대로 넣어 주세요.'
+  ],
+  [/DELETE_FAILED/, '플랫폼이 삭제를 받아 주지 않았어요. 작품은 그대로 있을 가능성이 높아요.'],
+  [/CREATE_FAILED/, '플랫폼이 새 작품을 받아 주지 않았어요.'],
   [/KEEP_DEFAULT/, '기본 시작 상황과 주연 캐릭터는 지울 수 없어요. 하나는 꼭 남아야 해요.'],
   [/START_LIMIT/, '이 플랫폼은 추가 시작 설정을 2개까지만 받아요.'],
   [/NO_CHARACTERS/, '이 플랫폼은 작품 하나에 캐릭터가 하나라 캐릭터를 더하거나 지울 수 없어요.'],
@@ -69,7 +81,10 @@ const MESSAGES: [RegExp, string][] = [
 ]
 export function toolMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
-  for (const [re, message] of MESSAGES) if (re.test(code)) return message
+  for (const [re, message] of MESSAGES)
+    if (re.test(code))
+      // 플랫폼이 거절한 경우는 받은 상태 코드도 같이 알려 준다
+      return /_FAILED /.test(code) ? message + ' (' + code.slice(0, 90) + ')' : message
   return '요청을 처리하지 못했어요. (' + code.slice(0, 80) + ')'
 }
 
@@ -146,7 +161,10 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
             sites: Object.values(WORK_ADAPTERS).map((a) => ({
               site: a.id,
               label: a.label,
-              capabilities: a.capabilities
+              capabilities: a.capabilities,
+              visibilities: a.visibilities ?? [],
+              can_delete: !!a.remove,
+              can_create: !!a.create
             }))
           }
         }

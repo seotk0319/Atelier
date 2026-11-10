@@ -162,12 +162,12 @@ function tools(
 }
 
 describe('에덴 저장 본문', () => {
-  it('허용 요청: 작품 통째 저장(PUT) 한 가지뿐이다', () => {
+  it('허용 요청: 작품 통째 저장·삭제와 새 작품 임시저장뿐이다', () => {
     expect(workWriteAllowed('eden', 'PUT', O + '/api/works/' + W)).toBe(true)
-    expect(workWriteAllowed('eden', 'DELETE', O + '/api/works/' + W)).toBe(false)
+    expect(workWriteAllowed('eden', 'DELETE', O + '/api/works/' + W)).toBe(true)
     expect(workWriteAllowed('eden', 'PATCH', O + '/api/works/' + W)).toBe(false)
     expect(workWriteAllowed('eden', 'PUT', O + '/api/works/' + W + '/characters')).toBe(false)
-    expect(workWriteAllowed('eden', 'PUT', O + '/api/works/new')).toBe(false)
+    expect(workWriteAllowed('eden', 'PUT', O + '/api/works/new')).toBe(true)
     expect(workWriteAllowed('eden', 'PUT', O + '/api/works/' + W + '?x=1')).toBe(false)
     expect(workWriteAllowed('eden', 'PUT', 'https://evil.example/api/works/' + W)).toBe(false)
     expect(workWriteAllowed('babe', 'PUT', O + '/api/works/' + W)).toBe(false)

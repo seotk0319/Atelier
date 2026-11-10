@@ -91,10 +91,38 @@ export interface WorkAdapter {
   applyChanges?(raw: unknown, changes: WorkChanges): unknown
   /** 새 원본을 플랫폼에 저장한다. 공개 상태는 원본에 있던 값 그대로 보낸다. */
   save?(write: WorkWrite, workId: string, next: unknown): Promise<void>
+  /** 이 플랫폼이 받는 공개 상태 값 (work_plan의 visibility) */
+  visibilities?: string[]
+  /** 작품을 통째로 지운다. 되돌릴 수 없다. */
+  remove?(write: WorkWrite, workId: string): Promise<void>
+  /** 비공개 새 작품을 만들고 작품 번호를 돌려준다 */
+  create?(write: WorkWrite, draft: WorkDraft): Promise<string>
 }
 
 /** 로그인한 계정으로 쓰는 통로. 허용 요청 검사는 통로를 만드는 쪽(collector)이 한다. */
-export type WorkWrite = (method: 'PUT' | 'POST', url: string, body: unknown) => Promise<Response>
+export type WorkWrite = (
+  method: 'PUT' | 'POST' | 'DELETE',
+  url: string,
+  body?: unknown
+) => Promise<Response>
+
+/** 새 작품의 내용. 만들어지는 작품은 항상 비공개다. */
+export interface WorkDraft {
+  title: string
+  /** 메인 프롬프트 (베이비챗은 캐릭터 설정) */
+  main: string
+  /** 성인 작품 여부 */
+  adult: boolean
+  subtitle?: string
+  description?: string
+  categories?: string[]
+  hashtags?: string[]
+  /** 첫 번째가 주연이다 */
+  characters: { name: string; details?: string; info?: string }[]
+  lorebook?: LoreEntry[]
+  /** 첫 번째가 기본 시작 상황이다 */
+  startScenarios?: StartScenarioDraft[]
+}
 
 export type StartScenarioDraft = Partial<
   Pick<StartScenario, 'title' | 'content' | 'subPrompt' | 'dialogue' | 'situation' | 'description'>
@@ -102,6 +130,8 @@ export type StartScenarioDraft = Partial<
 
 /** 바꿀 내용. 적지 않은 칸은 플랫폼에 있던 값 그대로 둔다. */
 export interface WorkChanges {
+  /** 공개 상태 바꾸기 (그 플랫폼의 visibilities 중 하나) */
+  visibility?: string
   /** 글 칸 통째 교체: title / subtitle / description / main / creator_comment */
   fields?: Record<string, string>
   /** 로어북 전체 교체 */
