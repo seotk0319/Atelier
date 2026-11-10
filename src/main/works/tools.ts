@@ -34,7 +34,11 @@ const MESSAGES: [RegExp, string][] = [
   [/BAD_INDEX/, '없는 번호예요. work_read의 index를 써 주세요.'],
   [
     /BAD_FIELD/,
-    '없는 칸이에요. title / subtitle / description / main / creator_comment 중에서 골라 주세요.'
+    '그 플랫폼에 없는 칸이에요. work_read의 field_lengths에 나오는 이름 중에서 골라 주세요.'
+  ],
+  [
+    /NO_LOREBOOK_REPLACE/,
+    '이 플랫폼은 아직 로어북 전체 교체를 지원하지 않아요. lorebook_patch로 항목별로 고쳐 주세요.'
   ],
   [/NO_EDITIONS/, '언어 판본이 없는 플랫폼이에요.'],
   [/UNAPPROVED_(READ|WRITE)_ROUTE/, '허용되지 않은 주소라 요청하지 않았어요.'],

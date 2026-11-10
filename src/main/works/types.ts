@@ -94,7 +94,7 @@ export interface WorkAdapter {
 }
 
 /** 로그인한 계정으로 쓰는 통로. 허용 요청 검사는 통로를 만드는 쪽(collector)이 한다. */
-export type WorkWrite = (method: 'PUT', url: string, body: unknown) => Promise<Response>
+export type WorkWrite = (method: 'PUT' | 'POST', url: string, body: unknown) => Promise<Response>
 
 /** 바꿀 내용. 적지 않은 칸은 플랫폼에 있던 값 그대로 둔다. */
 export interface WorkChanges {

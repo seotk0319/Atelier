@@ -1,9 +1,11 @@
 // 작품 본문을 읽을 수 있는 플랫폼 연결부 등록부. 새 플랫폼은 여기 한 줄을 더한다.
+import { babeWorks } from './babe'
 import { edenWorks } from './eden'
 import type { WorkAdapter } from './types'
 
 export const WORK_ADAPTERS: Record<string, WorkAdapter> = {
-  eden: edenWorks
+  eden: edenWorks,
+  babe: babeWorks
 }
 
 // 사람이 부르는 이름 → 연결부 이름
@@ -11,7 +13,11 @@ const ALIASES: Record<string, string> = {
   에덴: 'eden',
   에덴챗: 'eden',
   edenchat: 'eden',
-  'eden-chat': 'eden'
+  'eden-chat': 'eden',
+  바베: 'babe',
+  바베챗: 'babe',
+  베이비챗: 'babe',
+  babechat: 'babe'
 }
 
 export function workAdapter(site: string): WorkAdapter {
