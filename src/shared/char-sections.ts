@@ -2,17 +2,40 @@
 //   # == base ==   → 기본 프롬프트
 //   # == char1 ==  → 1번 캐릭터 프롬프트 (켜 둔 캐릭터 순서, 없으면 새로 만든다)
 //   # == char2 ==  → 2번 캐릭터 …
+//   # == char1 C3 == → 위치까지 지정 (NAI 5×5 칸: 가로 A~E, 세로 1~5, 가운데 C3)
+//     위치를 하나라도 적으면 그 요청은 위치 지정 모드로 보낸다. 안 적은 구간은 캐릭터 칸에만 들어간다.
+//     에셋 생성기의 캐릭터 코드(# == char2 ns1 ==)는 여기서는 무시한다.
 // 표시가 없는 줄은 앞 구간에 속한다. 맨 처음은 base. 다른 '#' 줄(# == 구도 == 등)은 그대로 주석이다.
 // 네거티브에 쓰면 캐릭터 네거티브로 간다.
 import type { CharacterPromptInput } from './types'
 
-const MARKER = /^\s*#\s*=+\s*(base|char\s*(\d{1,2}))\s*=+\s*$/i
+const MARKER = /^\s*#\s*=+\s*(base|char\s*(\d{1,2})((?:\s+[A-Za-z0-9_-]+){0,2}))\s*=+\s*$/i
+const GRID = /^([A-E])([1-5])$/i
+
+/** NAI 위치 칸 이름(A1~E5)을 0~1 좌표로. A1이 왼쪽 위, C3이 가운데 */
+export function gridCenter(cell: string): { x: number; y: number } | null {
+  const m = GRID.exec(cell.trim())
+  if (!m) return null
+  const col = m[1].toUpperCase().charCodeAt(0) - 65
+  const row = Number(m[2]) - 1
+  return { x: Math.round((0.1 + col * 0.2) * 10) / 10, y: Math.round((0.1 + row * 0.2) * 10) / 10 }
+}
+
+/** 표시 줄을 읽는다: 구간 번호(0 = base)와 적어 둔 위치 */
+export function markerOf(
+  line: string
+): { section: number; center: { x: number; y: number } | null } | null {
+  const m = MARKER.exec(line)
+  if (!m) return null
+  if (!m[2]) return { section: 0, center: null }
+  const tokens = (m[3] || '').trim().split(/\s+/).filter(Boolean)
+  const cell = tokens.find((t) => GRID.test(t))
+  return { section: Math.max(1, Number(m[2])), center: cell ? gridCenter(cell) : null }
+}
 
 /** base 또는 charN 표시 줄이면 0(base)이나 N을, 아니면 null */
 export function sectionOf(line: string): number | null {
-  const m = MARKER.exec(line)
-  if (!m) return null
-  return m[2] ? Math.max(1, Number(m[2])) : 0
+  return markerOf(line)?.section ?? null
 }
 
 export function hasCharSections(text: string): boolean {
@@ -52,15 +75,19 @@ export interface SplitSections {
   base: string
   /** 캐릭터 번호(1부터) → 그 구간 글 */
   chars: Map<number, string>
+  /** 캐릭터 번호 → 표시 줄에 적은 위치 */
+  centers: Map<number, { x: number; y: number }>
 }
 
 export function splitCharSections(text: string): SplitSections {
   const buckets = new Map<number, string[]>([[0, []]])
+  const centers = new Map<number, { x: number; y: number }>()
   let current = 0
   for (const line of String(text || '').split('\n')) {
-    const section = sectionOf(line)
-    if (section !== null) {
-      current = section
+    const marker = markerOf(line)
+    if (marker !== null) {
+      current = marker.section
+      if (marker.center) centers.set(current, marker.center)
       if (!buckets.has(current)) buckets.set(current, [])
       continue
     }
@@ -77,7 +104,7 @@ export function splitCharSections(text: string): SplitSections {
     const value = join(lines)
     if (value) chars.set(n, value)
   }
-  return { base: join(buckets.get(0)!), chars }
+  return { base: join(buckets.get(0)!), chars, centers }
 }
 
 interface SectionTarget {
@@ -85,6 +112,7 @@ interface SectionTarget {
   negativePrompt: string
   promptParts?: { base: string; additional: string; detail: string }
   characterPrompts: CharacterPromptInput[]
+  useCoords?: boolean
 }
 
 /**
@@ -102,13 +130,17 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
   const negative = splitCharSections(req.negativePrompt)
   const charPos = new Map<number, string>()
   const charNeg = new Map<number, string>()
+  const centers = new Map<number, { x: number; y: number }>()
   for (const s of splits)
     for (const [n, v] of s.chars) charPos.set(n, tidyJoin(charPos.get(n) ?? '', v))
   for (const [n, v] of negative.chars) charNeg.set(n, tidyJoin(charNeg.get(n) ?? '', v))
+  for (const s of [...splits, negative]) for (const [n, c] of s.centers) centers.set(n, c)
 
   const characters = req.characterPrompts.map((c) => ({ ...c }))
   const enabled = characters.map((c, i) => (c.enabled ? i : -1)).filter((i) => i >= 0)
-  const numbers = [...new Set([...charPos.keys(), ...charNeg.keys()])].sort((a, b) => a - b)
+  const numbers = [...new Set([...charPos.keys(), ...charNeg.keys(), ...centers.keys()])].sort(
+    (a, b) => a - b
+  )
   for (const n of numbers) {
     let index = enabled[n - 1]
     if (index === undefined) {
@@ -120,6 +152,8 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
     const c = characters[index]
     c.prompt = tidyJoin(c.prompt, charPos.get(n) ?? '')
     c.negativePrompt = tidyJoin(c.negativePrompt, charNeg.get(n) ?? '')
+    const center = centers.get(n)
+    if (center) c.center = center
   }
 
   const promptParts = req.promptParts
@@ -130,6 +164,8 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
     prompt: promptParts ? req.prompt : splits[0].base,
     promptParts,
     negativePrompt: negative.base,
-    characterPrompts: characters
+    characterPrompts: characters,
+    // 위치를 하나라도 적었으면 위치 지정 모드로 (안 적은 캐릭터는 카드에 찍어 둔 좌표를 쓴다)
+    useCoords: centers.size > 0 ? true : req.useCoords
   }
 }

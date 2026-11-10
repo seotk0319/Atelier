@@ -204,6 +204,8 @@ app.whenReady().then(() => {
         : undefined
       let request = {
         ...rawRequest,
+        // 구간 표시에 위치(# == char1 C3 ==)를 적었으면 위치 지정 모드로 바뀐다
+        useCoords: sectioned.useCoords,
         prompt: subbedParts
           ? [subbedParts.base, subbedParts.additional, subbedParts.detail]
               .filter((p) => p.trim())
