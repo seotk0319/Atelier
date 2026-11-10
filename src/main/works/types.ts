@@ -2,7 +2,10 @@
 // 플랫폼마다 다른 부분(주소·필드 이름)은 그 플랫폼 연결부 파일 안에만 둔다.
 
 export interface WorkReadInit {
-  method?: 'GET'
+  /** 기본 GET. POST는 목록을 폼 요청으로만 주는 플랫폼(루나)용이고, 연결부의 readPostAllowed를 통과해야 나간다 */
+  method?: 'GET' | 'POST'
+  body?: string
+  contentType?: string
 }
 /** 로그인한 계정으로 읽는 통로. 허용 주소 검사는 통로를 만드는 쪽(collector)이 한다. */
 export type WorkFetch = (url: string, init?: WorkReadInit) => Promise<Response>
@@ -78,6 +81,8 @@ export interface WorkAdapter {
   capabilities: string[]
   /** 이 연결부가 읽어도 되는 주소인지 (이 밖으로는 요청하지 않는다) */
   readAllowed(url: string): boolean
+  /** 읽기를 POST로 해야 하는 주소인지. 주소·본문 종류·본문 모양까지 본다 (없으면 POST 읽기는 막는다) */
+  readPostAllowed?(url: string, init: WorkReadInit): boolean
   list(read: WorkFetch): Promise<WorkListItem[]>
   /** 작품 원본 전체 (스냅샷으로 남기는 값) */
   readRaw(read: WorkFetch, workId: string): Promise<unknown>
@@ -90,13 +95,14 @@ export interface WorkAdapter {
   /** 원본에 바꿀 내용을 얹은 새 원본을 돌려준다 (원본은 건드리지 않는다) */
   applyChanges?(raw: unknown, changes: WorkChanges): unknown
   /** 새 원본을 플랫폼에 저장한다. 공개 상태는 원본에 있던 값 그대로 보낸다. */
-  save?(write: WorkWrite, workId: string, next: unknown): Promise<void>
+  /** io는 JSON이 아닌 저장(파일 묶음·CSRF 헤더)이 필요한 플랫폼용 통로 묶음 */
+  save?(write: WorkWrite, workId: string, next: unknown, io?: WorkIo): Promise<void>
   /** 이 플랫폼이 받는 공개 상태 값 (work_plan의 visibility) */
   visibilities?: string[]
   /** 작품을 통째로 지운다. 되돌릴 수 없다. */
-  remove?(write: WorkWrite, workId: string): Promise<void>
+  remove?(write: WorkWrite, workId: string, io?: WorkIo): Promise<void>
   /** 비공개 새 작품을 만들고 작품 번호를 돌려준다 (read는 만든 작품 번호를 목록에서 찾을 때만 쓴다) */
-  create?(write: WorkWrite, draft: WorkDraft, read?: WorkFetch): Promise<string>
+  create?(write: WorkWrite, draft: WorkDraft, read?: WorkFetch, io?: WorkIo): Promise<string>
   /** 새 작품 내용이 플랫폼 규격에 맞는지 미리 본다 (대표 이미지 주소는 아직 없어도 된다) */
   checkDraft?(draft: WorkDraft): void
 
@@ -145,7 +151,7 @@ export interface FileRules {
 export type FormField = { name: string; value: string } | { name: string; file: LocalImage }
 /** 허용 목록을 통과해야 나가는 요청 하나. JSON 말고 파일 묶음(multipart)·바이너리도 보낸다 */
 export interface WorkRequest {
-  method: 'POST' | 'PUT' | 'DELETE'
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   url: string
   json?: unknown
   form?: FormField[]
@@ -167,6 +173,11 @@ export interface SendRule {
   headers?: string[]
   /** 보내기 전에 로그인 토큰을 이 쿠키로 맞춰 둔다 (사이트가 토큰을 쿠키에 적는 플랫폼) */
   cookieFromBearer?: { name: string; domain: string }
+  /**
+   * 사이트 쿠키에 든 CSRF 토큰을 이 헤더로 붙인다 (젠잇: wavechat_csrftoken → X-CSRFToken).
+   * 쿠키가 없으면 보내지 않고 LOGIN_REQUIRED로 멈춘다.
+   */
+  csrfCookie?: { domain: string; name: string; header: string }
 }
 
 /** 읽기·JSON 쓰기·파일 보내기 통로 묶음 */

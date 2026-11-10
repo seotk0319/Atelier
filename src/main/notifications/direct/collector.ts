@@ -41,7 +41,7 @@ import {
 } from './my-works'
 import type { InboxWork } from '../../../shared/inbox'
 import { workReadAllowed, workSendRule, workWriteAllowed } from '../../works/adapters'
-import type { WorkRequest } from '../../works/types'
+import type { WorkReadInit, WorkRequest } from '../../works/types'
 import {
   checkContent,
   findEdenReplies,
@@ -127,10 +127,10 @@ export function createDirectCollector(options: {
   /** 내 작품 목록을 읽을 수 있는 연결된 플랫폼 */
   myWorkPlatforms(): Promise<string[]>
   /**
-   * 그 플랫폼 작품 본문을 로그인 계정으로 읽는다 (GET만, 작품 읽기로 허용된 주소만).
-   * 연결 안 됐으면 LOGIN_REQUIRED.
+   * 그 플랫폼 작품 본문을 로그인 계정으로 읽는다 (작품 읽기로 허용된 주소만. 기본 GET,
+   * POST는 연결부가 주소·본문 종류·본문 모양까지 허용한 읽기만). 연결 안 됐으면 LOGIN_REQUIRED.
    */
-  workRead(platform: string, url: string): Promise<Response>
+  workRead(platform: string, url: string, init?: WorkReadInit): Promise<Response>
   /**
    * 그 플랫폼 작품을 로그인 계정으로 저장한다 (작품 저장으로 허용된 요청만, JSON 본문).
    * 연결 안 됐으면 LOGIN_REQUIRED.
@@ -831,8 +831,8 @@ export function createDirectCollector(options: {
       }
       return readMyWorks(platform, read, { teapotUid, rplayOid })
     },
-    async workRead(platform, url) {
-      if (!workReadAllowed(platform, url)) throw new Error('UNAPPROVED_READ_ROUTE')
+    async workRead(platform, url, init) {
+      if (!workReadAllowed(platform, url, init)) throw new Error('UNAPPROVED_READ_ROUTE')
       const s = await ready()
       const current = s.platforms[platform as DirectPlatformId]
       if (!current) throw new ReplyError('LOGIN_REQUIRED')
@@ -840,7 +840,12 @@ export function createDirectCollector(options: {
       const origin = new URL(url).origin
       const call = (): Promise<Response> =>
         ses.fetch(url, {
-          headers: holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {},
+          method: init?.method ?? 'GET',
+          headers: {
+            ...(holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}),
+            ...(init?.contentType ? { 'content-type': init.contentType } : {})
+          },
+          body: init?.body,
           credentials: 'include',
           redirect: 'error',
           signal: AbortSignal.timeout(20_000)
@@ -944,14 +949,25 @@ export function createDirectCollector(options: {
           })
           .catch(() => undefined)
       }
+      // 사이트가 쿠키의 CSRF 토큰을 헤더로 되돌려 보내게 하는 주소용 (젠잇). 쿠키가 없으면 보내지 않는다.
+      const csrf = async (): Promise<Record<string, string>> => {
+        const need = rule.csrfCookie
+        if (!need) return {}
+        const found = await ses.cookies.get({ domain: need.domain, name: need.name })
+        const value = found[0]?.value
+        if (!value || /[\s;]/.test(value)) throw new ReplyError('LOGIN_REQUIRED')
+        return { [need.header]: value }
+      }
       const call = async (): Promise<Response> => {
         await syncCookie()
+        const token = await csrf()
         return ses.fetch(request.url, {
           method: request.method,
           headers: {
             ...stored(),
             ...(request.json !== undefined ? { 'content-type': 'application/json' } : {}),
-            ...request.headers
+            ...request.headers,
+            ...token
           },
           body: body(),
           credentials: rule.auth === 'session' || rule.auth === 'cookie' ? 'include' : 'omit',

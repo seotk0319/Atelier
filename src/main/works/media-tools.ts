@@ -203,6 +203,7 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
       description:
         '작품의 이미지 목록을 플랫폼에서 새로 읽는다. 에덴은 캐릭터마다 묶음이 하나씩 있고(label = 이미지 코드), ' +
         '베이비챗은 묶음 하나에 0번이 대표 이미지, 1번부터 감정 이미지다(label = 감정 이름). ' +
+        '젠잇은 묶음 0이 에셋(내부 이미지, label = 출력에서 {{url}} 뒤에 붙는 폴더/이름), 묶음 1이 대표 이미지다. ' +
         'images_plan의 remove·order는 여기 나온 index를 쓴다.',
       inputSchema: {
         type: 'object',
@@ -229,6 +230,12 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         'remove로 지우고(되돌릴 수 없다), order로 순서를 바꾼다(add와 같이 쓸 수 없다). ' +
         '베이비챗: main_file로 대표 이미지를 바꾸고, add로 감정 이미지를 더하고(label = 감정 이름, 비우면 파일 이름), ' +
         'remove로 감정 이미지를 뺀다. 베이비챗은 적용하면 작품 버전이 하나 오른다. ' +
+        '젠잇: character_index 0(기본)은 에셋 — add의 label에 "폴더/이름"(webp, 공백 없음)을 주고 remove로 뺀다, ' +
+        '1은 대표 이미지 — 끝에 더하기와 첫 장 아닌 것 빼기만 된다. 젠잇은 작품 저장과 같은 요청으로 올라간다. ' +
+        '엘린: main_file로 대표 이미지를 바꾸고, add로 갤러리 이미지를 더한다(label = 영문·숫자 12자 이하 slug, ' +
+        'visibility public / partial / private). 공개 작품은 적용하면 검수 요청이 된다. ' +
+        '네코챗: main_file로 아바타를 바꾸고, add로 이미지 슬롯을 더한다(label = 영문·숫자 1~20자 slug, ' +
+        'visibility public / hidden). ' +
         '파일 한도는 images_list의 rules(확장자·바이트)를 따른다.',
       inputSchema: {
         type: 'object',

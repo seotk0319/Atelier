@@ -16,7 +16,7 @@ import type {
   InboxWorksResult
 } from '../../shared/inbox'
 import { REPLY_MAX, ReplyError } from './direct/babe-reply'
-import type { WorkRequest } from '../works/types'
+import type { WorkReadInit, WorkRequest } from '../works/types'
 import { canReply, type ReplyComment, type ReplyItem } from './direct/replies'
 import { classifyTopics, topicMap, topicState } from './topics'
 import {
@@ -128,10 +128,14 @@ export async function getInboxWorks(refresh = false): Promise<InboxWorksResult> 
   }
 }
 /** 작품 본문 읽기 통로 (src/main/works). 허용 주소 검사와 로그인 연장은 collector가 한다. */
-export async function workRead(platform: string, url: string): Promise<Response> {
+export async function workRead(
+  platform: string,
+  url: string,
+  init?: WorkReadInit
+): Promise<Response> {
   await startInbox().catch(() => undefined)
   if (!direct) throw new ReplyError('LOGIN_REQUIRED')
-  return direct.workRead(platform, url)
+  return direct.workRead(platform, url, init)
 }
 
 /** 작품 저장 통로 (src/main/works). 허용 요청 검사와 로그인 연장은 collector가 한다. */

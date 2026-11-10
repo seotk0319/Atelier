@@ -11,7 +11,8 @@ import {
   type LoreEntry,
   type WorkBody,
   type WorkChanges,
-  type WorkDraft
+  type WorkDraft,
+  type WorkIo
 } from './types'
 
 export const PLAN_TTL = 30 * 60_000
@@ -196,10 +197,12 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
       title: '',
       keys: '',
       content: '',
-      mode: 'keyword',
+      // 발동 방식·턴 값을 주지 않으면 비워 두고 연결부가 그 플랫폼 기본값을 넣는다
+      // (에덴 keyword·5·5, 엘린 on_match·3, 이 칸이 없는 플랫폼은 그대로 통과)
+      mode: null,
       offKeys: [],
-      turnRange: 5,
-      offTurnRange: 5,
+      turnRange: null,
+      offTurnRange: null,
       ...loreEntry(e, false)
     }))
   }
@@ -402,6 +405,14 @@ export const CHANGE_PROPERTIES = {
   }
 }
 
+// 저장·삭제·만들기에 JSON이 아닌 요청(파일 묶음, CSRF 헤더 등)이 필요한 플랫폼용 통로 묶음.
+// 파일 통로는 실제로 쓸 때 연다 (JSON 통로만 쓰는 플랫폼은 건드리지 않는다).
+const workIo = (deps: WorkToolDeps, platform: string): WorkIo => ({
+  read: deps.reader(platform),
+  write: deps.writer(platform),
+  send: (request) => deps.sender(platform)(request)
+})
+
 export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => void): ToolDef[] {
   const plans = new Map<string, Plan>()
   const deletions = new Map<
@@ -494,7 +505,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
 
         plans.delete(planId)
         forget(adapter.id + ':' + plan.workId)
-        await adapter.save(deps.writer(adapter.id), plan.workId, next)
+        await adapter.save(deps.writer(adapter.id), plan.workId, next, workIo(deps, adapter.id))
 
         const afterRaw = await adapter.readRaw(read, plan.workId)
         const after = adapter.normalize(afterRaw)
@@ -583,7 +594,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         const backup = await deps.snapshot(adapter.id, plan.workId, raw)
         deletions.delete(planId)
         forget(adapter.id + ':' + plan.workId)
-        await adapter.remove(deps.writer(adapter.id), plan.workId)
+        await adapter.remove(deps.writer(adapter.id), plan.workId, workIo(deps, adapter.id))
         // 지워졌으면 다시 읽을 수 없어야 한다
         let gone = await adapter.readRaw(read, plan.workId).then(
           () => false,
@@ -712,7 +723,8 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         const id = await adapter.create(
           deps.writer(adapter.id),
           { ...draft, ...(coverUrl ? { coverUrl } : {}) },
-          deps.reader(adapter.id)
+          deps.reader(adapter.id),
+          workIo(deps, adapter.id)
         )
         const raw = await adapter.readRaw(deps.reader(adapter.id), id)
         const body = adapter.normalize(raw)

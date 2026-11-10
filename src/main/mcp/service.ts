@@ -25,7 +25,7 @@ export async function startMcp(): Promise<void> {
       token,
       info: { name: 'nais3-works', version: app.getVersion() },
       tools: createWorkTools({
-        reader: (platform) => (url) => workRead(platform, url),
+        reader: (platform) => (url, init) => workRead(platform, url, init),
         writer: (platform) => (method, url, body) => workWrite(platform, method, url, body),
         sender: (platform) => (request) => workSend(platform, request),
         readFile: (path) => readFile(path, 'utf8'),

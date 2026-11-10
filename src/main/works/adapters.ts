@@ -1,11 +1,19 @@
 // 작품 본문을 읽을 수 있는 플랫폼 연결부 등록부. 새 플랫폼은 여기 한 줄을 더한다.
 import { babeWorks } from './babe'
 import { edenWorks } from './eden'
-import type { SendRule, WorkAdapter, WorkRequest } from './types'
+import { elynWorks } from './elyn'
+import { genitWorks } from './genit'
+import { lunaWorks } from './luna'
+import { nekoWorks } from './neko'
+import type { SendRule, WorkAdapter, WorkReadInit, WorkRequest } from './types'
 
 export const WORK_ADAPTERS: Record<string, WorkAdapter> = {
   eden: edenWorks,
-  babe: babeWorks
+  babe: babeWorks,
+  genit: genitWorks,
+  luna: lunaWorks,
+  elyn: elynWorks,
+  neko: nekoWorks
 }
 
 // 사람이 부르는 이름 → 연결부 이름
@@ -17,7 +25,17 @@ const ALIASES: Record<string, string> = {
   바베: 'babe',
   바베챗: 'babe',
   베이비챗: 'babe',
-  babechat: 'babe'
+  babechat: 'babe',
+  젠잇: 'genit',
+  루나: 'luna',
+  루나톡: 'luna',
+  lunatalk: 'luna',
+  엘린: 'elyn',
+  elynai: 'elyn',
+  'elyn.ai': 'elyn',
+  네코: 'neko',
+  네코챗: 'neko',
+  nekochat: 'neko'
 }
 
 export function workAdapter(site: string): WorkAdapter {
@@ -30,8 +48,13 @@ export function workAdapter(site: string): WorkAdapter {
 }
 
 /** 그 플랫폼 작품 읽기 주소로 허용된 것인지 (collector가 요청 전에 확인한다) */
-export function workReadAllowed(platform: string, url: string): boolean {
-  return WORK_ADAPTERS[platform]?.readAllowed(url) ?? false
+export function workReadAllowed(platform: string, url: string, init?: WorkReadInit): boolean {
+  const adapter = WORK_ADAPTERS[platform]
+  if (!adapter) return false
+  // 본문 없는 GET만 readAllowed로 본다. POST 읽기는 연결부가 주소·본문 종류·본문 모양까지 따로 허용해야 한다.
+  if ((init?.method ?? 'GET') === 'GET')
+    return init?.body === undefined && init?.contentType === undefined && adapter.readAllowed(url)
+  return init?.method === 'POST' && (adapter.readPostAllowed?.(url, init) ?? false)
 }
 
 /** 그 플랫폼 작품 저장 요청으로 허용된 것인지 (collector가 요청 전에 확인한다) */

@@ -119,7 +119,15 @@ const MESSAGES: [RegExp, string][] = [
     /PLAN_STALE/,
     '계획을 세운 뒤 플랫폼 내용이나 로컬 파일이 바뀌어서 진행하지 않았어요. 계획 도구(…_plan)부터 다시 해 주세요.'
   ],
-  [/SAVE_FAILED/, '플랫폼이 저장을 받아 주지 않았어요. 내용은 바뀌지 않았을 가능성이 높아요.']
+  [/SAVE_FAILED/, '플랫폼이 저장을 받아 주지 않았어요. 내용은 바뀌지 않았을 가능성이 높아요.'],
+  [
+    /PROMPT_SHAPE/,
+    '이 작품의 메인 프롬프트는 모델별로 나뉜 옛 형식이라 여기서 고치지 않아요. 사이트 편집기에서 한 번 저장한 뒤 다시 해 주세요.'
+  ],
+  [
+    /LOREBOOK_EMPTY/,
+    '이 플랫폼은 로어북을 전부 비우는 저장을 편집기도 보내지 않아요. 항목을 하나 이상 남겨 주세요.'
+  ]
 ]
 export function toolMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
