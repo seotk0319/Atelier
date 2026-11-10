@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { GenerationRequest, PresetParams, PromptParts, PromptPreset } from '@shared/types'
-import { mergePromptParts, useGenerationStore } from './generation-store'
+import { isV5Model } from '@shared/nai-models'
+import { DEFAULT_REQUEST, mergePromptParts, useGenerationStore } from './generation-store'
 
 /** 프리셋에 함께 저장/복원되는 파라미터 (시드·캐릭터 제외) */
 export function pickPresetParams(req: GenerationRequest): PresetParams {
@@ -17,6 +18,30 @@ export function pickPresetParams(req: GenerationRequest): PresetParams {
     qualityToggle: req.qualityToggle,
     transparentBackground: req.transparentBackground === true,
     ucPreset: req.ucPreset
+  }
+}
+
+/** 모델별 기본 생성값 (NAI 웹 기본: V5 23스텝·CFG 7, V4.5 28스텝·CFG 5) */
+function defaultsForModel(model: string): Partial<GenerationRequest> {
+  return isV5Model(model) ? { steps: 23, cfgScale: 7 } : { steps: 28, cfgScale: 5 }
+}
+
+/**
+ * 프리셋 적용 시 복원할 파라미터 — 저장되지 않은 필드(구버전 params=null, NAIS2 이관 일부 필드)는
+ * 기본값으로 채운다. 비워 두면 직전 프리셋 값이 남고, 그 값이 자동 저장으로 이 프리셋에 굳는다.
+ * 모델이 저장돼 있지 않으면 지금 모델을 유지하고 그 모델의 기본값을 쓴다.
+ */
+export function presetParamsForApply(
+  params: PresetParams | null,
+  currentModel: string
+): PresetParams {
+  const model = params?.model ?? currentModel
+  const stored = Object.fromEntries(
+    Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null)
+  ) as PresetParams
+  return {
+    ...pickPresetParams({ ...DEFAULT_REQUEST, model, ...defaultsForModel(model) }),
+    ...stored
   }
 }
 
@@ -140,15 +165,17 @@ export const usePromptPresetsStore = create<PromptPresetsState>((set, get) => ({
       // 1) 이전 프리셋(없으면 첫 번째)으로 자동 전환 + 적용
       const next = rest[Math.max(0, idx - 1)]
       get().setActive(next.id)
-      useGenerationStore.getState().patchRequest({
+      const gen = useGenerationStore.getState()
+      gen.patchRequest({
         prompt: next.prompt,
         promptParts: partsForApply(next),
         negativePrompt: next.negativePrompt,
-        ...(next.params ?? {})
+        ...presetParamsForApply(next.params, gen.request.model)
       })
     } else {
-      // 2) 전부 삭제됐으면 기본 프리셋을 새로 만들어 활성화 (빈 프롬프트)
-      const newId = await get().create('기본', '', '')
+      // 2) 전부 삭제됐으면 기본 프리셋을 새로 만들어 활성화 (빈 프롬프트, 지금 생성값을 담아 둔다)
+      const params = pickPresetParams(useGenerationStore.getState().request)
+      const newId = await get().create('기본', '', '', params)
       get().setActive(newId)
       useGenerationStore
         .getState()

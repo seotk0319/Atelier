@@ -42,6 +42,14 @@ export interface GenerationQueueOptions {
 interface InternalQueueItem extends QueueItem {
   /** 묶음이 접수될 때 확정한 작업자 집합. 토큰은 담지 않는다. */
   allowedAccountIds: string[]
+  /** 씬 예약에서 넘어온 항목 — 취소되면 그 씬 예약으로 1장 돌려준다 */
+  reservation?: boolean
+}
+
+/** 취소로 씬에 돌려줄 예약 수 */
+export interface ReturnedReservation {
+  sceneId: number
+  count: number
 }
 
 type GenerateFn = (
@@ -72,6 +80,7 @@ export class GenerationQueue extends EventEmitter {
   private roundRobinIndex = 0
   private pumping = false
   private terminalCounts = { done: 0, failed: 0, cancelled: 0 }
+  private returnedReservations = new Map<number, number>()
   private readonly getAccounts: () => GenerationAccount[]
   private readonly accelerationAvailable: boolean
   private readonly isAccelerationEnabled: () => boolean
@@ -108,8 +117,12 @@ export class GenerationQueue extends EventEmitter {
     return this.tryEnqueueMany(requests).ids
   }
 
-  tryEnqueueMany(requests: GenerationRequest[]): QueueEnqueueResult {
-    return this.enqueueRequests(requests)
+  /** reservation: 씬 예약을 넘긴 묶음 — 취소된 항목은 'reservationsReturned'로 씬에 돌려준다 */
+  tryEnqueueMany(
+    requests: GenerationRequest[],
+    options: { reservation?: boolean } = {}
+  ): QueueEnqueueResult {
+    return this.enqueueRequests(requests, options.reservation === true)
   }
 
   /**
@@ -132,7 +145,7 @@ export class GenerationQueue extends EventEmitter {
     return { ids: [id] }
   }
 
-  private enqueueRequests(requests: GenerationRequest[]): QueueEnqueueResult {
+  private enqueueRequests(requests: GenerationRequest[], reservation = false): QueueEnqueueResult {
     if (requests.length === 0) return { ids: [] }
     const accounts = this.accountsForNewBatch()
     const blockedReason = this.blockedReason(accounts)
@@ -146,7 +159,8 @@ export class GenerationQueue extends EventEmitter {
         id,
         state: 'pending',
         request,
-        allowedAccountIds: [...allowedAccountIds]
+        allowedAccountIds: [...allowedAccountIds],
+        ...(reservation && request.sceneId !== undefined ? { reservation: true } : {})
       })
       ids.push(id)
     }
@@ -167,18 +181,33 @@ export class GenerationQueue extends EventEmitter {
       }
     }
     this.pruneTerminalItems()
+    this.flushReturnedReservations()
     this.emitChanged()
     this.pump()
   }
 
-  /** 삭제되는 씬에 연결된 pending/generating 항목을 한 번에 취소한다. */
+  /** 삭제되는 씬에 연결된 pending/generating 항목을 한 번에 취소한다 (예약은 돌려주지 않는다). */
   cancelScenes(sceneIds: number[]): void {
     if (sceneIds.length === 0) return
+    this.forgetReservations(sceneIds)
     const targets = new Set(sceneIds)
     const ids = [...this.items.values()]
       .filter((item) => item.request.sceneId !== undefined && targets.has(item.request.sceneId))
       .map((item) => item.id)
     this.cancel(ids)
+  }
+
+  /**
+   * 씬이 지워지거나 통째로 바뀌면(프리셋 삭제, 백업 복원) 그 씬 예약 출처를 잊는다 —
+   * 나중에 취소해도 같은 번호를 다시 받은 다른 씬에 예약이 붙지 않게. sceneIds가 없으면 전부.
+   */
+  forgetReservations(sceneIds?: number[]): void {
+    const targets = sceneIds ? new Set(sceneIds) : null
+    for (const item of this.items.values()) {
+      if (!item.reservation) continue
+      if (!targets || (item.request.sceneId !== undefined && targets.has(item.request.sceneId)))
+        delete item.reservation
+    }
   }
 
   reset(): void {
@@ -393,6 +422,7 @@ export class GenerationQueue extends EventEmitter {
 
       if (item.state !== 'pending') this.releaseHeavyFields(item)
       this.pruneTerminalItems()
+      this.flushReturnedReservations()
       const shouldDelay = this.delayMs > 0 && !!this.nextPending()
       if (shouldDelay) this.coolingAccounts.add(account.id)
       this.emitChanged()
@@ -472,6 +502,7 @@ export class GenerationQueue extends EventEmitter {
 
   private toStatusItem(item: InternalQueueItem): QueueItem {
     const { allowedAccountIds: _allowedAccountIds, ...publicItem } = item
+    delete publicItem.reservation
     const request = { ...item.request }
     delete request.source
     if (item.state !== 'generating') {
@@ -494,6 +525,22 @@ export class GenerationQueue extends EventEmitter {
     if (item.state === 'done' || item.state === 'failed' || item.state === 'cancelled') return
     item.state = state
     this.terminalCounts[state]++
+    // 취소로 뽑지 못한 예약 1장은 씬에 돌려준다 (완료·실패는 돌려주지 않는다)
+    if (state === 'cancelled' && item.reservation && item.request.sceneId !== undefined) {
+      const sceneId = item.request.sceneId
+      this.returnedReservations.set(sceneId, (this.returnedReservations.get(sceneId) ?? 0) + 1)
+    }
+    delete item.reservation
+  }
+
+  /** 모아 둔 돌려줄 예약을 한 번에 알린다 (전체 취소 1,000장도 한 번) */
+  private flushReturnedReservations(): void {
+    if (this.returnedReservations.size === 0) return
+    const returned: ReturnedReservation[] = [...this.returnedReservations].map(
+      ([sceneId, count]) => ({ sceneId, count })
+    )
+    this.returnedReservations.clear()
+    this.emit('reservationsReturned', returned)
   }
 
   private pruneTerminalItems(): void {

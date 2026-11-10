@@ -446,6 +446,18 @@ export function adjustReserveAll(presetId: number, delta: number, ids?: number[]
   }
 }
 
+/** 취소된 예약 생성을 씬 예약에 더한다 (그사이 새로 건 예약은 그대로 두고 더하기만) */
+export function returnReservations(returned: { sceneId: number; count: number }[]): void {
+  if (returned.length === 0) return
+  const db = getDb()
+  const stmt = db.prepare(
+    'UPDATE gen_scenes SET reserve_count = reserve_count + ? WHERE id = ? AND ? > 0'
+  )
+  db.transaction(() => {
+    for (const r of returned) stmt.run(r.count, r.sceneId, r.count)
+  })()
+}
+
 /** 모든 프리셋의 예약 총합 */
 export function reservedTotal(): number {
   const row = getDb()

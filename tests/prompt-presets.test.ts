@@ -67,6 +67,77 @@ describe('prompt preset sync guards', () => {
   })
 })
 
+describe('preset params on apply (이전 프리셋 값이 딸려 오지 않게)', () => {
+  const full = {
+    width: 832,
+    height: 1216,
+    cfgRescale: 0,
+    sampler: 'k_euler_ancestral',
+    noiseSchedule: 'karras',
+    variety: false,
+    qualityToggle: true,
+    transparentBackground: false,
+    ucPreset: 0
+  }
+
+  it('params가 없는 옛 프리셋은 모든 칸을 지금 모델의 기본값으로 채운다', async () => {
+    const { presetParamsForApply } = await helpers()
+    expect(presetParamsForApply(null, 'nai-diffusion-4-5-full')).toEqual({
+      ...full,
+      model: 'nai-diffusion-4-5-full',
+      steps: 28,
+      cfgScale: 5
+    })
+    expect(presetParamsForApply(null, 'nai-diffusion-5-full')).toEqual({
+      ...full,
+      model: 'nai-diffusion-5-full',
+      steps: 23,
+      cfgScale: 7
+    })
+  })
+
+  it('저장된 칸은 그대로, 빠진 칸은 저장된 모델의 기본값', async () => {
+    const { presetParamsForApply } = await helpers()
+    const applied = presetParamsForApply(
+      { model: 'nai-diffusion-5-full', steps: 40, cfgScale: undefined },
+      'nai-diffusion-4-5-full'
+    )
+    expect(applied.model).toBe('nai-diffusion-5-full')
+    expect(applied.steps).toBe(40)
+    expect(applied.cfgScale).toBe(7)
+    expect(applied.sampler).toBe('k_euler_ancestral')
+  })
+
+  it('직전 프리셋이 무엇이었든 같은 값이 된다', async () => {
+    const { presetParamsForApply } = await helpers()
+    const partial = { model: 'nai-diffusion-4-5-full', steps: 28, cfgScale: 5 }
+    const afterV5 = presetParamsForApply(partial, 'nai-diffusion-5-full')
+    expect(afterV5).toEqual(presetParamsForApply(partial, 'nai-diffusion-4-5-curated'))
+    expect(Object.values(afterV5)).not.toContain(undefined)
+  })
+
+  it('적용 결과를 요청에 덮으면 이전 요청의 생성 값이 남지 않는다', async () => {
+    const { presetParamsForApply, pickPresetParams } = await helpers()
+    const { DEFAULT_REQUEST } = await import('../src/renderer/src/stores/generation-store')
+    const previous = {
+      ...DEFAULT_REQUEST,
+      steps: 50,
+      cfgScale: 9,
+      sampler: 'k_dpmpp_2m',
+      width: 1024,
+      height: 1024,
+      transparentBackground: true
+    }
+    const next = { ...previous, ...presetParamsForApply({ steps: 30 }, previous.model) }
+    expect(pickPresetParams(next)).toEqual({
+      ...full,
+      model: previous.model,
+      steps: 30,
+      cfgScale: 5
+    })
+  })
+})
+
 describe('prompt preset split parts (3분할 보존)', () => {
   const parts = { base: '1girl', additional: 'smile', detail: 'cafe' }
   const merged = '1girl, smile, cafe'

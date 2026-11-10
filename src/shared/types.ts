@@ -540,7 +540,11 @@ export interface IpcInvokeMap {
     res: { date: string; items: NaiAccountUsage[] }
   }
   'queue:enqueue': { req: { request: GenerationRequest; count: number }; res: QueueEnqueueResult }
-  'queue:enqueueMany': { req: { requests: GenerationRequest[] }; res: QueueEnqueueResult }
+  /** reservation: 씬 예약을 넘기는 묶음 — 취소된 장은 씬 예약으로 돌아간다 */
+  'queue:enqueueMany': {
+    req: { requests: GenerationRequest[]; reservation?: boolean }
+    res: QueueEnqueueResult
+  }
   'queue:enqueueQuick': { req: { request: GenerationRequest }; res: QueueEnqueueResult }
   'queue:cancel': { req: { ids: string[] }; res: void }
   'queue:reset': { req: void; res: void }
@@ -930,6 +934,8 @@ export interface IpcEventMap {
   'images:updated': { filePath: string; thumbnail: string; revision: number }
   /** 씬에 새 이미지가 생성됨 (목록/상세 갱신). filePath로 카드 즉시 낙관적 갱신 */
   'scenes:changed': { sceneId: number; filePath: string }
+  /** 취소된 예약 생성이 씬 예약으로 돌아감 — 예약 수만 다시 읽는다 */
+  'scenes:reservesChanged': { sceneIds: number[] }
   /** 바이브 인코딩 완료 — 카드의 인코딩 표시 갱신용 */
   'vibes:encoded': Record<string, never>
   'gpt:changed': { jobs: GptJob[] }

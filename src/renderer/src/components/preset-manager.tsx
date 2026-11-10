@@ -4,7 +4,8 @@ import {
   usePromptPresetsStore,
   normalizePresetParts,
   partsForApply,
-  pickPresetParams
+  pickPresetParams,
+  presetParamsForApply
 } from '../stores/prompt-presets-store'
 import { useGenerationStore } from '../stores/generation-store'
 import { useScenesStore } from '../stores/scenes-store'
@@ -62,14 +63,13 @@ export function PresetManager({
           const next = usePromptPresetsStore.getState().presets[0]
           if (next) {
             ps.setActive(next.id)
-            useGenerationStore
-              .getState()
-              .patchRequest({
-                prompt: next.prompt,
-                promptParts: partsForApply(next),
-                negativePrompt: next.negativePrompt,
-                ...(next.params ?? {})
-              })
+            const gen = useGenerationStore.getState()
+            gen.patchRequest({
+              prompt: next.prompt,
+              promptParts: partsForApply(next),
+              negativePrompt: next.negativePrompt,
+              ...presetParamsForApply(next.params, gen.request.model)
+            })
           }
         }
       } else {

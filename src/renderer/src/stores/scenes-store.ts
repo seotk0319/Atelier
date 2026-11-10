@@ -589,49 +589,65 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   },
 
   generateReserved: async () => {
-    const preset = get().presets.find((p) => p.id === get().activePresetId)
-    const reserved = get().scenes.filter((s) => s.reserveCount > 0)
-    if (reserved.length === 0) return
-    const requests = buildReservedRequests(reserved, preset?.characterIds ?? null)
-    const result = await window.nais.invoke('queue:enqueueMany', { requests })
-    if (result.blockedReason) {
-      toast(enqueueBlockedMessage(result.blockedReason), 'info')
-      return
+    // 넘기는 중에 또 누르면(단축키 연타) 같은 예약이 두 번 들어간다
+    if (handingOff) return
+    handingOff = true
+    try {
+      // 큐에 넘기는 사이에 프리셋을 바꿔도 넘긴 프리셋에서만 뺀다
+      const presetId = get().activePresetId
+      const preset = get().presets.find((p) => p.id === presetId)
+      const reserved = get().scenes.filter((s) => s.reserveCount > 0)
+      if (reserved.length === 0) return
+      const requests = buildReservedRequests(reserved, preset?.characterIds ?? null)
+      const sent = reserved.map((s) => ({ id: s.id, count: s.reserveCount }))
+      const result = await window.nais.invoke('queue:enqueueMany', {
+        requests,
+        reservation: true
+      })
+      if (result.blockedReason) {
+        toast(enqueueBlockedMessage(result.blockedReason), 'info')
+        return
+      }
+      await consumeSentReserves(presetId, sent)
+    } finally {
+      handingOff = false
     }
-    set({ scenes: get().scenes.map((s) => (s.reserveCount > 0 ? { ...s, reserveCount: 0 } : s)) })
-    await window.nais.invoke('scenes:setReserveAll', {
-      presetId: get().activePresetId,
-      count: 0
-    })
     void get().refreshReservedTotal()
   },
 
   generateAllReserved: async () => {
-    const requests: GenerationRequest[] = []
-    const consumedPresetIds: number[] = []
-    for (const preset of get().presets) {
-      const { items } = await window.nais.invoke('scenes:list', { presetId: preset.id })
-      const reserved = items.filter((s) => s.reserveCount > 0)
-      if (reserved.length === 0) continue
-      requests.push(...buildReservedRequests(reserved, preset.characterIds))
-      consumedPresetIds.push(preset.id)
-    }
-    if (requests.length === 0) return 0
-    const result = await window.nais.invoke('queue:enqueueMany', { requests })
-    if (result.blockedReason) {
-      toast(enqueueBlockedMessage(result.blockedReason), 'info')
-      return 0
-    }
-    await Promise.all(
-      consumedPresetIds.map((presetId) =>
-        window.nais.invoke('scenes:setReserveAll', { presetId, count: 0 })
+    if (handingOff) return 0
+    handingOff = true
+    try {
+      const requests: GenerationRequest[] = []
+      const sentByPreset: { presetId: number; sent: SentReserve[] }[] = []
+      for (const preset of get().presets) {
+        const { items } = await window.nais.invoke('scenes:list', { presetId: preset.id })
+        const reserved = items.filter((s) => s.reserveCount > 0)
+        if (reserved.length === 0) continue
+        requests.push(...buildReservedRequests(reserved, preset.characterIds))
+        sentByPreset.push({
+          presetId: preset.id,
+          sent: reserved.map((s) => ({ id: s.id, count: s.reserveCount }))
+        })
+      }
+      if (requests.length === 0) return 0
+      const result = await window.nais.invoke('queue:enqueueMany', {
+        requests,
+        reservation: true
+      })
+      if (result.blockedReason) {
+        toast(enqueueBlockedMessage(result.blockedReason), 'info')
+        return 0
+      }
+      await Promise.all(
+        sentByPreset.map(({ presetId, sent }) => consumeSentReserves(presetId, sent))
       )
-    )
-    if (consumedPresetIds.includes(get().activePresetId)) {
-      set({ scenes: get().scenes.map((s) => (s.reserveCount > 0 ? { ...s, reserveCount: 0 } : s)) })
+      return requests.length
+    } finally {
+      handingOff = false
+      void get().refreshReservedTotal()
     }
-    set({ reservedTotal: 0 })
-    return requests.length
   },
 
   setPresetCharacters: async (id, characterIds) => {
@@ -670,6 +686,51 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   }
 }))
 
+/** 예약을 큐에 넘기는 중인지 — 연타로 같은 예약이 두 번 들어가지 않게 */
+let handingOff = false
+
+export interface SentReserve {
+  id: number
+  count: number
+}
+
+/** 넘긴 장수만큼만 뺀다 — 넘기는 사이에 누른 +1은 남는다 */
+export function subtractSentReserves<T extends { id: number; reserveCount: number }>(
+  scenes: T[],
+  sent: SentReserve[]
+): T[] {
+  const byId = new Map(sent.map((s) => [s.id, s.count]))
+  return scenes.map((s) =>
+    byId.has(s.id) ? { ...s, reserveCount: Math.max(0, s.reserveCount - byId.get(s.id)!) } : s
+  )
+}
+
+/** 같은 장수를 넘긴 씬끼리 묶는다 — 본체 adjustReserveAll 한 번에 한 묶음 */
+export function groupSentByCount(sent: SentReserve[]): Map<number, number[]> {
+  const groups = new Map<number, number[]>()
+  for (const s of sent) {
+    if (s.count <= 0) continue
+    groups.set(s.count, [...(groups.get(s.count) ?? []), s.id])
+  }
+  return groups
+}
+
+/**
+ * 큐에 넘긴 예약을 씬에서 뺀다. 화면 값과 본체 요청을 같은 틱에 보내서, 이 뒤에 누른 +1 요청은
+ * 반드시 이 빼기 다음에 본체에 도착한다 (예전처럼 0으로 덮어쓰지 않는다).
+ */
+function consumeSentReserves(presetId: number, sent: SentReserve[]): Promise<unknown> {
+  const st = useScenesStore.getState()
+  if (st.activePresetId === presetId) {
+    useScenesStore.setState({ scenes: subtractSentReserves(st.scenes, sent) })
+  }
+  return Promise.all(
+    [...groupSentByCount(sent)].map(([count, ids]) =>
+      window.nais.invoke('scenes:adjustReserveAll', { presetId, delta: -count, ids })
+    )
+  )
+}
+
 /** 예약된 씬들을 큐에 — 시드 고정 시 모든 씬이 같은 base 시드 (같은 씬 반복만 +i로 동일 그림 방지) */
 function buildReservedRequests(
   scenes: Scene[],
@@ -702,7 +763,25 @@ function sceneSeed(scene: Scene, offset: number): number {
 export function bindSceneEvents(): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined
   let reloadSelected = false
-  return window.nais.on('scenes:changed', ({ sceneId, filePath }) => {
+  // 취소한 예약이 씬으로 돌아옴 — 예약 수만 다시 읽어 맞춘다 (썸네일·장수는 건드리지 않는다)
+  const offReserves = window.nais.on('scenes:reservesChanged', ({ sceneIds }) => {
+    const st = useScenesStore.getState()
+    void st.refreshReservedTotal()
+    const changed = new Set(sceneIds)
+    if (!st.scenes.some((s) => changed.has(s.id))) return
+    const presetId = st.activePresetId
+    void window.nais.invoke('scenes:list', { presetId }).then(({ items }) => {
+      const now = useScenesStore.getState()
+      if (now.activePresetId !== presetId) return
+      const counts = new Map(items.map((s) => [s.id, s.reserveCount]))
+      useScenesStore.setState({
+        scenes: now.scenes.map((s) =>
+          changed.has(s.id) && counts.has(s.id) ? { ...s, reserveCount: counts.get(s.id)! } : s
+        )
+      })
+    })
+  })
+  const offChanged = window.nais.on('scenes:changed', ({ sceneId, filePath }) => {
     const st = useScenesStore.getState()
     // 완료 즉시 카드 낙관적 갱신 — 스트리밍 프레임이 사라진 뒤 옛 썸네일이 튀는 것 방지.
     // 새 원본을 바로 표시(thumbnail 비워 thumbnailPath로 폴백), load()가 곧 정식 썸네일로 대체.
@@ -715,4 +794,8 @@ export function bindSceneEvents(): () => void {
       reloadSelected = false
     }, 300)
   })
+  return () => {
+    offReserves()
+    offChanged()
+  }
 }

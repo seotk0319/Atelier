@@ -409,8 +409,8 @@ function SceneGrid(): React.JSX.Element {
     void reorder(arrayMove(scenes, from, to).map((s) => s.id))
   }
 
-  // 스트리밍: 현재 생성 중인 씬과 미리보기 프레임 (해당 씬 카드에만 전달)
-  const previewPng = useGenerationStore((s) => s.previewPng)
+  // 스트리밍: 현재 생성 중인 씬만 정한다. 미리보기 프레임은 그 카드가 직접 구독해서
+  // 스텝마다 격자 전체가 아니라 그 카드 하나만 다시 그린다
   const generatingSceneId = useGenerationStore(
     (s) => s.queue?.items.find((i) => i.state === 'generating')?.request.sceneId ?? null
   )
@@ -744,7 +744,6 @@ function SceneGrid(): React.JSX.Element {
                     <SceneCard
                       key={scene.id}
                       scene={scene}
-                      live={scene.id === generatingSceneId ? previewPng : null}
                       generating={scene.id === generatingSceneId}
                       remaining={remainingByScene.get(scene.id) ?? 0}
                       quickOrder={quickByScene.get(scene.id) ?? NO_ORDER}
@@ -964,7 +963,6 @@ const NO_ORDER: number[] = []
 
 const SceneCard = memo(function SceneCard(props: {
   scene: Scene
-  live: string | null
   generating: boolean
   remaining: number
   quickOrder: number[]
@@ -976,7 +974,6 @@ const SceneCard = memo(function SceneCard(props: {
 
 function SceneCardBody({
   scene,
-  live,
   generating,
   remaining,
   quickOrder,
@@ -984,7 +981,6 @@ function SceneCardBody({
   sortable
 }: {
   scene: Scene
-  live: string | null
   quickOrder: number[]
   quickLive: boolean
   generating: boolean
@@ -992,6 +988,8 @@ function SceneCardBody({
   remaining: number
   sortable: ReturnType<typeof useSortable>
 }): React.JSX.Element {
+  // 생성 중인 카드만 미리보기 프레임을 구독한다 (다른 카드는 null로 고정돼 다시 그리지 않음)
+  const live = useGenerationStore((s) => (generating ? s.previewPng : null))
   const editMode = useScenesStore((s) => s.editMode)
   const cardOrientation = useScenesStore((s) => s.cardOrientation)
   const selection = useScenesStore((s) => s.selection)

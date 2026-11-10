@@ -62,6 +62,14 @@ export function isV5Model(model: string): boolean {
   return model.includes('nai-diffusion-5-')
 }
 
+/**
+ * 바이브 트랜스퍼·캐릭터 레퍼런스를 요청에 실을 수 있는 모델인지. V5는 둘 다 받지 않는다
+ * (원본 NAIS3 v1.0.19 modelCapabilities와 같은 기준).
+ */
+export function supportsReferences(model: string): boolean {
+  return !isV5Model(model)
+}
+
 /** NAI 웹 모델 설정: V4.5는 캐릭터 6명, V5는 32명까지 (NAI 웹 코드 확인) */
 export function maxCharactersForModel(model: string): number {
   return isV5Model(model) ? 32 : 6

@@ -9,6 +9,7 @@ import {
   shell
 } from 'electron'
 import type { IpcEventMap, IpcInvokeMap } from '../shared/types'
+import type { ReturnedReservation } from './queue/generation-queue'
 import {
   getInbox,
   getInboxWorks,
@@ -147,6 +148,7 @@ import {
   setReserveAll,
   clearAllReservations,
   adjustReserveAll,
+  returnReservations,
   reservedTotal,
   bulkMove,
   bulkDelete,
@@ -352,7 +354,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
 
   handle('queue:enqueue', ({ request, count }) => ctx.queue.tryEnqueue(request, count))
-  handle('queue:enqueueMany', ({ requests }) => ctx.queue.tryEnqueueMany(requests))
+  handle('queue:enqueueMany', ({ requests, reservation }) =>
+    ctx.queue.tryEnqueueMany(requests, { reservation })
+  )
   handle('queue:enqueueQuick', ({ request }) => ctx.queue.tryEnqueueQuick(request))
   handle('queue:cancel', ({ ids }) => ctx.queue.cancel(ids))
   handle('queue:reset', () => {
@@ -482,6 +486,10 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     renamePreset(id, name)
   })
   handle('scenePresets:delete', ({ id }) => {
+    // 지워지는 씬 번호는 다른 씬이 다시 받을 수 있다 — 큐에 남은 그 씬 예약 출처를 잊는다
+    ctx.queue.forgetReservations(
+      getDb().prepare('SELECT id FROM gen_scenes WHERE preset_id = ?').pluck().all(id) as number[]
+    )
     deletePreset(id)
   })
   handle('scenePresets:reorder', ({ ids }) => {
@@ -577,6 +585,8 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
       const data = JSON.parse(readFileSync(result.filePaths[0], 'utf-8')) as Record<string, unknown>
       // 포맷 감지: NAIS3는 _app='NAIS3', NAIS2는 nais2-* 키
       if (data._app === 'NAIS3') {
+        // 씬 표가 통째로 바뀐다 — 큐의 예약 출처가 엉뚱한 씬을 가리키지 않게 먼저 잊는다
+        ctx.queue.forgetReservations()
         const { imported } = importAll(data)
         return { summary: `NAIS3 백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
       }
@@ -1115,4 +1125,13 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
 
   ctx.queue.on('changed', (status) => broadcast('queue:changed', status))
+  // 취소된 예약 생성은 씬 예약으로 돌려준다 (큐 emit 안에서 돌므로 DB 오류가 취소를 깨지 않게)
+  ctx.queue.on('reservationsReturned', (returned: ReturnedReservation[]) => {
+    try {
+      returnReservations(returned)
+      broadcast('scenes:reservesChanged', { sceneIds: returned.map((r) => r.sceneId) })
+    } catch (error) {
+      console.error('취소한 예약을 씬에 돌려주지 못함', error)
+    }
+  })
 }

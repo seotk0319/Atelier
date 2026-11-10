@@ -289,3 +289,94 @@ describe('GenerationQueue', () => {
     expect(queue.tryEnqueueQuick(request()).blockedReason).toBe('no-account')
   })
 })
+
+describe('GenerationQueue 예약 되돌리기', () => {
+  function abortable(): {
+    queue: GenerationQueue
+    returned: { sceneId: number; count: number }[][]
+    finish: () => void
+  } {
+    const gates: (() => void)[] = []
+    const queue = new GenerationQueue(
+      (_request, _id, signal) =>
+        new Promise<string>((resolve, reject) => {
+          gates.push(() => resolve('done.png'))
+          signal.addEventListener('abort', () => {
+            const error = new Error('Aborted')
+            error.name = 'AbortError'
+            reject(error)
+          })
+        })
+    )
+    queue.setDelayMs(0)
+    const returned: { sceneId: number; count: number }[][] = []
+    queue.on('reservationsReturned', (list) => returned.push(list))
+    return { queue, returned, finish: () => gates.shift()?.() }
+  }
+
+  it('취소한 예약 장수를 씬별로 한 번에 돌려준다 (생성 중이던 장 포함)', async () => {
+    const { queue, returned } = abortable()
+    const { ids } = queue.tryEnqueueMany(
+      [request({ sceneId: 1 }), request({ sceneId: 1 }), request({ sceneId: 2 })],
+      { reservation: true }
+    )
+    await tick()
+    expect(queue.status().items.find((i) => i.id === ids[0])?.state).toBe('generating')
+
+    queue.cancel(ids)
+    // 대기 2장은 바로, 생성 중 1장은 중단이 끝난 뒤 돌아온다
+    expect(returned).toEqual([[{ sceneId: 1, count: 1 }, { sceneId: 2, count: 1 }]])
+    await vi.waitFor(() => expect(returned).toHaveLength(2))
+    expect(returned[1]).toEqual([{ sceneId: 1, count: 1 }])
+  })
+
+  it('다 뽑은 장은 돌려주지 않는다', async () => {
+    const { queue, returned, finish } = abortable()
+    const { ids } = queue.tryEnqueueMany([request({ sceneId: 1 }), request({ sceneId: 1 })], {
+      reservation: true
+    })
+    await tick()
+    finish()
+    await vi.waitFor(() =>
+      expect(queue.status().items.find((i) => i.id === ids[0])?.state).toBe('done')
+    )
+    queue.cancel(ids)
+    await vi.waitFor(() => expect(returned.flat().reduce((n, r) => n + r.count, 0)).toBe(1))
+  })
+
+  it('예약이 아닌 묶음·바로 뽑기는 돌려주지 않는다', async () => {
+    const { queue, returned } = abortable()
+    const many = queue.tryEnqueueMany([request({ sceneId: 1 })]).ids
+    const quick = queue.tryEnqueueQuick(request({ sceneId: 2 })).ids
+    await tick()
+    queue.cancel([...many, ...quick])
+    await tick()
+    await tick()
+    expect(returned).toEqual([])
+  })
+
+  it('씬을 지우며 취소하거나 잊은 씬은 돌려주지 않는다', async () => {
+    const { queue, returned } = abortable()
+    const { ids } = queue.tryEnqueueMany(
+      [request({ sceneId: 1 }), request({ sceneId: 2 }), request({ sceneId: 3 })],
+      { reservation: true }
+    )
+    await tick()
+    queue.cancelScenes([2])
+    queue.forgetReservations([3])
+    queue.cancel(ids)
+    await vi.waitFor(() => expect(returned.flat()).toEqual([{ sceneId: 1, count: 1 }]))
+    await tick()
+    expect(returned.flat()).toEqual([{ sceneId: 1, count: 1 }])
+  })
+
+  it('작업 새로고침(reset)은 예약을 돌려주지 않는다', async () => {
+    const { queue, returned } = abortable()
+    queue.tryEnqueueMany([request({ sceneId: 1 }), request({ sceneId: 1 })], { reservation: true })
+    await tick()
+    queue.reset()
+    await tick()
+    await tick()
+    expect(returned).toEqual([])
+  })
+})

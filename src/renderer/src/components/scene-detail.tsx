@@ -42,7 +42,9 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
   const baseNegative = useGenerationStore((s) => s.request.negativePrompt)
   const model = useGenerationStore((s) => s.request.model)
   const charItems = useCharactersStore((s) => s.items)
-  const previewPng = useGenerationStore((s) => s.previewPng)
+  // 프레임이 있는지만 본다 — 프레임 자체는 StreamingFrame이 읽어서 스텝마다 이미지 격자 전체를
+  // 다시 그리지 않는다
+  const hasPreview = useGenerationStore((s) => s.previewPng != null)
   const imageRevisions = useGenerationStore((s) => s.imageRevisions)
   const generatingSceneId = useGenerationStore(
     (s) => s.queue?.items.find((i) => i.state === 'generating')?.request.sceneId ?? null
@@ -54,28 +56,26 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
 
   // F1 튐 방지: 스트리밍 마지막 프레임을 붙들었다가 완성본이 로드되면 교체.
   // 스트리밍 시작 시점의 최상단 이미지 id를 기록 → 그와 다른 새 이미지가 로드되면 프레임 해제.
-  const [heldFrame, setHeldFrame] = useState<string | null>(null)
+  const [holding, setHolding] = useState(false)
   const baselineTopId = useRef<number | null>(null)
   useEffect(() => {
     if (streaming) baselineTopId.current = images[0]?.id ?? null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming])
   useEffect(() => {
-    if (streaming && previewPng) setHeldFrame(previewPng)
-  }, [streaming, previewPng])
+    if (streaming && hasPreview) setHolding(true)
+  }, [streaming, hasPreview])
   // 안전장치: 씬이 바뀌면 프레임 리셋 / 스트리밍 끝난 뒤 새 이미지가 안 오면 6초 후 해제
-  useEffect(() => setHeldFrame(null), [scene.id])
+  useEffect(() => setHolding(false), [scene.id])
   useEffect(() => {
-    if (streaming || !heldFrame) return
-    const t = setTimeout(() => setHeldFrame(null), 6000)
+    if (streaming || !holding) return
+    const t = setTimeout(() => setHolding(false), 6000)
     return () => clearTimeout(t)
-  }, [streaming, heldFrame])
+  }, [streaming, holding])
   // 스트리밍이 끝났는데 아직 새 이미지가 안 들어왔으면 프레임 유지, 들어와 로드되면 해제
   const newTop =
-    !streaming && heldFrame && images[0] && images[0].id !== baselineTopId.current
-      ? images[0]
-      : null
-  const showTile = streaming || heldFrame != null
+    !streaming && holding && images[0] && images[0].id !== baselineTopId.current ? images[0] : null
+  const showTile = streaming || holding
 
   // 씬 에디터도 실제 생성 요청과 같은 고정 → 가변 → 씬 → 디테일 순서로 계산한다.
   const [sceneTokens, setSceneTokens] = useState<{ pos: number | null; neg: number | null }>({
@@ -292,7 +292,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
           </div>
         </div>
 
-        {images.length === 0 && !imagesLoading && !streaming ? (
+        {images.length === 0 && !imagesLoading && !showTile ? (
           <p className="py-10 text-center text-[13px] text-faint">
             {favoritesOnly
               ? '즐겨찾기한 이미지가 없어요.'
@@ -309,23 +309,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
                 className="relative overflow-hidden rounded-md bg-surface-2 ring-2 ring-accent/50"
                 style={{ aspectRatio: `${scene.width} / ${scene.height}` }}
               >
-                {streaming && previewPng ? (
-                  <img
-                    src={`data:image/png;base64,${previewPng}`}
-                    className="h-full w-full object-cover"
-                    alt=""
-                  />
-                ) : heldFrame ? (
-                  <img
-                    src={`data:image/png;base64,${heldFrame}`}
-                    className="h-full w-full object-cover"
-                    alt=""
-                  />
-                ) : (
-                  <div className="grid h-full w-full place-items-center">
-                    <Loader2 size={26} className="animate-spin text-accent" />
-                  </div>
-                )}
+                <StreamingFrame key={scene.id} streaming={streaming} />
                 {streaming && (
                   <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white">
                     생성 중…
@@ -336,7 +320,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
                   <img
                     src={imageUrl(newTop.filePath, imageRevisions[newTop.filePath])}
                     className="hidden"
-                    onLoad={() => setHeldFrame(null)}
+                    onLoad={() => setHolding(false)}
                     alt=""
                   />
                 )}
@@ -485,6 +469,25 @@ function SceneSeedField({
           해제
         </button>
       )}
+    </div>
+  )
+}
+
+/**
+ * 스트리밍 타일 그림. 미리보기 프레임을 혼자 구독해서 스텝마다 이 타일만 다시 그리고,
+ * 스트리밍이 끝난 뒤에도 부모가 놓을 때까지 마지막 프레임을 붙든다.
+ */
+function StreamingFrame({ streaming }: { streaming: boolean }): React.JSX.Element {
+  const previewPng = useGenerationStore((s) => s.previewPng)
+  const [heldFrame, setHeldFrame] = useState<string | null>(null)
+  // 마지막 프레임을 그리는 중에 기억한다 (스텝마다 effect를 한 번 더 돌리지 않게)
+  if (streaming && previewPng && previewPng !== heldFrame) setHeldFrame(previewPng)
+  const frame = streaming && previewPng ? previewPng : heldFrame
+  return frame ? (
+    <img src={`data:image/png;base64,${frame}`} className="h-full w-full object-cover" alt="" />
+  ) : (
+    <div className="grid h-full w-full place-items-center">
+      <Loader2 size={26} className="animate-spin text-accent" />
     </div>
   )
 }

@@ -9,7 +9,7 @@ import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settin
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
 import { applyCharSections } from '../shared/char-sections'
-import { maxCharactersForModel } from '../shared/nai-models'
+import { maxCharactersForModel, supportsReferences } from '../shared/nai-models'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
@@ -47,7 +47,8 @@ const appIcon = SHOULD_INVERT_ICON ? iconInverted : icon
 app.setName(APP_NAME)
 
 // 중복 실행 방지 (특히 Windows) — 두 번째 실행은 기존 창을 앞으로
-if (!app.requestSingleInstanceLock()) {
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
@@ -108,6 +109,9 @@ function createWindow(): void {
 const previewGate = createPreviewGate()
 
 app.whenReady().then(() => {
+  // app.quit()은 비동기라 두 번째 실행도 ready까지 온다 — 여기서 멈추지 않으면 첫 실행이 쓰는
+  // DB를 같이 열어 백업·마이그레이션을 중복 실행한다. 기존 창은 첫 실행의 second-instance가 앞으로 가져온다.
+  if (!hasSingleInstanceLock) return
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
 
   protocol.handle('nais-thumb', async (request) => {
@@ -172,9 +176,12 @@ app.whenReady().then(() => {
       const maySpend = (): boolean => PROFILE !== 1 || getSetting('anlas_spending') !== '0'
       const ensureFree = async (): Promise<void> => {
         if (maySpend()) return
-        const rows = enabledVibeRows()
+        const refsUsed = supportsReferences(rawRequest.model)
+        const rows = refsUsed ? enabledVibeRows() : []
         await checkFreeGeneration(token, rawRequest, {
-          characterCount: enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0),
+          characterCount: refsUsed
+            ? enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0)
+            : 0,
           vibeCount: rows.length,
           unencodedVibes: rows.filter((r) => !r.encoded || r.encodedIe !== r.infoExtracted).length
         })
@@ -221,13 +228,20 @@ app.whenReady().then(() => {
         }))
       }
 
-      // 바이브/캐릭레퍼는 DB의 enabled 항목에서 준비 (바이브는 필요 시 인코딩 — 2 Anlas, 캐시됨)
-      const { vibes, newlyEncoded } = await prepareVibes(token, maySpend)
+      // 바이브/캐릭레퍼는 DB의 enabled 항목에서 준비 (바이브는 필요 시 인코딩 — 2 Anlas, 캐시됨).
+      // V5는 둘 다 받지 않는다 — 싣지도, 바이브를 4.5용으로 인코딩(과금)하지도 않는다.
+      const refsSupported = supportsReferences(rawRequest.model)
+      const { vibes, newlyEncoded } = refsSupported
+        ? await prepareVibes(token, maySpend)
+        : { vibes: [], newlyEncoded: [] }
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
-      const extraCharacterReferences = rawRequest.extraCharRefs?.length
-        ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
+      const extraCharacterReferences =
+        refsSupported && rawRequest.extraCharRefs?.length
+          ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
+          : []
+      const characterReferences = refsSupported
+        ? [...extraCharacterReferences, ...(await prepareCharRefs())]
         : []
-      const characterReferences = [...extraCharacterReferences, ...(await prepareCharRefs())]
 
       let source = request.source
       // i2i/인페인트: 소스 해상도를 유효 NAI 해상도(64 배수·픽셀 상한)로 스냅하고 이미지를 맞춰 리사이즈.
@@ -403,7 +417,8 @@ app.on('window-all-closed', () => {
 
 let inboxClosed = false
 app.on('before-quit', (event) => {
-  if (PROFILE !== 1 || inboxClosed) return
+  // 두 번째 실행은 아무것도 시작하지 않았다 — 정리할 것도 없다
+  if (!hasSingleInstanceLock || PROFILE !== 1 || inboxClosed) return
   event.preventDefault()
   stopAiReplies()
   void stopMcp()

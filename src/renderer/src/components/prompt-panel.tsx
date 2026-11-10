@@ -91,6 +91,8 @@ export function PromptPanel(): React.JSX.Element {
   const crefOverlayOpen = useCharRefsStore((s) => s.overlayOpen)
   const setCrefOpen = useCharRefsStore((s) => s.setOverlayOpen)
   const enabledCrefs = useCharRefsStore((s) => s.items.filter((c) => c.enabled).length)
+  // V5 요청에는 바이브·레퍼런스를 싣지 않는다 (본체 index.ts와 같은 기준) — 비용 계산에서도 뺀다
+  const sentCrefs = v5Enabled ? 0 : enabledCrefs
   const source = useGenerationStore((s) => s.source)
   const [paramsOpen, setParamsOpen] = useState(false)
   const stripExif = useStorageSettingsStore((s) => s.stripExif)
@@ -206,20 +208,12 @@ export function PromptPanel(): React.JSX.Element {
         height: request.height,
         steps,
         model: request.model,
-        charRefCount: enabledCrefs,
+        charRefCount: sentCrefs,
         isOpus: subscriptionTier === 'opus',
         batchCount,
         unencodedVibes: 0 // 캐시 상태는 오버레이에서 확인 — 배지로만 안내
       }),
-    [
-      request.width,
-      request.height,
-      steps,
-      request.model,
-      subscriptionTier,
-      batchCount,
-      enabledCrefs
-    ]
+    [request.width, request.height, steps, request.model, subscriptionTier, batchCount, sentCrefs]
   )
 
   // 파라미터 요약 줄: 씬 모드는 씬마다 해상도가 달라서, 예약된 씬(없으면 전체 씬) 중 가장 큰 해상도로 판단한다.
@@ -245,7 +239,7 @@ export function PromptPanel(): React.JSX.Element {
       height: largest.height,
       steps,
       model: request.model,
-      charRefCount: enabledCrefs,
+      charRefCount: sentCrefs,
       isOpus: subscriptionTier === 'opus',
       batchCount: 1,
       unencodedVibes: 0
@@ -273,7 +267,7 @@ export function PromptPanel(): React.JSX.Element {
     seedLocked,
     anlas,
     batchCount,
-    enabledCrefs,
+    sentCrefs,
     subscriptionTier
   ])
 
@@ -547,6 +541,8 @@ export function PromptPanel(): React.JSX.Element {
           icon={<Layers size={14} />}
           label="바이브"
           badge={enabledVibes}
+          disabled={v5Enabled}
+          title={v5Enabled ? 'V5에서는 바이브를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요' : undefined}
           onClick={() => only('vibe')}
         />
         <ToolButton
@@ -554,6 +550,10 @@ export function PromptPanel(): React.JSX.Element {
           icon={<ImageUp size={14} />}
           label="레퍼런스"
           badge={enabledCrefs}
+          disabled={v5Enabled}
+          title={
+            v5Enabled ? 'V5에서는 레퍼런스를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요' : undefined
+          }
           onClick={() => only('cref')}
         />
         <ToolButton
@@ -1012,20 +1012,27 @@ function ToolButton({
   icon,
   label,
   badge,
-  onClick
+  onClick,
+  disabled = false,
+  title
 }: {
   active: boolean
   icon: React.ReactNode
   label: string
   badge: number
   onClick: () => void
+  /** 지금 모델에서 쓰지 않는 입력 (V5의 바이브·레퍼런스) */
+  disabled?: boolean
+  title?: string
 }): React.JSX.Element {
-  const inUse = badge > 0
+  const inUse = !disabled && badge > 0
   return (
     <button
+      disabled={disabled}
+      title={title}
       className={cn(
-        'flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 text-[12px] font-semibold transition-colors',
-        active
+        'flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 text-[12px] font-semibold transition-colors disabled:cursor-default disabled:opacity-50',
+        active && !disabled
           ? 'bg-accent text-white dark:text-paper'
           : inUse
             ? 'bg-accent-soft text-accent'
