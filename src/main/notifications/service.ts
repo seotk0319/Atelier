@@ -16,6 +16,7 @@ import type {
   InboxWorksResult
 } from '../../shared/inbox'
 import { REPLY_MAX, ReplyError } from './direct/babe-reply'
+import type { WorkRequest } from '../works/types'
 import { canReply, type ReplyComment, type ReplyItem } from './direct/replies'
 import { classifyTopics, topicMap, topicState } from './topics'
 import {
@@ -143,6 +144,13 @@ export async function workWrite(
   await startInbox().catch(() => undefined)
   if (!direct) throw new ReplyError('LOGIN_REQUIRED')
   return direct.workWrite(platform, method, url, body)
+}
+
+/** 작품 이미지·표지 통로 (파일 묶음·바이너리·파일 저장소). 허용 규칙 검사는 collector가 한다. */
+export async function workSend(platform: string, request: WorkRequest): Promise<Response> {
+  await startInbox().catch(() => undefined)
+  if (!direct) throw new ReplyError('LOGIN_REQUIRED')
+  return direct.workSend(platform, request)
 }
 
 let error: string | null = null

@@ -6,7 +6,18 @@
 //   GET /api/works/{id}/translations             언어 판본 목록 {items[]}
 //   GET /api/works/{id}/translations/{lang}      판본 내용 {item:{work, characters}}
 // 저장은 PUT /api/works/{id} 통째 저장만 메인·로어북·시작 상황을 받는다 (PATCH는 400).
+// 이미지·표지는 eden-media.ts, 언어 판본 저장은 eden-editions.ts에 있다.
 import { randomUUID } from 'node:crypto'
+import { edenEditionBody, edenEditionView } from './eden-editions'
+import {
+  EDEN_COVER_RULES,
+  EDEN_IMAGE_RULES,
+  edenApplyImages,
+  edenImageGroups,
+  edenPlanImages,
+  edenSendRule,
+  edenUploadCover
+} from './eden-media'
 import type {
   EditionBody,
   EditionInfo,
@@ -114,7 +125,10 @@ export const edenWorks: WorkAdapter = {
     'start_scenarios',
     'characters',
     'editions',
-    'save'
+    'save',
+    'images',
+    'cover',
+    'edition_save'
   ],
 
   readAllowed(url) {
@@ -169,11 +183,23 @@ export const edenWorks: WorkAdapter = {
       const found = await json(
         await read(ORIGIN + '/api/works/' + wid + '/characters/' + cid.toLowerCase() + '/images')
       )
-      images[cid] = Array.isArray(found)
+      const rows = Array.isArray(found)
         ? found
         : isObj(found)
           ? (found.images ?? found.items ?? found.data ?? [])
           : []
+      // 플랫폼은 이미지를 순서 없이 돌려준다. 편집기처럼 display_order로 줄을 세워야
+      // 화면에 보이는 순서와 같고, 순서 바꾸기 결과도 여기서 확인할 수 있다.
+      const order = (image: unknown): number => {
+        const value = isObj(image) ? image.display_order : null
+        return typeof value === 'number' ? value : parseInt(String(value ?? '0'), 10) || 0
+      }
+      images[cid] = Array.isArray(rows)
+        ? rows
+            .map((image, i) => ({ image, i }))
+            .sort((a, b) => order(a.image) - order(b.image) || a.i - b.i)
+            .map((x) => x.image)
+        : []
     }
     return { work, characters, images }
   },
@@ -231,9 +257,7 @@ export const edenWorks: WorkAdapter = {
         !u.password &&
         !u.search &&
         !u.hash &&
-        // 통째 저장·삭제는 작품 주소로, 새 작품(임시저장)은 /api/works/new 로만 보낸다
-        (((method === 'PUT' || method === 'DELETE') && WRITE_PATH.test(u.pathname)) ||
-          (method === 'PUT' && u.pathname === '/api/works/new'))
+        WRITE_ROUTES.some(([m, re]) => m === method && re.test(u.pathname))
       )
     } catch {
       return false
@@ -388,6 +412,60 @@ export const edenWorks: WorkAdapter = {
     if (!res.ok) throw new Error('DELETE_FAILED ' + res.status)
   },
 
+  sendRule: edenSendRule,
+  imageRules: EDEN_IMAGE_RULES,
+  imageGroups: edenImageGroups,
+  planImages: edenPlanImages,
+  applyImages: (io, id, raw, changes) => edenApplyImages(io, workId(id), raw, changes),
+
+  coverRules: EDEN_COVER_RULES,
+  coverUrl(raw) {
+    if (!isObj(raw) || !isObj(raw.work)) throw new Error('WORK_SHAPE')
+    return strOrNull(raw.work.cover_image_url)
+  },
+  async uploadCover(io, id, file, language) {
+    const wid = workId(id)
+    if (language === undefined) return edenUploadCover(io, wid, file)
+    // 판본 표지는 올린 주소를 '번역 저장' 본문에 넣어야 판본에 남는다 (편집기도 올린 뒤 번역 저장을 보낸다).
+    // 판본이 없으면 번역 저장이 원문을 베낀 새 판본을 만들어 버리므로 올리지 않는다.
+    const source = await edenWorks.readRaw(io.read, wid)
+    const edition = await edenWorks.readEditionRaw!(io.read, wid, language)
+    if (!isObj(edition) || edition.exists !== true) throw new Error('EDITION_MISSING')
+    const view = edenEditionView(source, edition)
+    const url = await edenUploadCover(io, wid, file, language)
+    ;(view.work as Obj).cover_image_url = url
+    await edenWorks.saveEdition!(io.write, wid, language, view)
+    return url
+  },
+
+  editionView: edenEditionView,
+  applyEditionChanges(view, changes) {
+    // 판본은 원문의 구조(시작 상황·캐릭터 개수)와 공개 상태를 따른다. 글만 바꿀 수 있다.
+    if (
+      changes.visibility !== undefined ||
+      changes.startScenariosAdd?.length ||
+      changes.startScenariosRemove?.length ||
+      changes.charactersAdd?.length ||
+      changes.charactersRemove?.length
+    )
+      throw new Error('EDITION_FIXED')
+    return edenWorks.applyChanges!(view, changes)
+  },
+  async saveEdition(write, id, language, view) {
+    if (!LANG_RE.test(language)) throw new Error('BAD_LANGUAGE')
+    const res = await write(
+      'PUT',
+      ORIGIN + '/api/works/' + workId(id) + '/translations/' + language,
+      edenEditionBody(view)
+    )
+    if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
+    const reply: unknown = await res.json().catch(() => null)
+    if (!res.ok || !isObj(reply) || !isObj(reply.item))
+      throw new Error(
+        'SAVE_FAILED ' + res.status + ' ' + text(isObj(reply) ? reply.error_code : '').slice(0, 40)
+      )
+  },
+
   async create(write, draft) {
     const res = await write('PUT', ORIGIN + '/api/works/new', edenCreateBody(draft))
     if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
@@ -405,6 +483,23 @@ export const edenWorks: WorkAdapter = {
 
 const VISIBILITIES = ['public', 'link', 'private']
 const WRITE_PATH = new RegExp('^/api/works/' + UUID + '$', 'i')
+const LANG = '[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?'
+// JSON으로 쓰는 요청 전부. 여기 없는 요청은 나가지 않는다.
+// 자동 번역(POST …/translations/{lang}, POST …/translation-drafts)은 일부러 넣지 않았다.
+const WRITE_ROUTES: [string, RegExp][] = [
+  // 통째 저장·삭제는 작품 주소로, 새 작품(임시저장)은 /api/works/new 로만 보낸다
+  ['PUT', WRITE_PATH],
+  ['DELETE', WRITE_PATH],
+  ['PUT', /^\/api\/works\/new$/],
+  // 표지: 올릴 자리 받기 → (저장소에 올림) → 작품 표지 또는 언어 판본 표지로 등록
+  ['POST', new RegExp('^/api/works/' + UUID + '/upload-cover/signed-url$', 'i')],
+  ['POST', new RegExp('^/api/works/' + UUID + '/upload-cover$', 'i')],
+  ['POST', new RegExp('^/api/works/' + UUID + '/translations/' + LANG + '/cover$', 'i')],
+  // 언어 판본 '번역 저장'
+  ['PUT', new RegExp('^/api/works/' + UUID + '/translations/' + LANG + '$', 'i')],
+  // 캐릭터 이미지 순서
+  ['PUT', new RegExp('^/api/works/' + UUID + '/characters/' + UUID + '/images/reorder$', 'i')]
+]
 
 /**
  * 새 작품 본문 (임시저장, 항상 비공개). 편집기의 새 작품 기본값과 같은 모양으로 채운다

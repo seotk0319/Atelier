@@ -40,7 +40,8 @@ import {
   type WorkRead
 } from './my-works'
 import type { InboxWork } from '../../../shared/inbox'
-import { workReadAllowed, workWriteAllowed } from '../../works/adapters'
+import { workReadAllowed, workSendRule, workWriteAllowed } from '../../works/adapters'
+import type { WorkRequest } from '../../works/types'
 import {
   checkContent,
   findEdenReplies,
@@ -135,6 +136,11 @@ export function createDirectCollector(options: {
    * 연결 안 됐으면 LOGIN_REQUIRED.
    */
   workWrite(platform: string, method: string, url: string, body: unknown): Promise<Response>
+  /**
+   * 작품 이미지·표지처럼 JSON이 아닌 본문(파일 묶음·바이너리)이나 파일 저장소로 가는 요청을 보낸다.
+   * 주소·본문 종류·헤더 이름이 그 플랫폼 연결부의 규칙과 맞을 때만 나가고, 규칙이 정한 로그인 정보만 붙는다.
+   */
+  workSend(platform: string, request: WorkRequest): Promise<Response>
   /** 에덴 댓글 번호 → 사이트에서 내가 그 뒤에 단 답글 (읽기만 한다). */
   edenReplies(commentIds: string[]): Promise<Record<string, FoundReply>>
   status(): Promise<{
@@ -876,6 +882,91 @@ export function createDirectCollector(options: {
         (await renewable(response.clone())) &&
         (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false))
       )
+        return call()
+      return response
+    },
+    async workSend(platform, request) {
+      // 허용 검사가 먼저다. 주소·본문 종류·헤더 이름 중 하나라도 규칙 밖이면 여기서 던진다.
+      const rule = workSendRule(platform, request)
+      const s = await ready()
+      const current = s.platforms[platform as DirectPlatformId]
+      if (!current) throw new ReplyError('LOGIN_REQUIRED')
+      const holder = { profile: current.profile }
+      const origin = new URL(request.url).origin
+      // 로그인 헤더는 규칙이 정한 만큼만 붙인다. 다른 회사 저장소(none)에는 아무것도 붙이지 않고,
+      // origin은 그 주소에 따로 저장된 헤더만 쓴다 (플랫폼 기본 헤더로 넘어가지 않는다).
+      const stored = (): Record<string, string> =>
+        rule.auth === 'session'
+          ? holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}
+          : rule.auth === 'origin'
+            ? holder.profile.headersByOrigin?.[origin] || {}
+            : {}
+      const body = (): BodyInit | undefined => {
+        if (request.json !== undefined) return JSON.stringify(request.json)
+        if (request.form) {
+          const data = new FormData()
+          for (const field of request.form)
+            if ('file' in field)
+              data.append(
+                field.name,
+                new Blob([Buffer.from(field.file.data)], { type: field.file.type }),
+                field.file.name
+              )
+            else data.append(field.name, field.value)
+          return data
+        }
+        if (request.bytes)
+          return new Blob([Buffer.from(request.bytes.data)], { type: request.bytes.contentType })
+        return undefined
+      }
+      // 사이트가 로그인 토큰을 쿠키에 적어 두고 그 쿠키로 확인하는 주소용. 알림 연장으로 토큰이
+      // 새로 바뀌어도 쿠키는 옛 값이라, 사이트 코드가 하는 것처럼 지금 토큰을 쿠키에 맞춰 적는다.
+      const syncCookie = async (): Promise<void> => {
+        const cookie = rule.cookieFromBearer
+        if (!cookie) return
+        const main = allowed[platform as DirectPlatformId]?.origin
+        const bearer = String(
+          (main && holder.profile.headersByOrigin?.[main]?.authorization) ||
+            holder.profile.headers?.authorization ||
+            ''
+        ).replace(/^Bearer\s+/i, '')
+        if (!bearer || /\s/.test(bearer)) return
+        await ses.cookies
+          .set({
+            url: 'https://' + cookie.domain + '/',
+            name: cookie.name,
+            value: bearer,
+            domain: '.' + cookie.domain,
+            path: '/',
+            secure: true,
+            sameSite: 'lax',
+            expirationDate: Math.floor(Date.now() / 1000) + 30 * 86_400
+          })
+          .catch(() => undefined)
+      }
+      const call = async (): Promise<Response> => {
+        await syncCookie()
+        return ses.fetch(request.url, {
+          method: request.method,
+          headers: {
+            ...stored(),
+            ...(request.json !== undefined ? { 'content-type': 'application/json' } : {}),
+            ...request.headers
+          },
+          body: body(),
+          credentials: rule.auth === 'session' || rule.auth === 'cookie' ? 'include' : 'omit',
+          redirect: 'error',
+          signal: AbortSignal.timeout(60_000)
+        })
+      }
+      const response = await call()
+      // 로그인 만료로 거절된 요청은 반영되지 않았으므로 로그인을 이어 붙인 뒤 한 번만 다시 보낸다.
+      // 저장소(origin·none)는 플랫폼 로그인과 상관없어 다시 보내지 않는다.
+      const expired =
+        rule.auth === 'session'
+          ? !response.ok && (await renewable(response.clone()))
+          : rule.auth === 'cookie' && (response.status === 401 || response.status === 403)
+      if (expired && (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false)))
         return call()
       return response
     },

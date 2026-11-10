@@ -4,10 +4,17 @@
 //  - 저장 직전 원본을 스냅샷으로 남기고, 저장 뒤 다시 읽어 뜻대로 들어갔는지 견준다.
 import { randomBytes } from 'node:crypto'
 import { workAdapter } from './adapters'
+import { loadImage } from './media-tools'
 import type { ToolDef, WorkToolDeps } from './tools'
-import { textLength, type LoreEntry, type WorkBody, type WorkChanges } from './types'
+import {
+  textLength,
+  type LoreEntry,
+  type WorkBody,
+  type WorkChanges,
+  type WorkDraft
+} from './types'
 
-const PLAN_TTL = 30 * 60_000
+export const PLAN_TTL = 30 * 60_000
 const FILE_MAX = 1_000_000
 
 type Obj = Record<string, unknown>
@@ -299,6 +306,102 @@ const withIndex = (properties: Obj): Obj => ({
 })
 const text = { type: 'string' }
 
+/** work_plan·edition_plan이 같이 쓰는 "바꿀 내용" 입력 모양 */
+export const CHANGE_PROPERTIES = {
+  visibility: {
+    type: 'string',
+    description:
+      '공개 상태 바꾸기. 플랫폼마다 받는 값이 다르다 (sites_list의 visibilities). ' +
+      '공개로 바꾸면 독자에게 바로 보이므로 사용자가 분명히 요청했을 때만 쓴다.'
+  },
+  fields: {
+    type: 'object',
+    description: '통째로 바꿀 글 칸. title / subtitle / description / main / creator_comment',
+    additionalProperties: text
+  },
+  field_files: {
+    type: 'object',
+    description: '글 칸 이름 → 그 칸에 넣을 로컬 파일 경로 (.md / .txt, UTF-8)',
+    additionalProperties: text
+  },
+  lorebook: {
+    type: 'array',
+    items: lorebookItem,
+    description: '로어북 전체를 이 목록으로 바꾼다'
+  },
+  lorebook_file: {
+    type: 'string',
+    description: '로어북 전체가 담긴 로컬 JSON 파일 경로 (lorebook과 같은 모양의 배열)'
+  },
+  lorebook_patch: {
+    type: 'array',
+    items: withIndex(lorebookItem.properties),
+    description: '로어북 일부 항목만 고친다'
+  },
+  lorebook_remove: {
+    type: 'array',
+    items: { type: 'integer' },
+    description: '지울 로어북 항목 번호들 (work_read의 index, 고치기 전 번호)'
+  },
+  lorebook_add: {
+    type: 'array',
+    items: lorebookItem,
+    description: '로어북 끝에 더할 새 항목들 (title·keys·content)'
+  },
+  start_scenarios: {
+    type: 'array',
+    items: withIndex({
+      title: text,
+      content: text,
+      sub_prompt: text,
+      dialogue: text,
+      situation: text,
+      description: text
+    }),
+    description: '시작 상황 일부만 고친다'
+  },
+  characters: {
+    type: 'array',
+    items: withIndex({ name: text, details: text, info: text }),
+    description: '캐릭터 일부만 고친다'
+  },
+  start_scenarios_remove: {
+    type: 'array',
+    items: { type: 'integer' },
+    description: '지울 시작 상황 번호들 (고치기 전 번호. 기본 시작 상황은 지울 수 없다)'
+  },
+  start_scenarios_add: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        title: text,
+        content: text,
+        sub_prompt: text,
+        dialogue: text,
+        situation: text,
+        description: text
+      }
+    },
+    description: '끝에 더할 새 시작 상황들'
+  },
+  characters_remove: {
+    type: 'array',
+    items: { type: 'integer' },
+    description:
+      '지울 캐릭터 번호들 (고치기 전 번호. 주연은 지울 수 없다). 그 캐릭터의 이미지도 함께 사라진다'
+  },
+  characters_add: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: { name: text, details: text, info: text },
+      required: ['name']
+    },
+    description: '끝에 더할 새 캐릭터들 (이미지는 따로 올린다)'
+  }
+}
+
 export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => void): ToolDef[] {
   const plans = new Map<string, Plan>()
   const deletions = new Map<
@@ -317,103 +420,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         '로컬 파일 경로(.md / .txt)를 주면 그 파일 내용을 쓴다.',
       inputSchema: {
         type: 'object',
-        properties: {
-          site,
-          work_id: workId,
-          visibility: {
-            type: 'string',
-            description:
-              '공개 상태 바꾸기. 플랫폼마다 받는 값이 다르다 (sites_list의 visibilities). ' +
-              '공개로 바꾸면 독자에게 바로 보이므로 사용자가 분명히 요청했을 때만 쓴다.'
-          },
-          fields: {
-            type: 'object',
-            description:
-              '통째로 바꿀 글 칸. title / subtitle / description / main / creator_comment',
-            additionalProperties: text
-          },
-          field_files: {
-            type: 'object',
-            description: '글 칸 이름 → 그 칸에 넣을 로컬 파일 경로 (.md / .txt, UTF-8)',
-            additionalProperties: text
-          },
-          lorebook: {
-            type: 'array',
-            items: lorebookItem,
-            description: '로어북 전체를 이 목록으로 바꾼다'
-          },
-          lorebook_file: {
-            type: 'string',
-            description: '로어북 전체가 담긴 로컬 JSON 파일 경로 (lorebook과 같은 모양의 배열)'
-          },
-          lorebook_patch: {
-            type: 'array',
-            items: withIndex(lorebookItem.properties),
-            description: '로어북 일부 항목만 고친다'
-          },
-          lorebook_remove: {
-            type: 'array',
-            items: { type: 'integer' },
-            description: '지울 로어북 항목 번호들 (work_read의 index, 고치기 전 번호)'
-          },
-          lorebook_add: {
-            type: 'array',
-            items: lorebookItem,
-            description: '로어북 끝에 더할 새 항목들 (title·keys·content)'
-          },
-          start_scenarios: {
-            type: 'array',
-            items: withIndex({
-              title: text,
-              content: text,
-              sub_prompt: text,
-              dialogue: text,
-              situation: text,
-              description: text
-            }),
-            description: '시작 상황 일부만 고친다'
-          },
-          characters: {
-            type: 'array',
-            items: withIndex({ name: text, details: text, info: text }),
-            description: '캐릭터 일부만 고친다'
-          },
-          start_scenarios_remove: {
-            type: 'array',
-            items: { type: 'integer' },
-            description: '지울 시작 상황 번호들 (고치기 전 번호. 기본 시작 상황은 지울 수 없다)'
-          },
-          start_scenarios_add: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                title: text,
-                content: text,
-                sub_prompt: text,
-                dialogue: text,
-                situation: text,
-                description: text
-              }
-            },
-            description: '끝에 더할 새 시작 상황들'
-          },
-          characters_remove: {
-            type: 'array',
-            items: { type: 'integer' },
-            description:
-              '지울 캐릭터 번호들 (고치기 전 번호. 주연은 지울 수 없다). 그 캐릭터의 이미지도 함께 사라진다'
-          },
-          characters_add: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { name: text, details: text, info: text },
-              required: ['name']
-            },
-            description: '끝에 더할 새 캐릭터들 (이미지는 따로 올린다)'
-          }
-        },
+        properties: { site, work_id: workId, ...CHANGE_PROPERTIES },
         required: ['site', 'work_id']
       },
       async run(args) {
@@ -578,19 +585,31 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         forget(adapter.id + ':' + plan.workId)
         await adapter.remove(deps.writer(adapter.id), plan.workId)
         // 지워졌으면 다시 읽을 수 없어야 한다
-        const gone = await adapter.readRaw(read, plan.workId).then(
+        let gone = await adapter.readRaw(read, plan.workId).then(
           () => false,
           (error: unknown) => error instanceof Error && /WORK_NOT_FOUND/.test(error.message)
         )
+        // 지운 작품을 번호로 읽으면 "없음" 말고 다른 답을 주는 플랫폼이 있다(베이비챗).
+        // 그럴 때는 내 작품 목록에서 사라졌는지로 확인한다.
+        if (!gone)
+          gone = await adapter.list(read).then(
+            (works) => !works.some((w) => w.id.toLowerCase() === plan.workId),
+            () => false
+          )
         return { deleted: true, verified: gone, id: plan.workId, title: plan.title, backup }
       }
     },
     {
       name: 'work_create',
       description:
-        '새 작품을 만든다. 만들어지는 작품은 항상 비공개(임시저장)이고, 공개하려면 만든 뒤 work_plan의 ' +
-        'visibility로 바꾼다. 표지와 이미지는 만든 뒤 따로 올린다. 긴 본문은 main 대신 main_file에 ' +
-        '로컬 파일 경로(.md / .txt)를 준다. characters의 첫 번째가 주연이다.',
+        '새 작품을 만든다. 만들어지는 작품은 항상 비공개이고, 공개하려면 만든 뒤 work_plan의 ' +
+        'visibility로 바꾼다. 긴 본문은 main 대신 main_file에 로컬 파일 경로(.md / .txt)를 준다. ' +
+        '에덴: characters가 필요하고(첫 번째가 주연) 표지·이미지는 만든 뒤 cover_plan / images_plan으로 올린다. ' +
+        '베이비챗: 대표 이미지가 있어야 만들 수 있어 cover_file이 필수다(이 도구가 먼저 올린다). characters는 주지 않고, ' +
+        'description·hashtags(1~10개)·start_scenarios(첫 번째의 title·content·dialogue 필수)와 ' +
+        'options {category: 숫자, target_gender: male|female|all, recommended_model: 글}이 필요하다. ' +
+        'category·recommended_model 값은 같은 계정의 기존 작품 스냅샷(work_read의 snapshot 파일 edit.category / ' +
+        'edit.recommendedModel)에서 가져온다.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -603,6 +622,16 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
           description: text,
           categories: { type: 'array', items: text },
           hashtags: { type: 'array', items: text },
+          cover_file: {
+            type: 'string',
+            description:
+              '대표 이미지 로컬 파일 경로 (베이비챗 필수. webp / png / jpg / gif, 5MB 이하)'
+          },
+          options: {
+            type: 'object',
+            description:
+              '플랫폼별 값. 베이비챗: category(숫자) · target_gender · recommended_model · system_prompt(선택)'
+          },
           characters: {
             type: 'array',
             items: {
@@ -629,7 +658,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
             description: '시작 상황들. 첫 번째가 기본'
           }
         },
-        required: ['site', 'title', 'adult', 'characters']
+        required: ['site', 'title', 'adult']
       },
       async run(args) {
         const adapter = workAdapter(str(args.site))
@@ -641,19 +670,18 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
             ? await readText(str(args.main_file), deps, /\.(md|txt)$/i)
             : str(args.main)
         // 바꾸기 도구와 같은 읽기 규칙으로 로어북·시작 상황·캐릭터를 받는다
-        const parts = await parseChanges(
-          {
-            ...(args.lorebook !== undefined ? { lorebook_add: args.lorebook } : {}),
-            ...(args.start_scenarios !== undefined
-              ? { start_scenarios_add: args.start_scenarios }
-              : {}),
-            characters_add: args.characters
-          },
-          deps
-        )
+        const given = {
+          ...(args.lorebook !== undefined ? { lorebook_add: args.lorebook } : {}),
+          ...(args.start_scenarios !== undefined
+            ? { start_scenarios_add: args.start_scenarios }
+            : {}),
+          ...(args.characters !== undefined ? { characters_add: args.characters } : {})
+        }
+        const parts = Object.keys(given).length ? await parseChanges(given, deps) : {}
+        if (args.options !== undefined && !isObj(args.options)) throw new Error('BAD_CHANGES')
         const strings = (v: unknown): string[] | undefined =>
           Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : undefined
-        const id = await adapter.create(deps.writer(adapter.id), {
+        const draft: WorkDraft = {
           title: str(args.title),
           main,
           adult: args.adult,
@@ -663,8 +691,29 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
           hashtags: strings(args.hashtags),
           characters: parts.charactersAdd ?? [],
           lorebook: parts.lorebookAdd,
-          startScenarios: parts.startScenariosAdd
-        })
+          startScenarios: parts.startScenariosAdd,
+          ...(isObj(args.options) ? { options: args.options } : {})
+        }
+        adapter.checkDraft?.(draft)
+        // 대표 이미지는 만들기 전에 올려 주소를 받아 둔다 (올리기만으로는 작품이 생기지 않는다)
+        let coverUrl: string | undefined
+        if (args.cover_file !== undefined) {
+          if (!adapter.uploadImage || !adapter.imageRules) throw new Error('NO_IMAGES')
+          const file = await loadImage(args.cover_file, deps, adapter.imageRules)
+          coverUrl = await adapter.uploadImage(
+            {
+              read: deps.reader(adapter.id),
+              write: deps.writer(adapter.id),
+              send: deps.sender(adapter.id)
+            },
+            file
+          )
+        }
+        const id = await adapter.create(
+          deps.writer(adapter.id),
+          { ...draft, ...(coverUrl ? { coverUrl } : {}) },
+          deps.reader(adapter.id)
+        )
         const raw = await adapter.readRaw(deps.reader(adapter.id), id)
         const body = adapter.normalize(raw)
         const snapshot = await deps.snapshot(adapter.id, id, raw)

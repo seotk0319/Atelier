@@ -1,8 +1,11 @@
 // MCP로 내놓는 작품 도구. 여기는 화면·Electron을 모르고, 읽기 통로와 스냅샷 저장만 받아서 쓴다.
-// 읽기 도구는 여기, 계획·저장 도구는 save-tools.ts에 있다.
+// 읽기 도구는 여기, 계획·저장 도구는 save-tools.ts, 언어 판본 저장은 edition-tools.ts,
+// 이미지·표지는 media-tools.ts에 있다.
 import { WORK_ADAPTERS, workAdapter } from './adapters'
+import { createEditionTools } from './edition-tools'
+import { createMediaTools } from './media-tools'
 import { createSaveTools } from './save-tools'
-import { textLength, type WorkBody, type WorkFetch, type WorkWrite } from './types'
+import { textLength, type WorkBody, type WorkFetch, type WorkSend, type WorkWrite } from './types'
 
 export interface WorkToolDeps {
   /** 그 플랫폼의 로그인 통로 */
@@ -13,6 +16,12 @@ export interface WorkToolDeps {
   writer(platform: string): WorkWrite
   /** 로컬 글 파일 읽기 (UTF-8). work_plan의 field_files·lorebook_file이 쓴다 */
   readFile(path: string): Promise<string>
+  /** 그 플랫폼의 파일 통로 (이미지·표지: 파일 묶음·바이너리·파일 저장소) */
+  sender(platform: string): WorkSend
+  /** 로컬 파일을 바이트로 읽는다. maxBytes보다 크면 읽지 않고 던진다 */
+  readBinary(path: string, maxBytes: number): Promise<Uint8Array>
+  /** 폴더 바로 아래 파일 이름들 (하위 폴더는 보지 않는다) */
+  listFolder(path: string): Promise<string[]>
 }
 
 export interface ToolDef {
@@ -45,6 +54,35 @@ const MESSAGES: [RegExp, string][] = [
   [/NO_SAVE/, '이 플랫폼은 아직 저장을 지원하지 않아요.'],
   [/NO_DELETE/, '이 플랫폼은 아직 작품 삭제를 지원하지 않아요.'],
   [/NO_CREATE/, '이 플랫폼은 아직 새 작품 만들기를 지원하지 않아요.'],
+  [/NO_IMAGES/, '이 플랫폼은 아직 이미지 올리기를 지원하지 않아요.'],
+  [/NO_COVER/, '이 플랫폼은 아직 표지 올리기를 지원하지 않아요.'],
+  [/NO_EDITION_SAVE/, '이 플랫폼은 언어 판본 저장을 지원하지 않아요.'],
+  [/BAD_IMAGE_LABEL/, '이미지 코드(감정 이름)가 비었거나 이미 쓰이고 있어요. 다른 이름을 주세요.'],
+  [
+    /BAD_IMAGE/,
+    '이미지 파일을 읽지 못했어요. 확장자·크기 한도(images_list의 rules, 표지는 webp·gif)와 경로를 확인해 주세요.'
+  ],
+  [/IMAGE_TOO_LARGE/, '플랫폼이 파일이 너무 크다고 거절했어요.'],
+  [/IMAGE_(UPLOAD|DELETE|ORDER)_FAILED/, '플랫폼이 이미지 요청을 받아 주지 않았어요.'],
+  [/COVER_FAILED/, '표지 올리기가 중간에 실패했어요. 표지는 바뀌지 않았을 가능성이 높아요.'],
+  [
+    /COVER_AMBIGUOUS/,
+    '같은 자리에 맞는 표지 파일이 둘 이상이에요. files로 자리와 파일을 직접 짝지어 주세요.'
+  ],
+  [/COVER_REQUIRED/, '이 플랫폼은 대표 이미지가 있어야 만들 수 있어요. cover_file을 주세요.'],
+  [
+    /EDITION_MISSING/,
+    '그 언어 판본이 아직 없어요. edition_plan → edition_save로 판본을 먼저 만들어 주세요.'
+  ],
+  [
+    /EDITION_FIXED/,
+    '판본에서는 글만 바꿀 수 있어요. 시작 상황·캐릭터 추가/삭제와 공개 상태는 원문에서 바꿔 주세요.'
+  ],
+  [/BAD_DRAFT/, '새 작품 내용이 플랫폼 규격에 맞지 않아요.'],
+  [
+    /CREATED_ID_UNKNOWN/,
+    '작품은 만들어졌을 수 있는데 번호를 찾지 못했어요. works_list로 확인해 주세요.'
+  ],
   [
     /BAD_VISIBILITY/,
     '그 플랫폼이 받지 않는 공개 상태예요. sites_list의 visibilities를 확인해 주세요.'
@@ -55,6 +93,10 @@ const MESSAGES: [RegExp, string][] = [
   ],
   [/DELETE_FAILED/, '플랫폼이 삭제를 받아 주지 않았어요. 작품은 그대로 있을 가능성이 높아요.'],
   [/CREATE_FAILED/, '플랫폼이 새 작품을 받아 주지 않았어요.'],
+  [
+    /KEEP_MAIN_IMAGE/,
+    '대표 이미지는 그냥 지울 수 없어요. 새 대표 이미지를 같이 올리거나(에덴: add의 default, 베이비챗: main_file) 전부 지울 때만 돼요.'
+  ],
   [/KEEP_DEFAULT/, '기본 시작 상황과 주연 캐릭터는 지울 수 없어요. 하나는 꼭 남아야 해요.'],
   [/START_LIMIT/, '이 플랫폼은 추가 시작 설정을 2개까지만 받아요.'],
   [/NO_CHARACTERS/, '이 플랫폼은 작품 하나에 캐릭터가 하나라 캐릭터를 더하거나 지울 수 없어요.'],
@@ -71,11 +113,11 @@ const MESSAGES: [RegExp, string][] = [
   [/BAD_FILE/, '파일을 읽지 못했어요. 글 칸은 .md / .txt, 로어북은 .json이고 1MB 이하여야 해요.'],
   [
     /PLAN_NOT_FOUND/,
-    '그 계획을 찾지 못했어요(30분이 지났거나 이미 썼어요). work_plan부터 다시 해 주세요.'
+    '그 계획을 찾지 못했어요(30분이 지났거나 이미 썼어요). 계획 도구(…_plan)부터 다시 해 주세요.'
   ],
   [
     /PLAN_STALE/,
-    '계획을 세운 뒤 플랫폼 내용이 바뀌어서 저장하지 않았어요. work_plan부터 다시 해 주세요.'
+    '계획을 세운 뒤 플랫폼 내용이나 로컬 파일이 바뀌어서 진행하지 않았어요. 계획 도구(…_plan)부터 다시 해 주세요.'
   ],
   [/SAVE_FAILED/, '플랫폼이 저장을 받아 주지 않았어요. 내용은 바뀌지 않았을 가능성이 높아요.']
 ]
@@ -84,7 +126,9 @@ export function toolMessage(error: unknown): string {
   for (const [re, message] of MESSAGES)
     if (re.test(code))
       // 플랫폼이 거절한 경우는 받은 상태 코드도 같이 알려 준다
-      return /_FAILED /.test(code) ? message + ' (' + code.slice(0, 90) + ')' : message
+      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS /.test(code)
+        ? message + ' (' + code.slice(0, 90) + ')'
+        : message
   return '요청을 처리하지 못했어요. (' + code.slice(0, 80) + ')'
 }
 
@@ -147,7 +191,9 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
   return [
     ...readTools(),
     // 저장하면 들고 있던 본문이 낡으므로 버린다
-    ...createSaveTools(deps, (key) => cache.delete(key))
+    ...createSaveTools(deps, (key) => cache.delete(key)),
+    ...createEditionTools(deps),
+    ...createMediaTools(deps, (key) => cache.delete(key))
   ]
 
   function readTools(): ToolDef[] {
@@ -164,7 +210,10 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
               capabilities: a.capabilities,
               visibilities: a.visibilities ?? [],
               can_delete: !!a.remove,
-              can_create: !!a.create
+              can_create: !!a.create,
+              can_images: !!a.applyImages,
+              can_cover: !!a.uploadCover,
+              can_edition_save: !!a.saveEdition
             }))
           }
         }

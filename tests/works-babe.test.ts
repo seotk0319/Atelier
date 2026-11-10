@@ -138,7 +138,10 @@ describe('베이비챗 작품', () => {
     expect(workWriteAllowed('babe', 'PUT', API + W + '/edit/preview')).toBe(false)
     expect(workWriteAllowed('babe', 'DELETE', API + W)).toBe(true)
     expect(workWriteAllowed('babe', 'PUT', API + 'edit/draft')).toBe(false)
-    expect(workWriteAllowed('babe', 'POST', API + 'create')).toBe(false)
+    // 새 작품 만들기는 그 주소 하나만 열려 있다
+    expect(workWriteAllowed('babe', 'POST', API + 'create')).toBe(true)
+    expect(workWriteAllowed('babe', 'POST', API + 'create/draft')).toBe(false)
+    expect(workWriteAllowed('babe', 'PUT', API + 'create')).toBe(false)
     expect(workAdapter('바베').id).toBe('babe')
   })
 

@@ -1,10 +1,10 @@
 // MCP 창구를 앱에 붙이는 곳. Custom 1(알림·로그인 연결이 있는 프로필)에서만 켠다.
 // 설정 mcp_enabled 가 '0'이면 열지 않고, mcp_port 로 포트를 바꿀 수 있다.
 import { app } from 'electron'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getSetting } from '../db/settings'
-import { workRead, workWrite } from '../notifications/service'
+import { workRead, workSend, workWrite } from '../notifications/service'
 import { createWorkTools } from '../works/tools'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
 
@@ -27,7 +27,18 @@ export async function startMcp(): Promise<void> {
       tools: createWorkTools({
         reader: (platform) => (url) => workRead(platform, url),
         writer: (platform) => (method, url, body) => workWrite(platform, method, url, body),
+        sender: (platform) => (request) => workSend(platform, request),
         readFile: (path) => readFile(path, 'utf8'),
+        // 이미지 파일은 크기를 먼저 보고, 한도 안일 때만 읽는다
+        async readBinary(path, maxBytes) {
+          const info = await stat(path)
+          if (!info.isFile() || info.size > maxBytes) throw new Error('BAD_FILE')
+          return readFile(path)
+        },
+        async listFolder(path) {
+          const entries = await readdir(path, { withFileTypes: true })
+          return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+        },
         async snapshot(platform, name, raw) {
           const safe = name.replace(/[^A-Za-z0-9_.-]/g, '_')
           const dir = join(root, 'snapshots', platform, safe)

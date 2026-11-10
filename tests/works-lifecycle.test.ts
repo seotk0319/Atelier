@@ -246,7 +246,8 @@ describe('새 작품 만들기', () => {
     await expect(run('work_create', { ...DRAFT, main_file: 'D:/x.md' })).rejects.toThrow(
       'BAD_CHANGES'
     )
-    await expect(run('work_create', { ...DRAFT, site: 'babe' })).rejects.toThrow('NO_CREATE')
+    // 베이비챗은 캐릭터를 따로 받지 않는다 (작품이 곧 캐릭터 하나)
+    await expect(run('work_create', { ...DRAFT, site: 'babe' })).rejects.toThrow('NO_CHARACTERS')
     expect(s.calls).toEqual(['PUT /api/works/new'])
     expect(toolMessage(new Error('CREATE_FAILED 400 bad'))).toContain('400')
   })

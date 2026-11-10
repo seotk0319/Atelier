@@ -95,8 +95,125 @@ export interface WorkAdapter {
   visibilities?: string[]
   /** 작품을 통째로 지운다. 되돌릴 수 없다. */
   remove?(write: WorkWrite, workId: string): Promise<void>
-  /** 비공개 새 작품을 만들고 작품 번호를 돌려준다 */
-  create?(write: WorkWrite, draft: WorkDraft): Promise<string>
+  /** 비공개 새 작품을 만들고 작품 번호를 돌려준다 (read는 만든 작품 번호를 목록에서 찾을 때만 쓴다) */
+  create?(write: WorkWrite, draft: WorkDraft, read?: WorkFetch): Promise<string>
+  /** 새 작품 내용이 플랫폼 규격에 맞는지 미리 본다 (대표 이미지 주소는 아직 없어도 된다) */
+  checkDraft?(draft: WorkDraft): void
+
+  // ── 이미지·표지 (JSON이 아닌 요청은 send 통로로만 나간다) ──
+  /** JSON이 아니거나 다른 주소로 가는 요청이 허용된 것인지, 어떤 로그인 정보를 붙일지 */
+  sendRule?(method: string, url: string): SendRule | null
+  /** 이미지 파일로 받는 확장자와 크기 한도 */
+  imageRules?: FileRules
+  /** 작품 원본에서 이미지 목록을 뽑는다 (캐릭터가 없는 플랫폼은 묶음 하나) */
+  imageGroups?(raw: unknown): ImageGroup[]
+  /** 이미지 바꾸기가 되는지 미리 본다. 안 되는 조합이면 던지고, 되면 일어날 일을 돌려준다 */
+  planImages?(raw: unknown, changes: ImageChanges): ImagePlanLine[]
+  /** 이미지 바꾸기를 플랫폼에 적용한다 (올리기 → 지우기 → 순서) */
+  applyImages?(io: WorkIo, workId: string, raw: unknown, changes: ImageChanges): Promise<void>
+  /** 이미지 하나를 올리고 주소만 돌려준다 (대표 이미지가 있어야 만들 수 있는 플랫폼용) */
+  uploadImage?(io: WorkIo, file: LocalImage): Promise<string>
+  /** 표지 파일로 받는 확장자와 크기 한도 */
+  coverRules?: FileRules
+  /** 작품 원본에 적힌 표지 주소 */
+  coverUrl?(raw: unknown): string | null
+  /** 표지를 올리고 그 주소를 돌려준다. language를 주면 그 언어 판본의 표지다 */
+  uploadCover?(io: WorkIo, workId: string, file: LocalImage, language?: string): Promise<string>
+
+  // ── 언어 판본 저장 ──
+  /** 원문과 판본을 편집기처럼 겹친 원본. 판본에 없는 칸은 원문 값이 들어간다 */
+  editionView?(source: unknown, edition: unknown): unknown
+  /** 겹친 원본에 바꿀 내용을 얹는다. 판본에서 못 바꾸는 것(구조·공개 상태)은 던진다 */
+  applyEditionChanges?(view: unknown, changes: WorkChanges): unknown
+  /** 겹친 원본을 그 언어 판본으로 저장한다 (자동 번역은 부르지 않는다) */
+  saveEdition?(write: WorkWrite, workId: string, language: string, view: unknown): Promise<void>
+}
+
+/** 로컬에서 읽은 이미지 파일 하나 */
+export interface LocalImage {
+  /** 파일 이름 (경로 없이) */
+  name: string
+  /** image/webp 같은 종류 */
+  type: string
+  data: Uint8Array
+}
+export interface FileRules {
+  extensions: string[]
+  maxBytes: number
+}
+
+export type FormField = { name: string; value: string } | { name: string; file: LocalImage }
+/** 허용 목록을 통과해야 나가는 요청 하나. JSON 말고 파일 묶음(multipart)·바이너리도 보낸다 */
+export interface WorkRequest {
+  method: 'POST' | 'PUT' | 'DELETE'
+  url: string
+  json?: unknown
+  form?: FormField[]
+  bytes?: { data: Uint8Array; contentType: string }
+  /** 덧붙일 헤더. 그 주소의 규칙(SendRule.headers)이 허용한 이름만 쓸 수 있다 */
+  headers?: Record<string, string>
+}
+export type WorkSend = (request: WorkRequest) => Promise<Response>
+
+/** send 통로로 나가는 주소 하나의 규칙 */
+export interface SendRule {
+  /**
+   * session: 플랫폼 로그인 헤더와 쿠키 / origin: 그 주소에 따로 저장된 헤더만 /
+   * cookie: 쿠키만 / none: 로그인 정보를 붙이지 않는다 (다른 회사 저장소)
+   */
+  auth: 'session' | 'origin' | 'cookie' | 'none'
+  body: 'json' | 'form' | 'bytes' | 'none'
+  /** 요청이 직접 붙여도 되는 헤더 이름 (소문자) */
+  headers?: string[]
+  /** 보내기 전에 로그인 토큰을 이 쿠키로 맞춰 둔다 (사이트가 토큰을 쿠키에 적는 플랫폼) */
+  cookieFromBearer?: { name: string; domain: string }
+}
+
+/** 읽기·JSON 쓰기·파일 보내기 통로 묶음 */
+export interface WorkIo {
+  read: WorkFetch
+  write: WorkWrite
+  send: WorkSend
+}
+
+export interface WorkImage {
+  /** 플랫폼이 붙인 이미지 번호 (없는 플랫폼은 null) */
+  id: string | null
+  url: string
+  /** 이미지 코드(에덴) 또는 감정 이름(베이비챗) */
+  label: string
+  description: string
+  visibility: string | null
+  /** 대표 이미지 여부 */
+  isDefault: boolean
+}
+export interface ImageGroup {
+  /** 캐릭터 번호 (캐릭터가 없는 플랫폼은 null) */
+  character: number | null
+  name: string
+  images: WorkImage[]
+}
+export interface ImageAdd {
+  file: LocalImage
+  label?: string
+  description?: string
+  visibility?: string
+  /** 올리면서 대표 이미지로 삼는다 */
+  isDefault?: boolean
+}
+/** 이미지 바꾸기. 번호는 images_list의 index (바꾸기 전 기준) */
+export interface ImageChanges {
+  character?: number
+  add?: ImageAdd[]
+  remove?: number[]
+  /** 대표 이미지를 이 파일로 바꾼다 (이미지가 저장 본문에 들어가는 플랫폼) */
+  main?: LocalImage
+  /** 지우고 남은 이미지의 새 순서 */
+  order?: number[]
+}
+export interface ImagePlanLine {
+  action: 'add' | 'remove' | 'main' | 'order'
+  detail: string
 }
 
 /** 로그인한 계정으로 쓰는 통로. 허용 요청 검사는 통로를 만드는 쪽(collector)이 한다. */
@@ -117,11 +234,15 @@ export interface WorkDraft {
   description?: string
   categories?: string[]
   hashtags?: string[]
-  /** 첫 번째가 주연이다 */
+  /** 첫 번째가 주연이다 (캐릭터가 따로 없는 플랫폼은 비워 둔다) */
   characters: { name: string; details?: string; info?: string }[]
   lorebook?: LoreEntry[]
   /** 첫 번째가 기본 시작 상황이다 */
   startScenarios?: StartScenarioDraft[]
+  /** 이미 올려 둔 대표 이미지 주소 (대표 이미지가 있어야 만들 수 있는 플랫폼) */
+  coverUrl?: string
+  /** 플랫폼마다 따로 필요한 값 (베이비챗: category·target_gender·recommended_model 등) */
+  options?: Record<string, unknown>
 }
 
 export type StartScenarioDraft = Partial<
