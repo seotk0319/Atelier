@@ -40,6 +40,7 @@ import {
   type WorkRead
 } from './my-works'
 import type { InboxWork } from '../../../shared/inbox'
+import { workReadAllowed } from '../../works/adapters'
 import {
   checkContent,
   findEdenReplies,
@@ -124,6 +125,11 @@ export function createDirectCollector(options: {
   myWorks(platform: string): Promise<InboxWork[]>
   /** 내 작품 목록을 읽을 수 있는 연결된 플랫폼 */
   myWorkPlatforms(): Promise<string[]>
+  /**
+   * 그 플랫폼 작품 본문을 로그인 계정으로 읽는다 (GET만, 작품 읽기로 허용된 주소만).
+   * 연결 안 됐으면 LOGIN_REQUIRED.
+   */
+  workRead(platform: string, url: string): Promise<Response>
   /** 에덴 댓글 번호 → 사이트에서 내가 그 뒤에 단 답글 (읽기만 한다). */
   edenReplies(commentIds: string[]): Promise<Record<string, FoundReply>>
   status(): Promise<{
@@ -813,6 +819,29 @@ export function createDirectCollector(options: {
         }
       }
       return readMyWorks(platform, read, { teapotUid, rplayOid })
+    },
+    async workRead(platform, url) {
+      if (!workReadAllowed(platform, url)) throw new Error('UNAPPROVED_READ_ROUTE')
+      const s = await ready()
+      const current = s.platforms[platform as DirectPlatformId]
+      if (!current) throw new ReplyError('LOGIN_REQUIRED')
+      const holder = { profile: current.profile }
+      const origin = new URL(url).origin
+      const call = (): Promise<Response> =>
+        ses.fetch(url, {
+          headers: holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {},
+          credentials: 'include',
+          redirect: 'error',
+          signal: AbortSignal.timeout(20_000)
+        })
+      const response = await call()
+      if (
+        !response.ok &&
+        (await renewable(response.clone())) &&
+        (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false))
+      )
+        return call()
+      return response
     },
     async myWorkPlatforms() {
       const s = await ready()

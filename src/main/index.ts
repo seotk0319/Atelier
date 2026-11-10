@@ -35,6 +35,7 @@ import {
 import { GenerationQueue } from './queue/generation-queue'
 import { getPresetName, getScene } from './scenes/repo'
 import { startInbox, closeInbox } from './notifications/service'
+import { startMcp, stopMcp } from './mcp/service'
 import { startAiReplies, stopAiReplies } from './ai-reply/service'
 import { initGpt } from './gpt/service'
 
@@ -378,6 +379,7 @@ app.whenReady().then(() => {
   if (PROFILE === 1) {
     void startInbox()
     startAiReplies()
+    void startMcp()
   }
 
   app.on('browser-window-created', (_, window) => {
@@ -404,6 +406,7 @@ app.on('before-quit', (event) => {
   if (PROFILE !== 1 || inboxClosed) return
   event.preventDefault()
   stopAiReplies()
+  void stopMcp()
   // Let authenticated ingestion finish its atomic write before exiting.
   void closeInbox().finally(() => {
     inboxClosed = true

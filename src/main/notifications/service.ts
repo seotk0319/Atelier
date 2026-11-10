@@ -126,6 +126,13 @@ export async function getInboxWorks(refresh = false): Promise<InboxWorksResult> 
     supported
   }
 }
+/** 작품 본문 읽기 통로 (src/main/works). 허용 주소 검사와 로그인 연장은 collector가 한다. */
+export async function workRead(platform: string, url: string): Promise<Response> {
+  await startInbox().catch(() => undefined)
+  if (!direct) throw new ReplyError('LOGIN_REQUIRED')
+  return direct.workRead(platform, url)
+}
+
 let error: string | null = null
 
 // 썸네일 기준표(베이비챗 작품 이름·이미지). 파일로 남겨 두고 6시간마다 새로 읽는다.
