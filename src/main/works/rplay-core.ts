@@ -165,6 +165,24 @@ const contentOptions: Check = (v) => {
   }
 }
 
+/** 가져오기 파일을 올리는 저장소 열쇠 (편집기: `story-chat/canvas-import/${대상 캔버스}.json`) */
+export const CANVAS_IMPORT_KEY_RE = new RegExp('^story-chat/canvas-import/' + HEX + '\\.json$')
+/** getUploadUrl의 context: {uploadType:"story-chat", contentOid} 두 값만 */
+const uploadContext: Check = (v) => {
+  try {
+    const o: unknown = JSON.parse(v)
+    return (
+      isObj(o) &&
+      Object.keys(o).length === 2 &&
+      o.uploadType === 'story-chat' &&
+      typeof o.contentOid === 'string' &&
+      HEX_RE.test(o.contentOid)
+    )
+  } catch {
+    return false
+  }
+}
+
 export const LIST_FILTER = ['work_in_progress_storyChat', 'publishedStoryChat']
 
 export const READ_ROUTES: Route[] = [
@@ -188,11 +206,36 @@ export const READ_ROUTES: Route[] = [
     },
     optional: ACCOUNT_OPTIONAL
   },
-  // 캔버스 (getChatCompositionCanvas)
+  // 캔버스 (getChatCompositionCanvas). includeMetadata=false는 가져오기가 끝났는지 볼 때
+  // (subscribeToImportProgress의 상태 확인과 같은 요청)
   {
     origin: RPLAY_CHAT_ORIGIN,
     path: /^\/story-chat\/chat-canvas$/,
-    required: { canvasOid: hex, includeMetadata: (v) => v === 'true', ...ACCOUNT_REQUIRED },
+    required: {
+      canvasOid: hex,
+      includeMetadata: (v) => v === 'true' || v === 'false',
+      ...ACCOUNT_REQUIRED
+    },
+    optional: ACCOUNT_OPTIONAL
+  },
+  // 캔버스 내보내기 (exportChatCompositionCanvas)
+  {
+    origin: RPLAY_CHAT_ORIGIN,
+    path: /^\/story-chat\/chat-canvas\/export$/,
+    required: { canvasOid: hex, ...ACCOUNT_REQUIRED },
+    optional: ACCOUNT_OPTIONAL
+  },
+  // 캔버스 가져오기 파일의 업로드 주소 (getUploadUrl: 비공개 저장소 열쇠 하나)
+  {
+    origin: RPLAY_API,
+    path: /^\/upload$/,
+    required: {
+      key: (v) => CANVAS_IMPORT_KEY_RE.test(v),
+      filetype: (v) => v === 'application/json',
+      access: (v) => v === 'private',
+      context: uploadContext,
+      ...ACCOUNT_REQUIRED
+    },
     optional: ACCOUNT_OPTIONAL
   },
   // 제목·소개 언어별 상태 (getStoryChatLocalization)
@@ -215,7 +258,9 @@ export const WRITE_PATHS = [
   /^\/story-chat\/chat-content$/,
   /^\/story-chat\/chat-canvas$/,
   /^\/story-chat\/chat-canvas\/metadata$/,
-  new RegExp('^/story-chat/localization/' + HEX + '/edit$')
+  new RegExp('^/story-chat/localization/' + HEX + '/edit$'),
+  // 캔버스 가져오기 (importChatCompositionCanvas). 캔버스 전체가 바뀐다 — canvas_plan → canvas_apply로만 부른다
+  /^\/story-chat\/chat-canvas\/import$/
 ]
 
 // ───────────── 응답 ─────────────

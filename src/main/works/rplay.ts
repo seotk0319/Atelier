@@ -47,6 +47,13 @@ import {
   type RplayAccount,
   type RplayRaw
 } from './rplay-core'
+import {
+  rplayCheckCanvas,
+  rplayCompareCanvas,
+  rplayExportCanvas,
+  rplayImportCanvas,
+  rplaySendRule
+} from './rplay-canvas'
 import type {
   ImageGroup,
   LoreEntry,
@@ -881,7 +888,15 @@ function rplayImageGroups(raw: unknown): ImageGroup[] {
 export const rplayWorks: WorkAdapter = {
   id: 'rplay',
   label: '알플레이',
-  capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'characters', 'save'],
+  capabilities: [
+    'works_list',
+    'work_read',
+    'lorebook',
+    'start_scenarios',
+    'characters',
+    'save',
+    'canvas'
+  ],
 
   readAllowed: (url) => routeAllowed(url, READ_ROUTES),
   writeAllowed(method, url) {
@@ -965,5 +980,12 @@ export const rplayWorks: WorkAdapter = {
   },
   checkDraft: rplayCheckDraft,
 
-  imageGroups: rplayImageGroups
+  imageGroups: rplayImageGroups,
+
+  // 캔버스 JSON 내보내기·가져오기 (rplay-canvas.ts). 저장소 PUT은 API가 이번에 내준 주소만 열린다
+  sendRule: rplaySendRule,
+  exportCanvas: rplayExportCanvas,
+  checkCanvas: rplayCheckCanvas,
+  importCanvas: rplayImportCanvas,
+  compareCanvas: rplayCompareCanvas
 }

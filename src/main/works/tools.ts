@@ -1,7 +1,8 @@
 // MCP로 내놓는 작품 도구. 여기는 화면·Electron을 모르고, 읽기 통로와 스냅샷 저장만 받아서 쓴다.
 // 읽기 도구는 여기, 계획·저장 도구는 save-tools.ts, 언어 판본 저장은 edition-tools.ts,
-// 이미지·표지는 media-tools.ts에 있다.
+// 이미지·표지는 media-tools.ts, 캔버스 JSON 내보내기·가져오기는 canvas-tools.ts에 있다.
 import { WORK_ADAPTERS, workAdapter, workKey } from './adapters'
+import { canCanvas, createCanvasTools } from './canvas-tools'
 import { createEditionTools } from './edition-tools'
 import { createMediaTools } from './media-tools'
 import { createSaveTools } from './save-tools'
@@ -129,6 +130,10 @@ const MESSAGES: [RegExp, string][] = [
     '이 플랫폼은 로어북을 전부 비우는 저장을 편집기도 보내지 않아요. 항목을 하나 이상 남겨 주세요.'
   ],
   [
+    /BAD_JSX/,
+    'JSX 컴포넌트를 컴파일하지 못했어요. 파일 이름(한글·영문·숫자·_·- 30자), 문법, 컴포넌트 이름(대문자로 시작하는 함수), 다른 파일과 겹치는 컴포넌트 이름을 확인해 주세요.'
+  ],
+  [
     /JSX_UNSUPPORTED/,
     '이 작품의 JSX 컴포넌트는 편집기가 저장할 때 브라우저에서 다시 컴파일해야 해서 여기서 저장하지 않아요.'
   ],
@@ -156,14 +161,45 @@ const MESSAGES: [RegExp, string][] = [
     '티팟의 공개 상태는 등록(심사)할 때만 반영돼요. 사이트에서 등록해 주세요.'
   ],
   [/CHECKPOINT_LIMIT/, '저장 파일 수가 한도에 찼어요. 사이트에서 오래된 저장 파일을 지워 주세요.'],
-  [/NOT_OWNER/, '내 계정의 작품이 아니에요.']
+  [/NOT_OWNER/, '내 계정의 작품이 아니에요.'],
+  [
+    /NO_CANVAS/,
+    '이 플랫폼은 캔버스 JSON 내보내기·가져오기를 지원하지 않아요. sites_list의 can_canvas가 true인 곳(알플레이)에서만 돼요.'
+  ],
+  [
+    /BAD_CANVAS_FILE/,
+    '캔버스 JSON 파일을 쓸 수 없어요. .json(UTF-8, 20MB 이하)이고 canvas_export 파일과 같은 모양이어야 해요.'
+  ],
+  [
+    /IMPORT_LANGUAGE_MISMATCH/,
+    '파일의 캔버스 언어가 지금 캔버스와 달라요. 지금 캔버스 언어로 넣으려면 use_current_language를 true로 주고 다시 계획해 주세요.'
+  ],
+  [
+    /IMPORT_SETTINGS_CHOICE_REQUIRED/,
+    '고급 설정이 지금 캔버스와 파일에서 달라요. settings_choice에 current(지금 설정 유지) 또는 imported(파일 설정)를 주고 다시 계획해 주세요.'
+  ],
+  [
+    /IMPORT_FILE_CHANGED/,
+    '올린 파일이 가져오기 전에 바뀌었다고 플랫폼이 거절했어요. 캔버스는 그대로예요. 계획부터 다시 해 주세요.'
+  ],
+  [
+    /CANVAS_BUSY/,
+    '캔버스가 지금 가져오기·컴파일 중이거나 다른 변경을 받는 중이에요. 끝난 뒤 다시 해 주세요.'
+  ],
+  [
+    /IMPORT_TIMEOUT|IMPORT_UNCONFIRMED/,
+    '가져오기가 끝났는지 확인하지 못했어요. 잠시 뒤 canvas_export로 지금 캔버스를 확인해 주세요.'
+  ],
+  [/CANVAS_UPLOAD_FAILED|IMPORT_FAILED/, '플랫폼이 캔버스 가져오기를 받아 주지 않았어요.']
 ]
 export function toolMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : String(error)
   for (const [re, message] of MESSAGES)
     if (re.test(code))
       // 플랫폼이 거절한 경우는 받은 상태 코드도 같이 알려 준다
-      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS |PUBLISH_REQUIREMENTS /.test(code)
+      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS |PUBLISH_REQUIREMENTS |BAD_CANVAS_FILE |IMPORT_LANGUAGE_MISMATCH |IMPORT_SETTINGS_CHOICE_REQUIRED /.test(
+        code
+      )
         ? message + ' (' + code.slice(0, 90) + ')'
         : message
   return '요청을 처리하지 못했어요. (' + code.slice(0, 80) + ')'
@@ -230,7 +266,8 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
     // 저장하면 들고 있던 본문이 낡으므로 버린다
     ...createSaveTools(deps, (key) => cache.delete(key)),
     ...createEditionTools(deps),
-    ...createMediaTools(deps, (key) => cache.delete(key))
+    ...createMediaTools(deps, (key) => cache.delete(key)),
+    ...createCanvasTools(deps, (key) => cache.delete(key))
   ]
 
   function readTools(): ToolDef[] {
@@ -250,7 +287,8 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
               can_create: !!a.create,
               can_images: !!a.applyImages,
               can_cover: !!a.uploadCover,
-              can_edition_save: !!a.saveEdition
+              can_edition_save: !!a.saveEdition,
+              can_canvas: canCanvas(a)
             }))
           }
         }

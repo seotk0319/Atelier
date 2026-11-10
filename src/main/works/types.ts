@@ -135,6 +135,71 @@ export interface WorkAdapter {
   applyEditionChanges?(view: unknown, changes: WorkChanges): unknown
   /** 겹친 원본을 그 언어 판본으로 저장한다 (자동 번역은 부르지 않는다) */
   saveEdition?(write: WorkWrite, workId: string, language: string, view: unknown): Promise<void>
+
+  // ── 캔버스 JSON (노드 캔버스로 만드는 플랫폼: 알플레이) ──
+  /** 편집기의 "캔버스 내보내기"와 같은 요청으로 작품의 캔버스 JSON을 받는다 */
+  exportCanvas?(read: WorkFetch, workId: string): Promise<CanvasExport>
+  /** 캔버스 JSON이 가져오기 규격에 맞는지 본다 (던지지 않고 문제 목록을 돌려준다) */
+  checkCanvas?(data: unknown): CanvasCheck
+  /** 캔버스 JSON을 편집기와 같은 순서로 가져온다 (캔버스 전체가 바뀐다). 끝날 때까지 기다린다 */
+  importCanvas?(
+    io: WorkIo,
+    workId: string,
+    file: CanvasFile,
+    options: CanvasImportOptions
+  ): Promise<{ runId: string | null }>
+  /** 넣은 파일과 다시 내보낸 JSON을 견줘 다른 곳을 돌려준다 (서버가 붙이는 값은 빼고 본다) */
+  compareCanvas?(expected: unknown, actual: unknown, options?: CanvasCompareOptions): string[]
+}
+
+/** 내보낸 캔버스 JSON */
+export interface CanvasExport {
+  /** 캔버스 번호 (작품 번호와 다르다) */
+  canvasId: string
+  /** 편집기 내보내기 파일과 같은 JSON */
+  data: unknown
+  /** 계획 뒤 캔버스가 바뀌었는지 견줄 값 (내보낸 시각처럼 매번 바뀌는 값은 뺀다) */
+  stamp: string
+}
+export interface CanvasSummary {
+  version: number | null
+  language: string | null
+  nodes: number
+  nodeTypes: Record<string, number>
+  connections: number
+  metadata: number
+  annotations: number
+  /** 이 파일을 내보낸 작품·캔버스 번호 (파일에 적힌 값) */
+  sourceWorkId: string | null
+  sourceCanvasId: string | null
+  /** 공통 설정 (가져올 때 지금 캔버스와 다르면 어느 쪽을 쓸지 골라야 한다) */
+  settings: Record<string, unknown> | null
+  nodeIds: string[]
+}
+export interface CanvasCheck {
+  summary: CanvasSummary
+  /** 규격에 맞지 않는 곳 (비어 있으면 가져올 수 있는 모양) */
+  problems: string[]
+}
+/** 가져올 로컬 파일 (UTF-8 글과 그 글의 바이트. BOM은 뺀다) */
+export interface CanvasFile {
+  name: string
+  text: string
+  data: Uint8Array
+}
+export interface CanvasImportOptions {
+  /** 계획 때 확인한 대상 캔버스 번호 (그 사이 바뀌었으면 멈춘다) */
+  canvasId: string
+  /** 파일의 캔버스 언어가 지금 캔버스와 다를 때 지금 캔버스 언어로 넣는다 */
+  useCurrentLanguage?: boolean
+  /** 공통 설정이 다를 때 고르는 쪽: current(지금 설정 유지) / imported(파일 설정) */
+  settingsChoice?: 'current' | 'imported'
+}
+export interface CanvasCompareOptions {
+  /** 공통 설정은 지금 캔버스 값을 남겼으니 견주지 않는다 */
+  keepCurrentSettings?: boolean
+  /** 캔버스 언어는 지금 캔버스 값을 남겼으니 견주지 않는다 */
+  keepCurrentLanguage?: boolean
 }
 
 /** 로컬에서 읽은 이미지 파일 하나 */

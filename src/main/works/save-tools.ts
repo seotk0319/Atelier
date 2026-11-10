@@ -177,7 +177,8 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
     if (!isObj(args.field_files)) throw new Error('BAD_CHANGES')
     for (const [name, path] of Object.entries(args.field_files)) {
       if (name in fields) throw new Error('BAD_CHANGES')
-      fields[name] = await readText(str(path), deps, /\.(md|txt)$/i)
+      // html은 소개 칸, jsx·tsx·js는 JSX 컴포넌트 칸(우마이 `jsx:{파일 이름}`)용
+      fields[name] = await readText(str(path), deps, /\.(md|txt|html|jsx|tsx|js)$/i)
     }
   }
   if (Object.keys(fields).length) changes.fields = fields
@@ -323,12 +324,14 @@ export const CHANGE_PROPERTIES = {
     type: 'object',
     description:
       '통째로 바꿀 글 칸. title / subtitle / description / main / creator_comment ' +
-      '(플랫폼 전용 칸: 네코챗 persistent_context, 우마이 play_guide — work_read의 field_lengths 참고)',
+      '(플랫폼 전용 칸: 네코챗 persistent_context, 우마이 play_guide — work_read의 field_lengths 참고). ' +
+      '우마이 JSX 컴포넌트 파일은 칸 이름 jsx:{파일 이름}에 소스 코드를 준다(저장할 때 컴파일된다. 빈 값이면 그 파일을 뺀다)',
     additionalProperties: text
   },
   field_files: {
     type: 'object',
-    description: '글 칸 이름 → 그 칸에 넣을 로컬 파일 경로 (.md / .txt, UTF-8)',
+    description:
+      '글 칸 이름 → 그 칸에 넣을 로컬 파일 경로 (.md / .txt / .html, UTF-8. 우마이 jsx:{파일 이름} 칸은 .jsx / .tsx / .js)',
     additionalProperties: text
   },
   lorebook: {
@@ -657,6 +660,15 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
             description: '캐릭터들. 첫 번째가 주연'
           },
           lorebook: { type: 'array', items: lorebookItem },
+          lorebook_file: {
+            type: 'string',
+            description: '로어북이 담긴 로컬 JSON 파일 경로 (lorebook과 같은 모양의 배열)'
+          },
+          start_scenarios_file: {
+            type: 'string',
+            description:
+              '시작 상황들이 담긴 로컬 JSON 파일 경로 (start_scenarios와 같은 모양의 배열)'
+          },
           start_scenarios: {
             type: 'array',
             items: {
@@ -685,11 +697,23 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
             ? await readText(str(args.main_file), deps, /\.(md|txt)$/i)
             : str(args.main)
         // 바꾸기 도구와 같은 읽기 규칙으로 로어북·시작 상황·캐릭터를 받는다
+        // 긴 로어북·시작 상황은 로컬 JSON 파일(같은 모양의 배열)로 받을 수 있다
+        const fromFile = async (inline: unknown, file: unknown): Promise<unknown> => {
+          if (file === undefined) return inline
+          if (inline !== undefined) throw new Error('BAD_CHANGES')
+          try {
+            return JSON.parse(await readText(str(file), deps, /.json$/i))
+          } catch (error) {
+            throw error instanceof Error && error.message === 'BAD_FILE'
+              ? error
+              : new Error('BAD_FILE')
+          }
+        }
+        const lorebook = await fromFile(args.lorebook, args.lorebook_file)
+        const starts = await fromFile(args.start_scenarios, args.start_scenarios_file)
         const given = {
-          ...(args.lorebook !== undefined ? { lorebook_add: args.lorebook } : {}),
-          ...(args.start_scenarios !== undefined
-            ? { start_scenarios_add: args.start_scenarios }
-            : {}),
+          ...(lorebook !== undefined ? { lorebook_add: lorebook } : {}),
+          ...(starts !== undefined ? { start_scenarios_add: starts } : {}),
           ...(args.characters !== undefined ? { characters_add: args.characters } : {})
         }
         const parts = Object.keys(given).length ? await parseChanges(given, deps) : {}

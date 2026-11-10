@@ -44,6 +44,7 @@ import {
   uumaiSendRule,
   uumaiUploadCover
 } from './uumai-media'
+import { compileUumaiJsx, JSX_MAX_FILES } from './uumai-jsx'
 import type { LoreEntry, WorkAdapter, WorkBody, WorkDraft, WorkListItem } from './types'
 
 const READ_PATHS = [
@@ -84,6 +85,8 @@ const LIMITS = {
   hashtags: 10,
   hashtag: 10
 }
+/** JSX 컴포넌트 파일을 가리키는 글 칸 이름의 앞머리 (jsx:{파일 이름}) */
+const JSX_FIELD = 'jsx:'
 const FIELDS: Record<string, string> = {
   title: 'title',
   subtitle: 'description',
@@ -273,7 +276,13 @@ export const uumaiWorks: WorkAdapter = {
       status: uumaiStatus(r),
       updatedAt:
         (strOrNull(w.updatedAt) ?? '') + (uumaiPendingDraft(r) ? ' (발행 안 된 초안)' : '') || null,
-      fields: Object.fromEntries(Object.entries(FIELDS).map(([k, key]) => [k, text(w[key])])),
+      fields: {
+        ...Object.fromEntries(Object.entries(FIELDS).map(([k, key]) => [k, text(w[key])])),
+        // JSX 컴포넌트 파일은 글 칸처럼 다룬다: 칸 이름 `jsx:{파일 이름}`, 값 = 소스 코드
+        ...Object.fromEntries(
+          list(w.jsx).map((j) => [JSX_FIELD + text(j.fileName), text(j.sourceCode)])
+        )
+      },
       lorebook: arrangeLorebooks(list(w.lorebooks), list(w.lorebookFolders)).map((l) => ({
         title: text(l.name),
         keys: strings(l.keywords).join(', '),
@@ -312,8 +321,30 @@ export const uumaiWorks: WorkAdapter = {
 
     let fieldsChanged = false
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
+      if (typeof value !== 'string') throw new Error('BAD_FIELD')
+      if (name.startsWith(JSX_FIELD)) {
+        // jsx:{파일 이름} = 소스 코드. 빈 값이면 그 파일을 뺀다. 편집기처럼 저장 전에 컴파일해 둔다
+        const fileName = name.slice(JSX_FIELD.length)
+        const rest = list(w.jsx).filter((j) => text(j.fileName) !== fileName)
+        const at = list(w.jsx).findIndex((j) => text(j.fileName) === fileName)
+        if (!value.trim()) {
+          if (at < 0) throw new Error('BAD_FIELD ' + name)
+          w.jsx = rest
+        } else {
+          const compiled = compileUumaiJsx(fileName, value)
+          // 같은 컴포넌트 이름이 다른 파일에 있으면 채팅 화면이 어느 쪽을 그릴지 알 수 없다
+          const taken = new Set(rest.flatMap((j) => strings(j.components)))
+          if (compiled.components.some((c) => taken.has(c))) throw new Error('BAD_JSX duplicate')
+          const all = list(w.jsx)
+          if (at < 0) all.push({ ...compiled })
+          else all[at] = { ...all[at], ...compiled }
+          if (all.length > JSX_MAX_FILES) throw new Error('BAD_JSX count')
+          w.jsx = all
+        }
+        continue
+      }
       const key = FIELDS[name]
-      if (!key || typeof value !== 'string') throw new Error('BAD_FIELD')
+      if (!key) throw new Error('BAD_FIELD')
       w[key] = value
       fieldsChanged = true
     }

@@ -319,7 +319,8 @@ describe('알플레이 허용 주소', () => {
     expect(r(CHAT + '/chat-canvas?canvasOid=' + CANVAS + '&includeMetadata=true&x=1' + acct)).toBe(
       false
     )
-    expect(r(CHAT + '/chat-canvas/export?canvasOid=' + CANVAS + acct)).toBe(false)
+    // 캔버스 내보내기는 열었다 (rplay-canvas.ts, 자세한 시험은 works-rplay-canvas.test.ts)
+    expect(r(CHAT + '/chat-canvas/export?canvasOid=' + CANVAS + acct)).toBe(true)
     expect(r(CHAT + '/localization/' + W + '?platformType=rplay&lang=ko')).toBe(true)
     expect(r(CHAT + '/localization/' + W + '/edit?platformType=rplay&lang=ko')).toBe(false)
     expect(r(CHAT + '/image-hashes?contentOid=' + W + acct)).toBe(true)
@@ -349,12 +350,13 @@ describe('알플레이 허용 주소', () => {
     expect(w('POST', CHAT + '/chat-canvas/metadata')).toBe(true)
     expect(w('POST', CHAT + '/localization/' + W + '/edit')).toBe(true)
     expect(w('POST', CHAT + '/localization/' + W + '/reserve')).toBe(false)
-    expect(w('POST', CHAT + '/chat-canvas/import')).toBe(false)
+    expect(w('POST', CHAT + '/chat-canvas/import')).toBe(true)
     expect(w('POST', CHAT + '/compile-node')).toBe(false)
     expect(w('POST', CHAT + '/chat-content?x=1')).toBe(false)
     expect(w('PUT', CHAT + '/chat-content')).toBe(false)
     expect(w('POST', 'https://api.rplay.live/content/comment')).toBe(false)
-    expect(rplayWorks.sendRule).toBeUndefined()
+    // 파일 보내기는 API가 이번에 내준 업로드 주소만 (아직 받은 주소가 없으면 아무것도)
+    expect(rplayWorks.sendRule!('PUT', 'https://bucket.example.com/x.json')).toBeNull()
   })
 })
 
