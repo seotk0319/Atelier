@@ -6,269 +6,246 @@
 <title>Atelier 시안</title>
 <style>
 :root{
-  --paper:#f4f1ea; --surface:#fbf9f4; --surface-2:#ebe7de; --ink:#1f1d1a; --muted:#5f5a51; --faint:#716b61; --line:#dcd6c9;
-  --seal:#c8372d; --on-seal:#fffaf6; --seal-text:#ad2a21; --seal-soft:#f6dfd9;
-  --jjok:#2a5a88; --jjok-soft:#dde7f0; --sol:#3a6a4c; --sol-soft:#dfeae1; --chija:#855e10; --chija-soft:#f1e5c6;
+  --paper:#f5f4f1; --surface:#ffffff; --surface-2:#ecebe7; --ink:#1f1e1c; --muted:#5d5a54; --faint:#726e66; --line:#dfddd7;
+  --red:#c8372d; --on-red:#ffffff; --red-text:#ad2a21; --red-soft:#f8e1dc;
+  --blue:#2a5a88; --blue-soft:#dde7f0; --green:#2f6a47; --green-soft:#dfeae1; --amber:#855e10; --amber-soft:#f3e7c8;
   --image-bg:#e3e3e3; color-scheme:light;
 }
 :root[data-theme="dark"]{
-  --paper:#161513; --surface:#1d1c19; --surface-2:#282623; --ink:#ece8df; --muted:#aaa497; --faint:#857f73; --line:#37342f;
-  --seal:#e8594c; --on-seal:#1d0906; --seal-text:#f0776b; --seal-soft:#3b1a16;
-  --jjok:#8fb6dc; --jjok-soft:#17283a; --sol:#8fc29d; --sol-soft:#18291d; --chija:#dab45e; --chija-soft:#33290f;
+  --paper:#151514; --surface:#1d1d1b; --surface-2:#292826; --ink:#ecebe7; --muted:#a9a69f; --faint:#86837b; --line:#363532;
+  --red:#e8594c; --on-red:#1d0906; --red-text:#f0776b; --red-soft:#3b1a16;
+  --blue:#8fb6dc; --blue-soft:#17283a; --green:#8fc29d; --green-soft:#18291d; --amber:#dab45e; --amber-soft:#33290f;
   --image-bg:#1b1b1b; color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:var(--paper);color:var(--ink);font:13px/1.55 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
+body{background:var(--paper);color:var(--ink);font:13px/1.5 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-.num{font-variant-numeric:tabular-nums}
-.muted{color:var(--muted)}.faint{color:var(--faint)}
+.num{font-variant-numeric:tabular-nums}.muted{color:var(--muted)}.faint{color:var(--faint)}.sp{flex:1}
 kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--muted);background:var(--surface)}
-.app{display:grid;grid-template-rows:44px 1fr 34px;height:100vh}
+.app{display:grid;grid-template-rows:46px 1fr 34px;height:100vh}
 
-/* 위: 지금 어디인가 */
-.top{display:flex;align-items:center;gap:4px;padding:0 14px;border-bottom:1px solid var(--line)}
-.crumb{height:28px;padding:0 9px;border-radius:6px;color:var(--muted)}
-.crumb:hover{background:var(--surface-2);color:var(--ink)}
-.crumb.here{color:var(--ink);font-weight:650}
-.sep{color:var(--faint);padding:0 2px}
-.verbs{display:none;margin-left:14px;gap:2px}
-.verbs.on{display:flex}
-.verb{height:28px;padding:0 11px;border-radius:14px;color:var(--muted);position:relative}
-.verb:hover{color:var(--ink)}
-.verb.on{background:var(--ink);color:var(--paper);font-weight:600}
-.verb i{position:absolute;right:3px;top:3px;width:6px;height:6px;background:var(--seal);border-radius:1px}
-.top .sp{flex:1}
-.tool{height:28px;padding:0 9px;border-radius:6px;color:var(--faint)}.tool:hover{color:var(--ink);background:var(--surface-2)}
+.top{display:flex;align-items:center;gap:4px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.crumb{height:30px;padding:0 10px;border-radius:6px;color:var(--muted);font-weight:600}
+.crumb:hover{background:var(--surface-2);color:var(--ink)}.crumb.here{color:var(--ink)}
+.sep{color:var(--faint)}
+.tabs{display:none;margin-left:16px;gap:2px}.tabs.on{display:flex}
+.tab{height:30px;padding:0 12px;border-radius:6px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.tab:hover{background:var(--surface-2);color:var(--ink)}
+.tab.on{background:var(--surface-2);color:var(--ink);font-weight:650}
+.cnt{min-width:18px;height:18px;border-radius:9px;padding:0 5px;background:var(--red);color:var(--on-red);font-size:11px;font-weight:700;display:inline-grid;place-items:center}
+.tool{height:30px;padding:0 10px;border-radius:6px;color:var(--muted)}.tool:hover{color:var(--ink);background:var(--surface-2)}
 
 .main{min-height:0;overflow:auto}
-.view{display:none;height:100%}.view.on{display:block}
+.view{display:none;padding:20px 24px;max-width:1500px;margin:0 auto}.view.on{display:block}
+.btn{height:32px;padding:0 13px;border-radius:6px;background:var(--surface-2);font-weight:600;white-space:nowrap}
+.btn:hover{filter:brightness(.96)}:root[data-theme=dark] .btn:hover{filter:brightness(1.2)}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.red{background:var(--red);color:var(--on-red)}
+.btn.ghost{background:none;color:var(--muted)}.btn.ghost:hover{background:var(--surface-2);color:var(--ink)}
+.btn.sm{height:28px;font-size:12px;padding:0 10px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.panel>h3{margin:0;padding:10px 14px;font-size:13px;font-weight:650;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:6px;padding:2px}
+.seg button{height:24px;padding:0 10px;border-radius:4px;font-size:12px;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--ink);font-weight:600}
 
-/* 다음 한 줄 */
-.next{display:flex;align-items:baseline;gap:12px;padding:26px 28px 18px}
-.next h1{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}
-.next .go{margin-left:auto;display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:17px;background:var(--seal);color:var(--on-seal);font-weight:650;align-self:center}
-.next .rest{color:var(--muted)}
+/* 할 일 */
+.todo{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.todo h1{margin:0 6px 0 0;font-size:20px;font-weight:650}
+.chip{height:32px;padding:0 12px;border-radius:16px;border:1px solid var(--line);background:var(--surface);display:inline-flex;align-items:center;gap:8px}
+.chip:hover{border-color:var(--faint)}
+.chip b{font-weight:700}.chip.hot b{color:var(--red-text)}
 
-/* 서가: 작품 = 책등, 플랫폼 = 등불 */
-.shelfwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;height:calc(100% - 78px)}
-.shelf{overflow:auto;padding:0 28px 20px}
-.grid{display:grid;grid-auto-flow:column;grid-auto-columns:46px;grid-template-rows:210px repeat(11,26px) 34px;column-gap:6px;width:max-content}
-.lab{grid-column:1;position:sticky;left:0;background:var(--paper);z-index:2;width:58px;padding-right:10px;text-align:right;color:var(--faint);font-size:11px;line-height:26px}
-.grid .lab:first-child{line-height:1}
-.spine{writing-mode:vertical-rl;text-orientation:mixed;display:flex;align-items:center;justify-content:flex-start;padding:12px 0;background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:5px 5px 0 0;font-weight:600;letter-spacing:.02em;overflow:hidden;white-space:nowrap;cursor:pointer;position:relative}
-.spine:hover{background:var(--surface-2)}
-.spine.mine{padding-top:20px}
-.spine.mine::after{content:"";position:absolute;top:6px;left:50%;margin-left:-3px;width:6px;height:6px;background:var(--seal);border-radius:1px}
-.spine.new{color:var(--faint);border-style:dashed;font-weight:500}
-.cell{display:grid;place-items:center;background:var(--surface);border-left:1px solid var(--line);border-right:1px solid var(--line)}
-.cell.foot{border-bottom:1px solid var(--line);border-radius:0 0 5px 5px;font-size:11px;color:var(--faint)}
-.lamp{width:12px;height:12px;border-radius:50%;display:block}
-.lamp.ok{background:var(--sol)}
-.lamp.stale{background:linear-gradient(90deg,var(--chija) 50%,transparent 50%);box-shadow:inset 0 0 0 1.5px var(--chija)}
-.lamp.run{box-shadow:inset 0 0 0 2px var(--jjok)}
-.lamp.me{background:var(--seal);border-radius:2px}
-.lamp.none{width:3px;height:3px;background:var(--line)}
-.cell:has(.lamp:not(.none)){cursor:pointer}
-.cell:has(.lamp:not(.none)):hover{background:var(--surface-2)}
-.legend{display:flex;gap:16px;padding:12px 28px 0 96px;color:var(--faint);font-size:11px;align-items:center;flex-wrap:wrap}
-.legend span{display:inline-flex;gap:6px;align-items:center}
-.peek{margin:10px 28px 0 96px;padding:10px 14px;border-left:2px solid var(--ink);background:var(--surface);min-height:42px;max-width:560px}
+/* 상태 배지 */
+.st{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:5px;font-size:12px;font-weight:600;white-space:nowrap}
+.st svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.st.ok{color:var(--green);background:var(--green-soft)}.st.stale{color:var(--amber);background:var(--amber-soft)}
+.st.run{color:var(--blue);background:var(--blue-soft)}.st.me{color:var(--on-red);background:var(--red)}
+.st.err{color:var(--red-text);background:var(--red-soft)}.st.none{color:var(--faint);padding:0 4px}
+button.st{cursor:pointer}button.st:hover{outline:1px solid currentColor}
 
-/* 밤사이 */
-.night{border-left:1px solid var(--line);padding:0 22px;overflow:auto}
-.night h2{font-size:13px;font-weight:650;margin:0 0 10px}
-.night ol{list-style:none;margin:0;padding:0;border-left:1px solid var(--line)}
-.night li{position:relative;padding:0 0 14px 14px}
-.night li::before{content:"";position:absolute;left:-3px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--faint)}
-.night li.me::before{background:var(--seal);border-radius:1px}
-.night time{display:block;font-size:11px;color:var(--faint)}
+.board{width:100%;border-collapse:collapse}
+.board th{font-size:11px;font-weight:600;color:var(--faint);text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.board td{padding:7px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.board tr:last-child td{border-bottom:0}.board tbody tr:hover{background:var(--surface-2)}
+.board td:first-child,.board th:first-child{padding-left:14px}
+.wname{font-weight:650;max-width:240px;overflow:hidden;text-overflow:ellipsis;display:block;text-align:left}
+.wname:hover{text-decoration:underline}
+.scroll{overflow:auto}
+.log{list-style:none;margin:0;padding:2px 0}
+.log li{display:grid;grid-template-columns:52px 1fr auto;gap:10px;padding:8px 14px;align-items:center}
+.log li+li{border-top:1px solid var(--line)}
+.two{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 
-/* 작업대 */
-.desk{padding:22px 28px;height:100%}
-.pick{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;height:100%}
-.stage{background:var(--image-bg);border-radius:6px;display:grid;place-items:center;color:var(--faint);position:relative}
-.keys{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:6px 14px;font-size:12px;color:var(--muted);white-space:nowrap}
-.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;align-content:start}
+/* 선별 */
+.pick{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;height:calc(100vh - 46px - 34px - 40px)}
+.stage{background:var(--image-bg);border-radius:8px;display:grid;place-items:center;color:var(--faint);position:relative}
+.keys{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px}
+.keys button{height:30px;padding:0 10px;border-radius:5px;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.keys button:hover{background:var(--surface-2)}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:10px}
 .strip div{aspect-ratio:1;background:var(--image-bg);border-radius:4px;position:relative}
 .strip .cur{outline:2px solid var(--ink);outline-offset:1px}
-.strip .kept::after{content:"";position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--sol)}
+.strip .kept::after{content:"✓";position:absolute;right:3px;top:1px;color:var(--green);font-weight:800}
 .strip .out{opacity:.25}
-.side h3{margin:0 0 2px;font-size:13px}
-.meter{height:3px;background:var(--surface-2);margin:10px 0 14px}.meter i{display:block;height:100%;background:var(--ink)}
+.bar{height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}.bar i{display:block;height:100%;background:var(--ink)}
 
-/* 올리기 + 도장 */
-.up{display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px;height:100%}
-.plist button{display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border-radius:6px;text-align:left}
-.plist button:hover,.plist button.on{background:var(--surface)}
-.plist button.on{font-weight:650}
-.plist .r{margin-left:auto;font-size:11px;color:var(--faint)}
-.sheet{background:var(--surface);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-height:0}
-.sheet header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
-.parts{display:flex;gap:4px;margin-left:auto}
-.parts button{height:24px;padding:0 9px;border-radius:12px;font-size:12px;color:var(--muted)}
-.parts button.on{background:var(--surface-2);color:var(--ink);font-weight:600}
-.parts button.seen::after{content:" ✓";color:var(--sol)}
-.diff{flex:1;overflow:auto;padding:14px 0;font:12.5px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
+/* 판본 */
+.up{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;height:calc(100vh - 46px - 34px - 40px)}
+.plist{overflow:auto}
+.plist button{display:flex;align-items:center;gap:10px;width:100%;height:38px;padding:0 12px;text-align:left;border-bottom:1px solid var(--line)}
+.plist button:hover{background:var(--surface-2)}.plist button.on{background:var(--surface-2);font-weight:650}
+.sheet{display:flex;flex-direction:column;min-height:0}
+.parts{display:flex;gap:4px;align-items:center}
+.parts button{height:26px;padding:0 10px;border-radius:13px;font-size:12px;color:var(--muted);background:var(--surface-2)}
+.parts button.on{background:var(--ink);color:var(--paper);font-weight:600}
+.parts button.seen::after{content:" ✓"}
+.diff{flex:1;overflow:auto;padding:12px 0;font:12.5px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
 .diff div{padding:0 16px;white-space:pre-wrap}
-.diff .add{background:var(--sol-soft)}.diff .del{background:var(--seal-soft);text-decoration:line-through;text-decoration-color:var(--faint)}
-.diff .at{color:var(--faint);padding-top:8px}
-.sign{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--line)}
-.stamp{position:relative;width:64px;height:64px;border-radius:8px;border:2px solid var(--seal);color:var(--seal-text);font-weight:700;font-size:12px;line-height:1.2;overflow:hidden;user-select:none}
-.stamp b{position:absolute;inset:0;background:var(--seal);transform:scaleY(0);transform-origin:bottom}
-.stamp.hold b{transform:scaleY(1);transition:transform .7s linear}
-.stamp span{position:relative}
-.stamp.hold span,.stamp.done span{color:var(--on-seal)}
-.stamp.done{background:var(--seal);transform:rotate(-4deg)}
-.back{height:32px;padding:0 12px;border-radius:6px;color:var(--muted)}.back:hover{background:var(--surface-2);color:var(--ink)}
+.diff .add{background:var(--green-soft)}.diff .del{background:var(--red-soft)}.diff .at{color:var(--faint);padding-top:8px}
+.sign{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line)}
 
-/* 아래: 띠 */
-.tape{display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);min-width:0}
-.tape button{display:flex;align-items:center;gap:10px;height:26px;padding:0 8px;border-radius:5px;min-width:0}
-.tape button:hover{background:var(--surface-2);color:var(--ink)}
-.ticks{display:flex;gap:1px;align-items:center}
-.ticks i{width:2px;height:10px;background:var(--line)}.ticks i.d{background:var(--ink)}.ticks i.n{background:var(--jjok);height:14px}
-.tape .sp{flex:1}
-.sq{width:7px;height:7px;background:var(--seal);border-radius:1px;display:inline-block}
-.dotok{width:7px;height:7px;background:var(--sol);border-radius:50%;display:inline-block}
-.queue{position:fixed;left:0;right:0;bottom:34px;background:var(--surface);border-top:1px solid var(--line);display:none;padding:14px 28px 18px}
+/* 아래 줄 */
+.foot{display:flex;align-items:center;gap:6px;padding:0 10px;border-top:1px solid var(--line);background:var(--surface);font-size:12px;color:var(--muted);min-width:0}
+.foot button{display:flex;align-items:center;gap:8px;height:26px;padding:0 8px;border-radius:5px;white-space:nowrap}
+.foot button:hover{background:var(--surface-2);color:var(--ink)}
+.foot .bar{width:120px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block}.dot.bad{background:var(--red)}
+.queue{position:fixed;left:0;right:0;bottom:34px;background:var(--surface);border-top:1px solid var(--line);display:none;padding:12px 24px 16px}
 .queue.on{display:block}
-.qrow{display:grid;grid-template-columns:150px minmax(0,1fr) 90px 60px;gap:14px;align-items:center;height:32px}
-.qrow .ticks{overflow:hidden}
-@media (prefers-reduced-motion:reduce){.stamp.hold b{transition:none}}
-@media (max-width:900px){.shelfwrap{grid-template-columns:1fr}.night{display:none}.pick,.up{grid-template-columns:1fr}.side,.plist{display:none}}
+.qrow{display:grid;grid-template-columns:160px minmax(0,1fr) 100px auto;gap:14px;align-items:center;height:36px;border-bottom:1px solid var(--line)}
+@media (max-width:900px){.pick,.up{grid-template-columns:1fr}.pick>.panel,.plist{display:none}}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-stale" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+<symbol id="i-run" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+<symbol id="i-me" viewBox="0 0 24 24"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></symbol>
+<symbol id="i-err" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/></symbol>
+</defs></svg>
 <div class="app">
 <header class="top">
-  <button class="crumb here" data-go="shelf" id="cShelf">서가</button>
+  <button class="crumb here" data-go="home" id="cHome">작품</button>
   <span class="sep" id="cSep" hidden>›</span>
   <button class="crumb here" id="cWork" hidden>대나무숲의 빌런이 되었다.</button>
-  <nav class="verbs" id="verbs">
-    <button class="verb" data-go="draw">그리기</button>
-    <button class="verb on" data-go="pick">고르기</button>
-    <button class="verb" data-go="pick">들이기</button>
-    <button class="verb" data-go="up">올리기<i></i></button>
-    <button class="verb" data-go="up">듣기</button>
+  <nav class="tabs" id="tabs">
+    <button class="tab" data-go="pick">생성</button>
+    <button class="tab" data-go="pick">선별 <span class="faint num">139</span></button>
+    <button class="tab" data-go="pick">반입</button>
+    <button class="tab" data-go="up">판본 <span class="cnt">1</span></button>
+    <button class="tab" data-go="up">댓글 <span class="cnt">3</span></button>
   </nav>
   <span class="sp"></span>
-  <button class="tool">디렉터</button><button class="tool">표지</button><button class="tool">보관함</button>
-  <button class="tool" id="theme">낮 / 밤</button>
+  <button class="tool">디렉터</button><button class="tool">표지</button><button class="tool">라이브러리</button><button class="tool">설정</button>
+  <button class="tool" id="theme">밝게 / 어둡게</button>
 </header>
 
 <main class="main">
-<section class="view on" id="v-shelf">
-  <div class="next">
-    <h1>도장 하나가 기다려요.</h1>
-    <span class="rest">그다음은 댓글 일곱, 고를 그림 139씬.</span>
-    <button class="go" data-go="up">바베 저장 보기 <kbd style="background:none;border-color:transparent;color:inherit">↵</kbd></button>
+<section class="view on" id="v-home">
+  <div class="todo">
+    <h1>할 일</h1>
+    <button class="chip hot" data-go="up"><b class="num">1</b> 승인 대기</button>
+    <button class="chip hot" data-go="up"><b class="num">7</b> 답글 안 단 댓글</button>
+    <button class="chip" data-go="pick"><b class="num">139</b> 선별할 씬</button>
+    <button class="chip hot"><b class="num">1</b> 로그인 풀림 · 티팟</button>
+    <span class="sp"></span>
+    <button class="btn primary" data-go="up">다음 할 일 열기 <kbd style="background:none;border-color:transparent;color:inherit">Enter</kbd></button>
   </div>
-  <div class="shelfwrap">
-    <div>
-      <div class="shelf"><div class="grid" id="grid"></div></div>
-      <div class="legend">
-        <span><i class="lamp ok"></i>그대로</span><span><i class="lamp stale"></i>에덴이 앞서감</span><span><i class="lamp run"></i>손보는 중</span><span><i class="lamp me"></i>내 차례</span><span class="faint">칸을 누르면 사정이 보여요</span>
-      </div>
-      <div class="peek" id="peek"><span class="faint">책등은 작품, 등불은 플랫폼이에요.</span></div>
+  <div class="two">
+    <div class="panel">
+      <h3>작품별 플랫폼 상태<span class="sp"></span>
+        <span class="seg"><button class="on">전체</button><button>낡은 것만</button><button>내 차례만</button></span>
+        <button class="btn sm">+ 새 작품</button></h3>
+      <div class="scroll"><table class="board"><thead><tr><th>작품</th><th>에덴</th><th>바베</th><th>젠잇</th><th>루나</th><th>엘린</th><th>네코</th><th>티팟</th><th>크랙</th><th>알플</th><th>우마이</th><th>챗플</th><th style="text-align:right;padding-right:14px">이미지</th></tr></thead><tbody id="board"></tbody></table></div>
+      <div style="padding:9px 14px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;align-items:center" class="faint" id="legend"></div>
     </div>
-    <aside class="night">
-      <h2>밤사이</h2>
-      <ol>
-        <li><time>02:14</time>우마이 로어북 넷 저장. 다시 읽어 확인함.</li>
-        <li><time>02:09</time>우마이 표지를 젠잇 3:4로 바꿈.</li>
-        <li class="me"><time>01:40</time>바베 공개작 저장안을 올려 둠. <b>도장 필요.</b></li>
-        <li><time>01:22</time>에덴 본문, 로컬과 같음.</li>
-        <li class="me"><time>어제</time>티팟 로그인이 풀림.</li>
-      </ol>
-    </aside>
+    <div class="panel">
+      <h3>AI가 한 일<span class="sp"></span><button class="btn sm ghost">전체 보기</button></h3>
+      <ul class="log" id="log"></ul>
+    </div>
   </div>
 </section>
 
-<section class="view" id="v-pick"><div class="desk"><div class="pick">
-  <div class="stage">그림<div class="keys"><span><kbd>F</kbd> 남기기</span><span><kbd>X</kbd> 빼기</span><span><kbd>G</kbd> 한 장 더</span><span><kbd>Z</kbd> 무르기</span><span><kbd>↑</kbd><kbd>↓</kbd> 씬</span></div></div>
-  <div class="side">
-    <h3>은비 · 놀람</h3><span class="muted num">12 / 139씬</span>
-    <div class="meter"><i style="width:9%"></i></div>
+<section class="view" id="v-pick"><div class="pick">
+  <div class="stage">이미지
+    <div class="keys"><button><kbd>F</kbd> 고르기</button><button><kbd>X</kbd> 버리기</button><button><kbd>G</kbd> 1장 더</button><button><kbd>Z</kbd> 되돌리기</button><button><kbd>↑</kbd><kbd>↓</kbd> 씬 이동</button></div></div>
+  <div class="panel" style="display:flex;flex-direction:column;min-height:0">
+    <h3>은비 · 놀람<span class="sp"></span><span class="muted num" style="font-weight:400">3 / 15장</span></h3>
+    <div style="padding:10px 14px 0"><div class="muted num" style="margin-bottom:6px">씬 12 / 139</div><div class="bar"><i style="width:9%"></i></div></div>
     <div class="strip" id="strip"></div>
-    <p class="faint" style="font-size:12px">남기거나 빼면 다음 장으로 넘어가요. 뺀 그림은 씬을 넘길 때 치워요.</p>
+    <div style="padding:0 14px 12px;font-size:12px" class="faint">고르거나 버리면 다음 장으로 넘어가요. 버린 그림은 씬을 넘길 때 지워져요.</div>
+    <div style="margin-top:auto;padding:12px 14px;border-top:1px solid var(--line)"><button class="btn primary" style="width:100%">고른 96장 반입하기</button></div>
   </div>
-</div></div></section>
+</div></section>
 
-<section class="view" id="v-up"><div class="desk"><div class="up">
-  <div class="plist" id="plist"></div>
-  <div class="sheet">
-    <header><b>바베</b><span class="muted">세 군데가 바뀌어요</span>
-      <div class="parts"><button class="on seen">본문</button><button>로어북</button><button>소개</button></div></header>
+<section class="view" id="v-up"><div class="up">
+  <div class="panel plist" id="plist"></div>
+  <div class="panel sheet">
+    <h3>바베 저장 내용<span class="muted" style="font-weight:400">3곳이 바뀌어요 · AI가 01:40에 올림</span><span class="sp"></span>
+      <span class="parts"><button class="on seen">본문</button><button>로어북</button><button>소개</button></span></h3>
     <div class="diff">
 <div class="at">관계 엔진 · 218줄</div>
 <div>  호감도는 장면의 결과로만 움직인다.</div>
-<div class="del">  상태창은 매 응답 끝에 출력한다.</div>
-<div class="add">  상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div>
-<div class="add">  응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div>
+<div class="del">- 상태창은 매 응답 끝에 출력한다.</div>
+<div class="add">+ 상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div>
+<div class="add">+ 응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div>
 <div class="at">글자 수</div>
 <div>  9,812 → 9,871 (한도 10,000)</div>
     </div>
     <div class="sign">
-      <span class="muted" id="signmsg" style="flex:1">공개작이라 독자에게 바로 보여요. 저장 전 모습은 남겨 둬요.</span>
-      <button class="back">돌려보내기</button>
-      <button class="stamp" id="stamp" aria-label="길게 눌러 승인"><b></b><span>꾹<br>눌러<br>찍기</span></button>
+      <span class="muted" id="signmsg">공개작이라 저장하면 독자에게 바로 보여요. 저장 전 상태는 백업해 둬요.</span><span class="sp"></span>
+      <button class="btn ghost">돌려보내기</button>
+      <button class="btn red" id="approve">승인하고 저장</button>
     </div>
   </div>
-</div></div></section>
+</div></section>
 </main>
 
 <div class="queue" id="queue">
-  <div class="qrow"><b>은비</b><span class="ticks" data-n="140" data-d="132"></span><span class="num muted">132 / 140</span><button class="back">빼기</button></div>
-  <div class="qrow"><b>유라</b><span class="ticks" data-n="140" data-d="0"></span><span class="num muted">0 / 140</span><button class="back">빼기</button></div>
-  <div class="qrow"><b>서진</b><span class="ticks" data-n="140" data-d="0"></span><span class="num muted">0 / 140</span><button class="back">빼기</button></div>
-  <div style="display:flex;gap:8px;margin-top:8px"><button class="back">잠깐 멈춤</button><button class="back" style="color:var(--seal-text)">전부 거두기</button></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>생성 대기열</b><span class="muted num">132 / 420장 · 46분 남음</span><span class="sp"></span><button class="btn sm">일시정지</button><button class="btn sm ghost" style="color:var(--red-text)">전부 취소</button></div>
+  <div class="qrow"><span><b>은비</b> <span class="st run"><svg><use href="#i-run"/></svg>생성 중</span></span><span class="bar"><i style="width:94%"></i></span><span class="num muted">132 / 140장</span><button class="btn sm ghost">취소</button></div>
+  <div class="qrow"><span><b>유라</b> <span class="faint">대기</span></span><span class="bar"><i style="width:0"></i></span><span class="num muted">0 / 140장</span><button class="btn sm ghost">취소</button></div>
+  <div class="qrow"><span><b>서진</b> <span class="faint">대기</span></span><span class="bar"><i style="width:0"></i></span><span class="num muted">0 / 140장</span><button class="btn sm ghost">취소</button></div>
 </div>
 
-<footer class="tape">
-  <button id="tapeBtn"><span class="ticks" data-n="60" data-d="19"></span><span class="num">132 / 420 · 46분</span></button>
-  <span class="num">Anlas 19,620</span>
+<footer class="foot">
+  <button id="qBtn"><span class="st run" style="height:20px"><svg><use href="#i-run"/></svg>생성 중</span><span class="bar"><i style="width:31%"></i></span><span class="num">132 / 420장 · 46분 남음</span></button>
+  <button><span class="num">Anlas 19,620</span></button>
   <span class="sp"></span>
-  <span><i class="sq"></i> 티팟 로그인</span>
-  <span><i class="dotok"></i> 창구 열림</span>
+  <button><i class="dot bad"></i>로그인 10 / 11</button>
+  <button><i class="dot"></i>MCP 켜짐</button>
 </footer>
 </div>
 
 <script>
 const $=(s)=>document.querySelector(s),$$=(s)=>[...document.querySelectorAll(s)];
-const P=['에덴','바베','젠잇','루나','엘린','네코','티팟','크랙','알플','우마이','챗플'];
+const ST={ok:['i-ok','최신'],stale:['i-stale','낡음'],run:['i-run','진행 중'],me:['i-me','승인'],err:['i-err','오류'],none:['','—']};
+const badge=(k,tag='span',label)=>{const[i,t]=ST[k];return `<${tag} class="st ${k}"${tag==='button'?' data-go="up"':''}>${i?`<svg><use href="#${i}"/></svg>`:''}${label||t}</${tag}>`};
 const W=[
- ['대나무숲의 빌런이 되었다.','ok stale stale stale stale none stale stale stale ok none','2,530',1],
- ['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok me ok ok none none','1,204',1],
- ['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok none none','884',0],
- ['오프파코','ok ok ok none ok none ok ok run none none','1,960',0],
- ['생활비','ok ok none none none none none none none none none','310',0],
- ['예시 작품 여섯','ok ok ok ok ok ok ok ok ok ok none','640',0],
- ['예시 작품 일곱','ok stale ok ok stale ok ok ok ok none none','512',0]];
-const WHY={ok:'에덴과 같은 판이에요.',stale:'에덴이 11월 8일에 바뀌었어요. 이 판은 그 전 것.',run:'지금 옮기는 중이에요.',me:'저장안이 올라와 있어요. 도장을 기다려요.'};
-let h='<span class="lab"></span>'+P.map(p=>`<span class="lab">${p}</span>`).join('')+'<span class="lab" style="line-height:34px">그림</span>';
-W.forEach(([t,s,n,m],i)=>{h+=`<div class="spine${m?' mine':''}" data-go="pick">${t}</div>`+s.split(' ').map((k,j)=>`<span class="cell" data-w="${i}" data-p="${j}" data-k="${k}"><i class="lamp ${k}"></i></span>`).join('')+`<span class="cell foot num">${n}</span>`});
-h+='<div class="spine new">새 작품</div>'+P.map(()=>'<span class="cell"><i class="lamp none"></i></span>').join('')+'<span class="cell foot">—</span>';
-$('#grid').innerHTML=h;
-$('#grid').addEventListener('click',e=>{const c=e.target.closest('.cell[data-k]');if(!c||c.dataset.k==='none')return;
- $('#peek').innerHTML=`<b>${W[c.dataset.w][0]}</b> · ${P[c.dataset.p]}<br><span class="muted">${WHY[c.dataset.k]}</span>`});
+ ['대나무숲의 빌런이 되었다.','ok stale stale stale stale none stale stale stale ok none','2,530'],
+ ['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok err ok ok none none','1,204'],
+ ['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok none none','884'],
+ ['오프파코','ok ok ok none ok none ok ok run none none','1,960'],
+ ['생활비','ok ok none none none none none none none none none','310']];
+$('#board').innerHTML=W.map(([t,s,n])=>`<tr><td><button class="wname" data-go="pick">${t}</button></td>${s.split(' ').map(k=>`<td>${badge(k,k==='me'||k==='stale'||k==='err'?'button':'span')}</td>`).join('')}<td class="num muted" style="text-align:right;padding-right:14px">${n}</td></tr>`).join('');
+$('#legend').innerHTML=[['ok','에덴과 같음'],['stale','에덴이 그 뒤에 바뀜'],['run','AI가 작업 중'],['me','내 승인 필요'],['err','로그인·저장 실패']].map(([k,d])=>`<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px">${badge(k)}${d}</span>`).join('');
+$('#log').innerHTML=[['02:14','우마이 「대나무숲…」 로어북 4개 저장','ok','확인됨'],['02:09','우마이 표지 교체','ok','확인됨'],['01:40','바베 「비 오는 날…」 공개작 저장안','me','승인 필요'],['01:22','에덴 「대나무숲…」 읽음 — 로컬과 같음','',''],['어제','티팟 읽기 실패','err','로그인 풀림']].map(([t,m,k,l])=>`<li><span class="faint num">${t}</span><span>${m}</span>${k?badge(k,k==='me'?'button':'span',l):'<span></span>'}</li>`).join('');
 $('#strip').innerHTML=Array.from({length:15},(_,i)=>`<div class="${i===2?'cur':i===0?'kept':i===1?'out':''}"></div>`).join('');
-$('#plist').innerHTML=[['에덴','ok','정본'],['바베','me','도장'],['젠잇','stale','11-08 전'],['루나','stale','11-08 전'],['엘린','stale','11-08 전'],['티팟','stale','11-08 전'],['크랙','stale','11-08 전'],['알플','stale','11-08 전'],['우마이','ok','11-10'],['네코','none','아직'],['챗플','none','아직']].map(([n,k,r])=>`<button class="${n==='바베'?'on':''}"><i class="lamp ${k}"></i>${n}<span class="r">${r}</span></button>`).join('');
-$$('.ticks').forEach(t=>{const n=+t.dataset.n,d=+t.dataset.d;t.innerHTML=Array.from({length:n},(_,i)=>`<i class="${i<d?'d':i===d&&d?'n':''}"></i>`).join('')});
-function go(v){const home=v==='shelf';$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+(v==='draw'?'pick':v)));
- $('#cSep').hidden=$('#cWork').hidden=home;$('#verbs').classList.toggle('on',!home);$('#cShelf').classList.toggle('here',home);
- const i={draw:0,pick:1,up:3}[v];$$('.verb').forEach((b,j)=>b.classList.toggle('on',j===i))}
+$('#plist').innerHTML=[['에덴','ok','정본'],['바베','me','승인 필요'],['젠잇','stale'],['루나','stale'],['엘린','stale'],['티팟','stale'],['크랙','stale'],['알플','stale'],['우마이','ok'],['네코','none','안 올림'],['챗플','none','안 올림']].map(([n,k,l])=>`<button class="${n==='바베'?'on':''}">${n}<span class="sp"></span>${badge(k,'span',l)}</button>`).join('');
+function go(v){const home=v==='home';$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));
+ $('#cSep').hidden=$('#cWork').hidden=home;$('#tabs').classList.toggle('on',!home);$('#cHome').classList.toggle('here',home);
+ const i={pick:1,up:3}[v];$$('.tab').forEach((b,j)=>b.classList.toggle('on',j===i));$('.main').scrollTop=0}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);
- const p=e.target.closest('.parts button');if(p){$$('.parts button').forEach(x=>x.classList.remove('on'));p.classList.add('on','seen')}});
+ const p=e.target.closest('.parts button');if(p){$$('.parts button').forEach(x=>x.classList.remove('on'));p.classList.add('on','seen')}
+ const s=e.target.closest('.seg button');if(s){[...s.parentElement.children].forEach(x=>x.classList.remove('on'));s.classList.add('on')}});
 $('#theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'};
-$('#tapeBtn').onclick=()=>$('#queue').classList.toggle('on');
-const st=$('#stamp');let tm;
-const down=()=>{if(st.classList.contains('done'))return;st.classList.add('hold');tm=setTimeout(()=>{st.classList.remove('hold');st.classList.add('done');st.querySelector('span').innerHTML='승인';$('#signmsg').textContent='저장했어요. 다시 읽어 보니 같아요.'},700)};
-const up=()=>{clearTimeout(tm);st.classList.remove('hold')};
-st.addEventListener('pointerdown',down);st.addEventListener('pointerup',up);st.addEventListener('pointerleave',up);
-st.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat)down()});st.addEventListener('keyup',up);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#queue').classList.remove('on');go('shelf')}if(e.key==='Enter'&&$('#v-shelf').classList.contains('on')&&document.activeElement===document.body)go('up')});
+$('#qBtn').onclick=()=>$('#queue').classList.toggle('on');
+$('#approve').onclick=e=>{e.target.disabled=true;e.target.textContent='저장됨';e.target.className='btn';$('#signmsg').textContent='저장했어요. 다시 읽어 보니 보낸 내용과 같아요.'};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#queue').classList.remove('on')}if(e.key==='Enter'&&$('#v-home').classList.contains('on')&&document.activeElement===document.body)go('up')});
 if(location.hash)go(location.hash.slice(1));if(location.search.includes('dark'))document.documentElement.dataset.theme='dark';if(location.search.includes('q'))$('#queue').classList.add('on');
 </script>
 </body>
