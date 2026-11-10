@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier 시안</title>
+<style>
+:root{
+  --paper:#f4f1ea; --surface:#fbf9f4; --surface-2:#ebe7de; --ink:#1f1d1a; --muted:#5f5a51; --faint:#716b61; --line:#dcd6c9;
+  --seal:#c8372d; --on-seal:#fffaf6; --seal-text:#ad2a21; --seal-soft:#f6dfd9;
+  --jjok:#2a5a88; --jjok-soft:#dde7f0; --sol:#3a6a4c; --sol-soft:#dfeae1; --chija:#855e10; --chija-soft:#f1e5c6;
+  --image-bg:#e3e3e3; color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --paper:#161513; --surface:#1d1c19; --surface-2:#282623; --ink:#ece8df; --muted:#aaa497; --faint:#857f73; --line:#37342f;
+  --seal:#e8594c; --on-seal:#1d0906; --seal-text:#f0776b; --seal-soft:#3b1a16;
+  --jjok:#8fb6dc; --jjok-soft:#17283a; --sol:#8fc29d; --sol-soft:#18291d; --chija:#dab45e; --chija-soft:#33290f;
+  --image-bg:#1b1b1b; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font:13px/1.55 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}.faint{color:var(--faint)}
+kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--muted);background:var(--surface)}
+.app{display:grid;grid-template-rows:44px 1fr 34px;height:100vh}
+
+/* 위: 지금 어디인가 */
+.top{display:flex;align-items:center;gap:4px;padding:0 14px;border-bottom:1px solid var(--line)}
+.crumb{height:28px;padding:0 9px;border-radius:6px;color:var(--muted)}
+.crumb:hover{background:var(--surface-2);color:var(--ink)}
+.crumb.here{color:var(--ink);font-weight:650}
+.sep{color:var(--faint);padding:0 2px}
+.verbs{display:none;margin-left:14px;gap:2px}
+.verbs.on{display:flex}
+.verb{height:28px;padding:0 11px;border-radius:14px;color:var(--muted);position:relative}
+.verb:hover{color:var(--ink)}
+.verb.on{background:var(--ink);color:var(--paper);font-weight:600}
+.verb i{position:absolute;right:3px;top:3px;width:6px;height:6px;background:var(--seal);border-radius:1px}
+.top .sp{flex:1}
+.tool{height:28px;padding:0 9px;border-radius:6px;color:var(--faint)}.tool:hover{color:var(--ink);background:var(--surface-2)}
+
+.main{min-height:0;overflow:auto}
+.view{display:none;height:100%}.view.on{display:block}
+
+/* 다음 한 줄 */
+.next{display:flex;align-items:baseline;gap:12px;padding:26px 28px 18px}
+.next h1{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em}
+.next .go{margin-left:auto;display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:17px;background:var(--seal);color:var(--on-seal);font-weight:650;align-self:center}
+.next .rest{color:var(--muted)}
+
+/* 서가: 작품 = 책등, 플랫폼 = 등불 */
+.shelfwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;height:calc(100% - 78px)}
+.shelf{overflow:auto;padding:0 28px 20px}
+.grid{display:grid;grid-auto-flow:column;grid-auto-columns:46px;grid-template-rows:210px repeat(11,26px) 34px;column-gap:6px;width:max-content}
+.lab{grid-column:1;position:sticky;left:0;background:var(--paper);z-index:2;width:58px;padding-right:10px;text-align:right;color:var(--faint);font-size:11px;line-height:26px}
+.grid .lab:first-child{line-height:1}
+.spine{writing-mode:vertical-rl;text-orientation:mixed;display:flex;align-items:center;justify-content:flex-start;padding:12px 0;background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:5px 5px 0 0;font-weight:600;letter-spacing:.02em;overflow:hidden;white-space:nowrap;cursor:pointer;position:relative}
+.spine:hover{background:var(--surface-2)}
+.spine.mine{padding-top:20px}
+.spine.mine::after{content:"";position:absolute;top:6px;left:50%;margin-left:-3px;width:6px;height:6px;background:var(--seal);border-radius:1px}
+.spine.new{color:var(--faint);border-style:dashed;font-weight:500}
+.cell{display:grid;place-items:center;background:var(--surface);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.cell.foot{border-bottom:1px solid var(--line);border-radius:0 0 5px 5px;font-size:11px;color:var(--faint)}
+.lamp{width:12px;height:12px;border-radius:50%;display:block}
+.lamp.ok{background:var(--sol)}
+.lamp.stale{background:linear-gradient(90deg,var(--chija) 50%,transparent 50%);box-shadow:inset 0 0 0 1.5px var(--chija)}
+.lamp.run{box-shadow:inset 0 0 0 2px var(--jjok)}
+.lamp.me{background:var(--seal);border-radius:2px}
+.lamp.none{width:3px;height:3px;background:var(--line)}
+.cell:has(.lamp:not(.none)){cursor:pointer}
+.cell:has(.lamp:not(.none)):hover{background:var(--surface-2)}
+.legend{display:flex;gap:16px;padding:12px 28px 0 96px;color:var(--faint);font-size:11px;align-items:center;flex-wrap:wrap}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.peek{margin:10px 28px 0 96px;padding:10px 14px;border-left:2px solid var(--ink);background:var(--surface);min-height:42px;max-width:560px}
+
+/* 밤사이 */
+.night{border-left:1px solid var(--line);padding:0 22px;overflow:auto}
+.night h2{font-size:13px;font-weight:650;margin:0 0 10px}
+.night ol{list-style:none;margin:0;padding:0;border-left:1px solid var(--line)}
+.night li{position:relative;padding:0 0 14px 14px}
+.night li::before{content:"";position:absolute;left:-3px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--faint)}
+.night li.me::before{background:var(--seal);border-radius:1px}
+.night time{display:block;font-size:11px;color:var(--faint)}
+
+/* 작업대 */
+.desk{padding:22px 28px;height:100%}
+.pick{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;height:100%}
+.stage{background:var(--image-bg);border-radius:6px;display:grid;place-items:center;color:var(--faint);position:relative}
+.keys{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:6px 14px;font-size:12px;color:var(--muted);white-space:nowrap}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;align-content:start}
+.strip div{aspect-ratio:1;background:var(--image-bg);border-radius:4px;position:relative}
+.strip .cur{outline:2px solid var(--ink);outline-offset:1px}
+.strip .kept::after{content:"";position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--sol)}
+.strip .out{opacity:.25}
+.side h3{margin:0 0 2px;font-size:13px}
+.meter{height:3px;background:var(--surface-2);margin:10px 0 14px}.meter i{display:block;height:100%;background:var(--ink)}
+
+/* 올리기 + 도장 */
+.up{display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px;height:100%}
+.plist button{display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border-radius:6px;text-align:left}
+.plist button:hover,.plist button.on{background:var(--surface)}
+.plist button.on{font-weight:650}
+.plist .r{margin-left:auto;font-size:11px;color:var(--faint)}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-height:0}
+.sheet header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.parts{display:flex;gap:4px;margin-left:auto}
+.parts button{height:24px;padding:0 9px;border-radius:12px;font-size:12px;color:var(--muted)}
+.parts button.on{background:var(--surface-2);color:var(--ink);font-weight:600}
+.parts button.seen::after{content:" ✓";color:var(--sol)}
+.diff{flex:1;overflow:auto;padding:14px 0;font:12.5px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
+.diff div{padding:0 16px;white-space:pre-wrap}
+.diff .add{background:var(--sol-soft)}.diff .del{background:var(--seal-soft);text-decoration:line-through;text-decoration-color:var(--faint)}
+.diff .at{color:var(--faint);padding-top:8px}
+.sign{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--line)}
+.stamp{position:relative;width:64px;height:64px;border-radius:8px;border:2px solid var(--seal);color:var(--seal-text);font-weight:700;font-size:12px;line-height:1.2;overflow:hidden;user-select:none}
+.stamp b{position:absolute;inset:0;background:var(--seal);transform:scaleY(0);transform-origin:bottom}
+.stamp.hold b{transform:scaleY(1);transition:transform .7s linear}
+.stamp span{position:relative}
+.stamp.hold span,.stamp.done span{color:var(--on-seal)}
+.stamp.done{background:var(--seal);transform:rotate(-4deg)}
+.back{height:32px;padding:0 12px;border-radius:6px;color:var(--muted)}.back:hover{background:var(--surface-2);color:var(--ink)}
+
+/* 아래: 띠 */
+.tape{display:flex;align-items:center;gap:14px;padding:0 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);min-width:0}
+.tape button{display:flex;align-items:center;gap:10px;height:26px;padding:0 8px;border-radius:5px;min-width:0}
+.tape button:hover{background:var(--surface-2);color:var(--ink)}
+.ticks{display:flex;gap:1px;align-items:center}
+.ticks i{width:2px;height:10px;background:var(--line)}.ticks i.d{background:var(--ink)}.ticks i.n{background:var(--jjok);height:14px}
+.tape .sp{flex:1}
+.sq{width:7px;height:7px;background:var(--seal);border-radius:1px;display:inline-block}
+.dotok{width:7px;height:7px;background:var(--sol);border-radius:50%;display:inline-block}
+.queue{position:fixed;left:0;right:0;bottom:34px;background:var(--surface);border-top:1px solid var(--line);display:none;padding:14px 28px 18px}
+.queue.on{display:block}
+.qrow{display:grid;grid-template-columns:150px minmax(0,1fr) 90px 60px;gap:14px;align-items:center;height:32px}
+.qrow .ticks{overflow:hidden}
+@media (prefers-reduced-motion:reduce){.stamp.hold b{transition:none}}
+@media (max-width:900px){.shelfwrap{grid-template-columns:1fr}.night{display:none}.pick,.up{grid-template-columns:1fr}.side,.plist{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top">
+  <button class="crumb here" data-go="shelf" id="cShelf">서가</button>
+  <span class="sep" id="cSep" hidden>›</span>
+  <button class="crumb here" id="cWork" hidden>대나무숲의 빌런이 되었다.</button>
+  <nav class="verbs" id="verbs">
+    <button class="verb" data-go="draw">그리기</button>
+    <button class="verb on" data-go="pick">고르기</button>
+    <button class="verb" data-go="pick">들이기</button>
+    <button class="verb" data-go="up">올리기<i></i></button>
+    <button class="verb" data-go="up">듣기</button>
+  </nav>
+  <span class="sp"></span>
+  <button class="tool">디렉터</button><button class="tool">표지</button><button class="tool">보관함</button>
+  <button class="tool" id="theme">낮 / 밤</button>
+</header>
+
+<main class="main">
+<section class="view on" id="v-shelf">
+  <div class="next">
+    <h1>도장 하나가 기다려요.</h1>
+    <span class="rest">그다음은 댓글 일곱, 고를 그림 139씬.</span>
+    <button class="go" data-go="up">바베 저장 보기 <kbd style="background:none;border-color:transparent;color:inherit">↵</kbd></button>
+  </div>
+  <div class="shelfwrap">
+    <div>
+      <div class="shelf"><div class="grid" id="grid"></div></div>
+      <div class="legend">
+        <span><i class="lamp ok"></i>그대로</span><span><i class="lamp stale"></i>에덴이 앞서감</span><span><i class="lamp run"></i>손보는 중</span><span><i class="lamp me"></i>내 차례</span><span class="faint">칸을 누르면 사정이 보여요</span>
+      </div>
+      <div class="peek" id="peek"><span class="faint">책등은 작품, 등불은 플랫폼이에요.</span></div>
+    </div>
+    <aside class="night">
+      <h2>밤사이</h2>
+      <ol>
+        <li><time>02:14</time>우마이 로어북 넷 저장. 다시 읽어 확인함.</li>
+        <li><time>02:09</time>우마이 표지를 젠잇 3:4로 바꿈.</li>
+        <li class="me"><time>01:40</time>바베 공개작 저장안을 올려 둠. <b>도장 필요.</b></li>
+        <li><time>01:22</time>에덴 본문, 로컬과 같음.</li>
+        <li class="me"><time>어제</time>티팟 로그인이 풀림.</li>
+      </ol>
+    </aside>
+  </div>
+</section>
+
+<section class="view" id="v-pick"><div class="desk"><div class="pick">
+  <div class="stage">그림<div class="keys"><span><kbd>F</kbd> 남기기</span><span><kbd>X</kbd> 빼기</span><span><kbd>G</kbd> 한 장 더</span><span><kbd>Z</kbd> 무르기</span><span><kbd>↑</kbd><kbd>↓</kbd> 씬</span></div></div>
+  <div class="side">
+    <h3>은비 · 놀람</h3><span class="muted num">12 / 139씬</span>
+    <div class="meter"><i style="width:9%"></i></div>
+    <div class="strip" id="strip"></div>
+    <p class="faint" style="font-size:12px">남기거나 빼면 다음 장으로 넘어가요. 뺀 그림은 씬을 넘길 때 치워요.</p>
+  </div>
+</div></div></section>
+
+<section class="view" id="v-up"><div class="desk"><div class="up">
+  <div class="plist" id="plist"></div>
+  <div class="sheet">
+    <header><b>바베</b><span class="muted">세 군데가 바뀌어요</span>
+      <div class="parts"><button class="on seen">본문</button><button>로어북</button><button>소개</button></div></header>
+    <div class="diff">
+<div class="at">관계 엔진 · 218줄</div>
+<div>  호감도는 장면의 결과로만 움직인다.</div>
+<div class="del">  상태창은 매 응답 끝에 출력한다.</div>
+<div class="add">  상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div>
+<div class="add">  응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div>
+<div class="at">글자 수</div>
+<div>  9,812 → 9,871 (한도 10,000)</div>
+    </div>
+    <div class="sign">
+      <span class="muted" id="signmsg" style="flex:1">공개작이라 독자에게 바로 보여요. 저장 전 모습은 남겨 둬요.</span>
+      <button class="back">돌려보내기</button>
+      <button class="stamp" id="stamp" aria-label="길게 눌러 승인"><b></b><span>꾹<br>눌러<br>찍기</span></button>
+    </div>
+  </div>
+</div></div></section>
+</main>
+
+<div class="queue" id="queue">
+  <div class="qrow"><b>은비</b><span class="ticks" data-n="140" data-d="132"></span><span class="num muted">132 / 140</span><button class="back">빼기</button></div>
+  <div class="qrow"><b>유라</b><span class="ticks" data-n="140" data-d="0"></span><span class="num muted">0 / 140</span><button class="back">빼기</button></div>
+  <div class="qrow"><b>서진</b><span class="ticks" data-n="140" data-d="0"></span><span class="num muted">0 / 140</span><button class="back">빼기</button></div>
+  <div style="display:flex;gap:8px;margin-top:8px"><button class="back">잠깐 멈춤</button><button class="back" style="color:var(--seal-text)">전부 거두기</button></div>
+</div>
+
+<footer class="tape">
+  <button id="tapeBtn"><span class="ticks" data-n="60" data-d="19"></span><span class="num">132 / 420 · 46분</span></button>
+  <span class="num">Anlas 19,620</span>
+  <span class="sp"></span>
+  <span><i class="sq"></i> 티팟 로그인</span>
+  <span><i class="dotok"></i> 창구 열림</span>
+</footer>
+</div>
+
+<script>
+const $=(s)=>document.querySelector(s),$$=(s)=>[...document.querySelectorAll(s)];
+const P=['에덴','바베','젠잇','루나','엘린','네코','티팟','크랙','알플','우마이','챗플'];
+const W=[
+ ['대나무숲의 빌런이 되었다.','ok stale stale stale stale none stale stale stale ok none','2,530',1],
+ ['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok me ok ok none none','1,204',1],
+ ['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok none none','884',0],
+ ['오프파코','ok ok ok none ok none ok ok run none none','1,960',0],
+ ['생활비','ok ok none none none none none none none none none','310',0],
+ ['예시 작품 여섯','ok ok ok ok ok ok ok ok ok ok none','640',0],
+ ['예시 작품 일곱','ok stale ok ok stale ok ok ok ok none none','512',0]];
+const WHY={ok:'에덴과 같은 판이에요.',stale:'에덴이 11월 8일에 바뀌었어요. 이 판은 그 전 것.',run:'지금 옮기는 중이에요.',me:'저장안이 올라와 있어요. 도장을 기다려요.'};
+let h='<span class="lab"></span>'+P.map(p=>`<span class="lab">${p}</span>`).join('')+'<span class="lab" style="line-height:34px">그림</span>';
+W.forEach(([t,s,n,m],i)=>{h+=`<div class="spine${m?' mine':''}" data-go="pick">${t}</div>`+s.split(' ').map((k,j)=>`<span class="cell" data-w="${i}" data-p="${j}" data-k="${k}"><i class="lamp ${k}"></i></span>`).join('')+`<span class="cell foot num">${n}</span>`});
+h+='<div class="spine new">새 작품</div>'+P.map(()=>'<span class="cell"><i class="lamp none"></i></span>').join('')+'<span class="cell foot">—</span>';
+$('#grid').innerHTML=h;
+$('#grid').addEventListener('click',e=>{const c=e.target.closest('.cell[data-k]');if(!c||c.dataset.k==='none')return;
+ $('#peek').innerHTML=`<b>${W[c.dataset.w][0]}</b> · ${P[c.dataset.p]}<br><span class="muted">${WHY[c.dataset.k]}</span>`});
+$('#strip').innerHTML=Array.from({length:15},(_,i)=>`<div class="${i===2?'cur':i===0?'kept':i===1?'out':''}"></div>`).join('');
+$('#plist').innerHTML=[['에덴','ok','정본'],['바베','me','도장'],['젠잇','stale','11-08 전'],['루나','stale','11-08 전'],['엘린','stale','11-08 전'],['티팟','stale','11-08 전'],['크랙','stale','11-08 전'],['알플','stale','11-08 전'],['우마이','ok','11-10'],['네코','none','아직'],['챗플','none','아직']].map(([n,k,r])=>`<button class="${n==='바베'?'on':''}"><i class="lamp ${k}"></i>${n}<span class="r">${r}</span></button>`).join('');
+$$('.ticks').forEach(t=>{const n=+t.dataset.n,d=+t.dataset.d;t.innerHTML=Array.from({length:n},(_,i)=>`<i class="${i<d?'d':i===d&&d?'n':''}"></i>`).join('')});
+function go(v){const home=v==='shelf';$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+(v==='draw'?'pick':v)));
+ $('#cSep').hidden=$('#cWork').hidden=home;$('#verbs').classList.toggle('on',!home);$('#cShelf').classList.toggle('here',home);
+ const i={draw:0,pick:1,up:3}[v];$$('.verb').forEach((b,j)=>b.classList.toggle('on',j===i))}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);
+ const p=e.target.closest('.parts button');if(p){$$('.parts button').forEach(x=>x.classList.remove('on'));p.classList.add('on','seen')}});
+$('#theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'};
+$('#tapeBtn').onclick=()=>$('#queue').classList.toggle('on');
+const st=$('#stamp');let tm;
+const down=()=>{if(st.classList.contains('done'))return;st.classList.add('hold');tm=setTimeout(()=>{st.classList.remove('hold');st.classList.add('done');st.querySelector('span').innerHTML='승인';$('#signmsg').textContent='저장했어요. 다시 읽어 보니 같아요.'},700)};
+const up=()=>{clearTimeout(tm);st.classList.remove('hold')};
+st.addEventListener('pointerdown',down);st.addEventListener('pointerup',up);st.addEventListener('pointerleave',up);
+st.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat)down()});st.addEventListener('keyup',up);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#queue').classList.remove('on');go('shelf')}if(e.key==='Enter'&&$('#v-shelf').classList.contains('on')&&document.activeElement===document.body)go('up')});
+if(location.hash)go(location.hash.slice(1));if(location.search.includes('dark'))document.documentElement.dataset.theme='dark';if(location.search.includes('q'))$('#queue').classList.add('on');
+</script>
+</body>
+</html>

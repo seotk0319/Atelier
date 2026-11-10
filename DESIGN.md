@@ -1,48 +1,101 @@
-# NAIS3 Custom Design Contract
+# Atelier 디자인
 
-## 1. Atmosphere
+한 사람이 작품을 만들고, 열한 곳에 올리고, 독자 말을 듣는 작업실. 화면은 그 사람의 하루를 따라간다.
 
-- Product type: dense desktop production tool.
-- Direction: restrained, neutral, utilitarian, and optimized for repeated scanning.
-- Preserve the existing NAIS3 visual language. Do not introduce marketing layouts or decorative effects.
+## 1. 세 가지 약속
 
-## 2. Color
+1. **먹과 종이, 그리고 인주 한 점.** 화면은 먹색 글자와 종이색 바탕뿐이다. 색은 그림이 낸다. 붉은색은 한 가지 뜻으로만 쓴다: 지금 내 손이 필요하다.
+2. **묻기 전에 보인다.** 앱을 켜면 다음 할 일이 한 문장으로 나와 있다. `Enter`를 누르면 그 일로 간다.
+3. **조용하다.** 끝난 일은 말하지 않는다. 숫자가 0이면 칸을 지운다. 도는 일은 아래 띠에서만 움직인다.
 
-- All component colors must use the semantic tokens declared in `src/renderer/src/assets/main.css`.
-- Surfaces: `paper`, `surface`, and `surface-2`.
-- Text: `ink`, `muted`, and `faint`.
-- Structure: `line`.
-- Actions: `accent`, `accent-soft`, and `danger`.
-- Existing functional status colors from the current Tailwind components may be reused without adding a new palette.
-- No gradients, glows, decorative color blobs, or new raw color literals.
+참고한 생각: 하라 켄야의 "비움은 채워질 가능성"(화면을 채우지 않고 그림과 글이 들어올 자리를 남긴다), 캄 테크놀로지(정보는 주변에 머물다 필요할 때만 가운데로 온다), App Store Connect의 상태 색(색의 뜻은 "누가 움직일 차례인가"), Lokalise의 낡음 표시, Lightroom의 한 키 선별.
 
-## 3. Typography
+## 2. 화면의 뼈
 
-- UI font: `var(--font-ui)`, currently Pretendard Variable with the existing system fallbacks.
-- Technical values: `var(--font-mono)`.
-- Keep the existing compact type scale. Toolbars and controls use the established 11px to 14px utilities.
-- Letter spacing remains zero. Do not add viewport-scaled typography.
+```text
+┌ 서가 › 작품 이름   그리기 고르기 들이기 올리기 듣기      디렉터 표지 보관함 ┐
+│                                                                        │
+│  지금 화면                                                               │
+│                                                                        │
+└ ▮▮▮▮▮▯▯▯ 132 / 420 · 46분   Anlas            ■ 티팟 로그인  ● 창구 열림 ┘
+```
 
-## 4. Spacing
+- **서가**가 첫 화면이다. 작품은 세로로 선 책등, 플랫폼은 그 아래 등불 열한 개. 표를 눕힌 것이라 작품이 늘어도 옆으로만 길어진다.
+- 책등을 누르면 그 작품의 **작업대**로 간다. 메뉴는 그 작품이 지나는 길이다: 그리기(생성·씬) → 고르기(선별) → 들이기(반입) → 올리기(판본·저장) → 듣기(댓글).
+- 작품에 묶이지 않는 도구(디렉터·표지·보관함·GPT)는 오른쪽 위에 흐리게 둔다.
+- 아래 **띠**는 어느 화면에서든 보인다. 눈금 하나가 그림 한 장(많으면 묶음). 누르면 줄 선 묶음이 올라오고, 거기서 묶음을 빼거나 멈춘다.
+- 사이드바·카드 격자·통계 타일은 쓰지 않는다.
 
-- Reuse existing Tailwind spacing utilities already present in the edited component.
-- Compact controls retain the established 32px or 40px heights.
-- Toolbars must wrap safely where the current component already supports wrapping.
-- Do not add new magic spacing values for these maintenance changes.
+## 3. 색
 
-## 5. Components
+화면용으로 맞춘 값이다. 이름은 빌렸고 전통색 표준값은 아니다.
 
-- Use the existing `Button`, `Slider`, tooltip, toast, and Lucide icon components.
-- Standard controls use the existing `rounded-md` shape and semantic border/surface tokens.
-- Preserve hover, focus, disabled, loading, empty, and error states.
-- Labels and tooltips must describe the real operation and real batch count.
+| 토큰 | 낮 (한지) | 밤 (먹지) | 쓰임 |
+|---|---|---|---|
+| `--paper` | `#f4f1ea` | `#161513` | 바탕 |
+| `--surface` | `#fbf9f4` | `#1d1c19` | 책등, 종이 한 장 |
+| `--surface-2` | `#ebe7de` | `#282623` | 눌린 자리 |
+| `--ink` | `#1f1d1a` | `#ece8df` | 글자, 고른 것, 진행 눈금 |
+| `--muted` | `#5f5a51` | `#aaa497` | 보조 글자 |
+| `--faint` | `#716b61` | `#857f73` | 표 머리, 시각 |
+| `--line` | `#dcd6c9` | `#37342f` | 선 |
+| `--seal` 인주 | `#c8372d` | `#e8594c` | 내 차례, 도장 |
+| `--on-seal` | `#fffaf6` | `#1d0906` | 인주 위 글자 |
+| `--seal-text` | `#ad2a21` | `#f0776b` | 붉은 글자 |
+| `--sol` 솔빛 | `#3a6a4c` | `#8fc29d` | 그대로(최신) |
+| `--chija` 치자 | `#855e10` | `#dab45e` | 에덴이 앞서감(낡음) |
+| `--jjok` 쪽빛 | `#2a5a88` | `#8fb6dc` | 손보는 중 |
+| `--image-bg` | `#e3e3e3` | `#1b1b1b` | 그림 뒤(색기 없는 회색) |
 
-## 6. Motion
+대비(계산값): 본문 14.9, 보조 6.1 / 7.4, 흐린 글자 4.6 이상, 인주 버튼 글자 5.0 / 5.5, 상태 글자 5.5 이상.
 
-- This maintenance scope adds no motion.
-- Preserve existing transitions. New motion may use only transform or opacity and must respect reduced motion.
+규칙
+- 핵심 버튼은 먹색 채움(`--ink` 바탕, `--paper` 글자)이다. 인주 채움은 "내 차례"로 데려가는 버튼과 도장에만.
+- 고른 것은 먹색 테두리나 먹색 알약. 색으로 고르지 않는다.
+- 지우기·거두기는 붉은 글자. 되돌릴 수 없으면 도장처럼 꾹 눌러야 한다.
+- 그림 옆에는 색 면을 두지 않는다.
+- 그라데이션(등불 반달 표시 제외), 그림자 겹, 유리 효과, 장식 아이콘 없음.
 
-## 7. Depth
+## 4. 등불
 
-- Reuse the existing border and shadow utilities already established by each component.
-- Do not add new elevation levels, glass effects, or nested decorative cards.
+색과 모양을 같이 쓴다. 흑백으로 찍어도 읽힌다.
+
+| 모양 | 뜻 | 누구 차례 |
+|---|---|---|
+| ● 찬 원, 솔빛 | 에덴과 같은 판 | 없음 |
+| ◐ 반달, 치자 | 에덴이 그 뒤에 바뀜 | AI에게 시키면 됨 |
+| ○ 빈 원, 쪽빛 | 지금 옮기는 중 | 없음 |
+| ■ 네모, 인주 | 저장안 대기, 로그인 풀림, 실패 | 나 |
+| · 작은 점 | 올리지 않음 | — |
+
+판정은 매니페스트의 「기준 에덴판」과 에덴 정식판 날짜를 견준다. 매니페스트가 없으면 점으로 둔다. 추측해서 솔빛을 켜지 않는다.
+
+## 5. 도장
+
+독자에게 보이는 일(공개작 저장, 공개 전환)과 되돌릴 수 없는 일(삭제, 덮어쓰기)은 도장으로 끝낸다.
+- 바뀐 내용이 화면 가득 먼저 보인다. 도장은 그 아래 오른쪽.
+- 0.7초 꾹 누르면 인주가 차오르고 찍힌다. 손을 떼면 무른다. 키보드는 `Enter`를 누르고 있기.
+- 찍으면 그 줄은 목록에서 빠지고 「밤사이」에 남는다.
+- 비공개·초안 저장은 도장 없이 AI가 한다.
+
+## 6. 글
+
+- 본문 13px, 화면 첫 문장 20px, 표 머리·시각 11px. Pretendard. 숫자는 폭이 같은 숫자.
+- 해요체. 한 문장, 사실 하나. 꾸미는 말은 뺀다.
+- 메뉴는 움직씨로: 그리기, 고르기, 들이기, 올리기, 듣기. 단추도: 남기기, 빼기, 무르기, 거두기, 돌려보내기.
+- 수는 뜻이 있을 때만. "도장 하나가 기다려요." "그다음은 댓글 일곱, 고를 그림 139씬."
+- 빈 화면은 한 줄. "조용해요. 밤새 온 말이 없어요."
+- 실패는 무슨 일이 있었는지와 내가 할 일. "티팟 로그인이 풀렸어요. 다시 들어가 주세요."
+- 설명이 필요한 단추는 이름이 틀린 것이다. 이름을 고친다.
+
+## 7. 손
+
+- 자주 하는 일은 키 하나. 키는 그 자리에서 늘 보인다(`F` 남기기 `X` 빼기 `G` 한 장 더 `Z` 무르기).
+- `Enter` 다음 할 일, `Esc` 서가로, `Ctrl+K` 찾기.
+- 마우스를 올려야 나오는 단추는 만들지 않는다.
+- 움직임은 120~180ms, 자리 옮김과 투명도만. 줄이기 설정을 따른다. 도장만 0.7초.
+- 생성 칸(프롬프트·네거티브·도구·생성 단추)의 순서는 NAIS3 Custom과 같게 둔다. 손이 기억하는 자리다.
+
+## 8. 시안
+
+`design/atelier-시안.html` — 서가, 고르기, 올리기(도장), 띠. 오른쪽 위 「낮 / 밤」.
