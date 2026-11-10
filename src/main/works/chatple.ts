@@ -355,6 +355,11 @@ async function ok(res: Response, what: string): Promise<void> {
 export const chatpleWorks: WorkAdapter = {
   id: 'chatple',
   label: '챗플',
+  guide: {
+    save: '공개 작품은 저장하면 수정본이 재심사에 들어가고, 재심사 중에는 저장이 막힌다(IN_REVIEW). 쓰기는 실제 계정에서 한 번도 해 보지 않았다.',
+    manual: ['새 작품', '이미지·표지', '도입부·캐릭터 추가와 삭제'],
+    unverified: ['쓰기 전부(본문 저장·공개 전환·작품 삭제). 실제 계정에서는 목록과 읽기만 확인했다']
+  },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'characters', 'save'],
 
   readAllowed: (url) =>

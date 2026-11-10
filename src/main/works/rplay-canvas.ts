@@ -357,9 +357,20 @@ export function rplayCompareCanvas(
       add('metadataSet ' + uid + ' 없음')
       continue
     }
-    for (const k of new Set([...Object.keys(m), ...Object.keys(got)]))
-      if (!volatile(k) && canonical(strip(m[k])) !== canonical(strip(got[k])))
-        add('metadataSet ' + uid + ' .' + k)
+    for (const k of new Set([...Object.keys(m), ...Object.keys(got)])) {
+      if (volatile(k)) continue
+      // 스토리 고급 설정은 서버가 파일에 없던 기본값 칸을 채워 넣는다 (2026-11-10 실제 가져오기에서
+      // liteMode:false가 붙음). 파일에 적은 칸만 견준다
+      if (k === 'advancedSettings' && isObj(m[k]) && isObj(got[k])) {
+        const want = m[k] as Obj
+        const have = got[k] as Obj
+        for (const s of Object.keys(want))
+          if (canonical(strip(want[s])) !== canonical(strip(have[s])))
+            add('metadataSet ' + uid + ' .advancedSettings.' + s)
+        continue
+      }
+      if (canonical(strip(m[k])) !== canonical(strip(got[k]))) add('metadataSet ' + uid + ' .' + k)
+    }
   }
   for (const uid of Object.keys(am)) if (!(uid in em)) add('metadataSet ' + uid + ' 더 있음')
 

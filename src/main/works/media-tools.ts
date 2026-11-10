@@ -3,7 +3,7 @@
 //  - 적용 단계는 계획 뒤 플랫폼 내용이 바뀌었으면 멈추고, 직전 원본을 스냅샷으로 남긴 뒤 다시 읽어 견준다.
 // 로컬 파일은 이미지 확장자와 크기 한도 안에서만 읽는다 (글 파일의 readText와 같은 제한).
 import { randomBytes } from 'node:crypto'
-import { workAdapter, workKey } from './adapters'
+import { platformNote, workAdapter, workKey } from './adapters'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type {
   FileRules,
@@ -12,6 +12,7 @@ import type {
   ImageGroup,
   LocalImage,
   WorkAdapter,
+  WorkImage,
   WorkIo
 } from './types'
 
@@ -125,19 +126,94 @@ const site = { type: 'string', description: '플랫폼 이름 (sites_list의 sit
 const workId = { type: 'string', description: '작품 번호 (works_list의 id)' }
 const text = { type: 'string' }
 
-const listed = (groups: ImageGroup[]): unknown =>
-  groups.map((g) => ({
-    character_index: g.character,
-    name: g.name,
-    images: g.images.map((image, index) => ({
-      index,
-      label: image.label,
-      is_default: image.isDefault,
-      visibility: image.visibility,
-      description: image.description,
-      url: image.url
-    }))
-  }))
+// ───────────── 이미지 목록 나눠 주기 ─────────────
+// 에셋이 수천 장인 작품은 목록 전체가 수십만 자라 부르는 AI 쪽에서 받지 못한다.
+// index는 언제나 묶음 전체 기준 번호다(잘라 줘도 바뀌지 않는다. images_plan의 remove·order가 이 번호를 쓴다).
+
+const IMAGE_PAGE_DEFAULT = 50
+const IMAGE_PAGE_MAX = 500
+/** 계획·적용 결과에서 묶음이 이 수 이하면 전부 싣는다 (예전과 같은 모양) */
+const IMAGE_SHOW_ALL = 50
+/** 그보다 큰 묶음은 앞쪽 이만큼 + 대표 + 이번에 건드린 이미지 주변만 싣는다 */
+const IMAGE_HEAD = 10
+const IMAGE_SHOWN_MAX = 200
+
+const shownImage = (image: WorkImage, index: number): Obj => ({
+  index,
+  label: image.label,
+  is_default: image.isDefault,
+  visibility: image.visibility,
+  description: image.description,
+  url: image.url
+})
+
+function whole(v: unknown, fallback: number, min: number, max: number, what: string): number {
+  if (v === undefined || v === null) return fallback
+  const n = Number(v)
+  if (!Number.isInteger(n) || n < min || n > max) throw new Error('BAD_RANGE ' + what)
+  return n
+}
+
+/** images_list: 묶음마다 offset부터 limit장. group을 주면 그 묶음만 */
+export function pagedGroups(groups: ImageGroup[], args: Obj): Obj {
+  const group =
+    args.group === undefined || args.group === null
+      ? null
+      : whole(args.group, 0, 0, Math.max(0, groups.length - 1), 'group')
+  if (group !== null && !groups.length) throw new Error('BAD_RANGE group')
+  const offset = whole(args.offset, 0, 0, Number.MAX_SAFE_INTEGER, 'offset')
+  const limit = whole(args.limit, IMAGE_PAGE_DEFAULT, 1, IMAGE_PAGE_MAX, 'limit')
+  let partial = false
+  const out = groups.flatMap((g, gi) => {
+    if (group !== null && gi !== group) return []
+    const count = g.images.length
+    const images = g.images.slice(offset, offset + limit)
+    const end = Math.min(count, offset + images.length)
+    if (offset > 0 || end < count) partial = true
+    return [
+      {
+        group: gi,
+        character_index: g.character,
+        name: g.name,
+        count,
+        offset,
+        returned: images.length,
+        next_offset: end < count ? end : null,
+        images: images.map((image, i) => shownImage(image, offset + i))
+      }
+    ]
+  })
+  return {
+    groups: out,
+    ...(partial
+      ? {
+          note: '묶음마다 일부만 줬어요(count가 전체 수). 이어 보려면 group과 offset(next_offset)을 주세요. index는 전체 기준 번호예요.'
+        }
+      : {})
+  }
+}
+
+/**
+ * images_plan·images_apply 결과용 목록. 작은 묶음은 전부, 큰 묶음은 앞쪽 일부·대표 이미지·이번에 건드린
+ * 이미지 주변만 싣고 partial: true를 붙인다 (검증은 이 목록이 아니라 전체로 한다).
+ */
+export function trimmedGroups(groups: ImageGroup[], focus: number, touched: number[]): unknown[] {
+  return groups.map((g, gi) => {
+    const count = g.images.length
+    const head = { group: gi, character_index: g.character, name: g.name, count }
+    if (count <= IMAGE_SHOW_ALL) return { ...head, images: g.images.map(shownImage) }
+    const keep = new Set<number>()
+    for (let i = 0; i < IMAGE_HEAD; i++) keep.add(i)
+    g.images.forEach((image, i) => {
+      if (image.isDefault) keep.add(i)
+    })
+    if (gi === focus)
+      for (const t of touched)
+        for (const i of [t - 1, t, t + 1]) if (i >= 0 && i < count) keep.add(i)
+    const shown = [...keep].sort((a, b) => a - b).slice(0, IMAGE_SHOWN_MAX)
+    return { ...head, partial: true, images: shown.map((i) => shownImage(g.images[i], i)) }
+  })
+}
 
 export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => void): ToolDef[] {
   const imagePlans = new Map<string, ImagePlan>()
@@ -204,10 +280,21 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         '작품의 이미지 목록을 플랫폼에서 새로 읽는다. 에덴은 캐릭터마다 묶음이 하나씩 있고(label = 이미지 코드), ' +
         '베이비챗은 묶음 하나에 0번이 대표 이미지, 1번부터 감정 이미지다(label = 감정 이름). ' +
         '젠잇은 묶음 0이 에셋(내부 이미지, label = 출력에서 {{url}} 뒤에 붙는 폴더/이름), 묶음 1이 대표 이미지다. ' +
-        'images_plan의 remove·order는 여기 나온 index를 쓴다.',
+        'images_plan의 remove·order는 여기 나온 index를 쓴다. 묶음마다 count(전체 수)와 offset부터 limit장' +
+        '(기본 50, 최대 500)만 주고 next_offset(더 없으면 null)을 알려 준다. group(묶음 번호 = character_index)을 ' +
+        '주면 그 묶음만 준다. index는 잘라 줘도 묶음 전체 기준 번호다.',
       inputSchema: {
         type: 'object',
-        properties: { site, work_id: workId },
+        properties: {
+          site,
+          work_id: workId,
+          group: {
+            type: 'integer',
+            description: '이 묶음만 본다 (character_index와 같은 번호. 묶음이 하나면 생략)'
+          },
+          offset: { type: 'integer', description: '묶음 안에서 이 index부터 (next_offset)' },
+          limit: { type: 'integer', description: '묶음마다 줄 이미지 수 (기본 50, 최대 500)' }
+        },
         required: ['site', 'work_id']
       },
       async run(args) {
@@ -220,7 +307,7 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         return {
           site: adapter.id,
           rules: adapter.imageRules,
-          groups: listed(adapter.imageGroups(raw))
+          ...pagedGroups(adapter.imageGroups(raw), args)
         }
       }
     },
@@ -242,7 +329,8 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         '우마이: main_file로 표지를 바꾸고, add로 작품 이미지를 더한다(label = 영문 소문자·숫자 5자 slug, 비우면 자동, ' +
         'description = 키워드 30자, visibility public / hidden). 우마이는 임시저장(초안)으로 저장돼, 발행한 작품은 ' +
         '사이트에서 작품 등록을 눌러야 독자에게 보인다. 챗플은 이미지 바꾸기를 지원하지 않는다. ' +
-        '파일 한도는 images_list의 rules(확장자·바이트)를 따른다.',
+        '파일 한도는 images_list의 rules(확장자·바이트)를 따른다. 결과의 current는 50장이 넘는 묶음이면 ' +
+        '앞쪽·대표·건드리는 이미지 주변만 싣는다(partial).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -307,11 +395,18 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
           sizes,
           expires: Date.now() + PLAN_TTL
         })
+        const which = changes.character ?? 0
+        const count = groups[which]?.images.length ?? 0
         return {
           plan_id: planId,
           changes: lines,
-          current: listed(groups),
-          note: '아직 아무것도 올리거나 지우지 않았어요. 사용자가 확인한 뒤 images_apply를 불러 주세요. 지운 이미지는 되돌릴 수 없어요.'
+          // 큰 묶음은 지울 이미지·대표·끝(더할 자리)·앞쪽 일부만 싣는다
+          current: trimmedGroups(groups, which, [
+            ...(changes.remove ?? []),
+            ...(changes.add?.length ? [count - 1] : [])
+          ]),
+          note: '아직 아무것도 올리거나 지우지 않았어요. 사용자가 확인한 뒤 images_apply를 불러 주세요. 지운 이미지는 되돌릴 수 없어요.',
+          ...platformNote(adapter)
         }
       }
     },
@@ -360,11 +455,17 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
         if (changes.main && (!now[0] || now[0].url === was[0]?.url)) problems.push('대표 이미지')
         if (changes.order && changes.order.map((i) => key(was[i])).join() !== now.map(key).join())
           problems.push('순서')
+        const added = changes.add?.length ?? 0
         return {
           applied: true,
           verified: problems.length === 0,
           mismatches: problems,
-          groups: listed(after),
+          // 큰 묶음은 새로 붙은 끝 이미지·대표·앞쪽 일부만 싣는다 (verified는 위에서 전체로 봤다)
+          groups: trimmedGroups(
+            after,
+            which,
+            Array.from({ length: added }, (_, i) => now.length - added + i)
+          ),
           backup
         }
       }
@@ -468,7 +569,8 @@ export function createMediaTools(deps: WorkToolDeps, forget: (key: string) => vo
           skipped,
           ignored,
           current_cover: adapter.coverUrl(raw),
-          note: '아직 올리지 않았어요. 사용자가 확인한 뒤 cover_apply를 불러 주세요. 올리면 지금 표지를 덮어써요.'
+          note: '아직 올리지 않았어요. 사용자가 확인한 뒤 cover_apply를 불러 주세요. 올리면 지금 표지를 덮어써요.',
+          ...platformNote(adapter)
         }
       }
     },

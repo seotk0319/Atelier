@@ -189,6 +189,14 @@ function shiftAuxiliary(prompts: Obj[], removed: number): Obj[] {
 export const nekoWorks: WorkAdapter = {
   id: 'neko',
   label: '네코챗',
+  guide: {
+    save: 'JSON으로 저장한다. 편집기가 저장 직후 따로 보내는 JSX 렌더러·네코 모바일 설정은 보내지 않는다.',
+    manual: [],
+    unverified: [
+      '공개작 저장(서버가 시트 검수 결과로 공개 상태를 낮출 수 있다)',
+      '저장 뒤 JSX 렌더러·네코 모바일 설정이 그대로인지'
+    ]
+  },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'save', 'images'],
 
   readAllowed: (url) => nekoPlain(url, READ_PATHS),

@@ -104,6 +104,11 @@ const edit = (raw: unknown): Obj => {
 export const babeWorks: WorkAdapter = {
   id: 'babe',
   label: '베이비챗',
+  guide: {
+    save: '저장할 때마다 버전이 1씩 오른다(되돌릴 수 없다). 제작자 코멘트는 빈 값, 팔로워 알림은 끈 채로 보낸다.',
+    manual: [],
+    unverified: ['공개작 저장', '공개 전환', '링크 공개(link)', '감정 이미지 순서', 'gif 변환']
+  },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'save', 'images'],
 
   readAllowed: (url) => plain(url, READ_PATHS),

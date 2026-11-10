@@ -247,6 +247,14 @@ export interface TeapotAdapter extends WorkAdapter {
 export const teapotWorks: TeapotAdapter = {
   id: 'teapot',
   label: '티팟',
+  guide: {
+    save: '임시저장(체크포인트)만 된다. 서비스 중인 작품은 바뀌지 않는다.',
+    manual: ['등록(심사 제출)', '공개 상태 바꾸기', '이미지 올리기'],
+    unverified: [
+      '등록된 작품에 임시저장했을 때 사이트 편집기가 여는 파일이 바뀌는지',
+      '등록된 작품의 삭제가 공개본까지 지우는지(삭제는 새로 만든 초안에서만 확인했다)'
+    ]
+  },
   caseSensitiveIds: true,
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'characters', 'save'],
 

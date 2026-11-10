@@ -5,7 +5,7 @@
 //  - canvas_apply: 계획 뒤 캔버스나 파일이 바뀌었으면 멈춘다. 직전 캔버스를 내보내 백업으로 남기고 가져온 뒤,
 //    다시 내보내 넣은 파일과 견준다. 가져오기는 캔버스 전체를 바꾸므로 사용자가 계획을 본 뒤에만 부른다.
 import { createHash, randomBytes } from 'node:crypto'
-import { workAdapter, workKey } from './adapters'
+import { platformNote, workAdapter, workKey } from './adapters'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type { CanvasFile, CanvasImportOptions, CanvasSummary, WorkAdapter, WorkIo } from './types'
 
@@ -274,7 +274,8 @@ export function createCanvasTools(deps: WorkToolDeps, forget: (key: string) => v
             preview: differences.slice(0, 30)
           },
           warnings,
-          note: '아직 가져오지 않았어요. 사용자가 확인한 뒤 canvas_apply를 불러 주세요. 가져오면 캔버스 전체가 바뀌어요.'
+          note: '아직 가져오지 않았어요. 사용자가 확인한 뒤 canvas_apply를 불러 주세요. 가져오면 캔버스 전체가 바뀌어요.',
+          ...platformNote(adapter)
         }
       }
     },

@@ -218,6 +218,14 @@ interface CrackNext extends CrackRaw {
 export const crackWorks: WorkAdapter = {
   id: 'crack',
   label: '크랙',
+  guide: {
+    save: '저장은 편집기의 「수정 → 등록」과 같아서 저장할 때마다 게시본 버전이 오른다(되돌릴 수 없다). 공개 작품은 검수를 거친다.',
+    manual: ['상황 이미지 올리기·지우기·순서', '2차 창작 템플릿의 메인'],
+    unverified: [
+      '공개작 저장과 검수 흐름',
+      '손대지 않는 칸(스탯·엔딩·단축어·애드온·추천 답변)이 공개작 저장 뒤 그대로인지'
+    ]
+  },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'save', 'images'],
 
   readAllowed: (url) =>

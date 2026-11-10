@@ -230,6 +230,18 @@ function checkLore(rows: Obj[]): void {
 export const genitWorks: WorkAdapter = {
   id: 'genit',
   label: '젠잇',
+  guide: {
+    save: '본문이 바뀌면 새 버전이 된다.',
+    manual: [
+      '에셋 순서 바꾸기',
+      '대표 이미지 첫 장 교체',
+      '모델별로 나뉜 옛 형식 프롬프트 작품의 메인 고치기(사이트 편집기에서 한 번 저장한 뒤에는 된다)'
+    ],
+    unverified: [
+      '공개작 저장이 새 버전·업데이트 표시를 만드는지',
+      '기존 작품의 태그·장르·설명 이미지·템플릿이 저장 뒤 남는지'
+    ]
+  },
   capabilities: [
     'works_list',
     'work_read',

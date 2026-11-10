@@ -1,7 +1,7 @@
 // MCP로 내놓는 작품 도구. 여기는 화면·Electron을 모르고, 읽기 통로와 스냅샷 저장만 받아서 쓴다.
 // 읽기 도구는 여기, 계획·저장 도구는 save-tools.ts, 언어 판본 저장은 edition-tools.ts,
 // 이미지·표지는 media-tools.ts, 캔버스 JSON 내보내기·가져오기는 canvas-tools.ts에 있다.
-import { WORK_ADAPTERS, workAdapter, workKey } from './adapters'
+import { MANUAL_EVERYWHERE, WORK_ADAPTERS, workAdapter, workKey } from './adapters'
 import { canCanvas, createCanvasTools } from './canvas-tools'
 import { createEditionTools } from './edition-tools'
 import { createMediaTools } from './media-tools'
@@ -42,6 +42,10 @@ const MESSAGES: [RegExp, string][] = [
   [/BAD_WORK_ID/, '작품 번호 모양이 맞지 않아요. works_list의 id를 써 주세요.'],
   [/BAD_LANGUAGE/, '언어 코드가 맞지 않아요. editions_list의 language를 써 주세요.'],
   [/BAD_INDEX/, '없는 번호예요. work_read의 index를 써 주세요.'],
+  [
+    /BAD_RANGE/,
+    '나눠 읽기 값이 맞지 않아요. work_read·edition_read의 offset은 fields에 칸을 하나만 줬을 때만 쓰고 0 이상 그 칸 길이 미만이어야 해요. max_chars는 숫자, images_list의 group은 있는 묶음 번호, offset은 0 이상, limit은 1~500이에요.'
+  ],
   [
     /BAD_FIELD/,
     '그 플랫폼에 없는 칸이에요. work_read의 field_lengths에 나오는 이름 중에서 골라 주세요.'
@@ -90,7 +94,7 @@ const MESSAGES: [RegExp, string][] = [
   ],
   [
     /TITLE_MISMATCH/,
-    '제목이 맞지 않아서 지우지 않았어요. work_delete_plan이 돌려준 제목을 그대로 넣어 주세요.'
+    '제목이 맞지 않아서 지우지 않았어요. work_delete_plan이 돌려준 제목을 그대로 넣어 주세요. 제목이 빈 작품은 작품 번호(work_delete_plan의 confirm_title)를 넣어요.'
   ],
   [/DELETE_FAILED/, '플랫폼이 삭제를 받아 주지 않았어요. 작품은 그대로 있을 가능성이 높아요.'],
   [/CREATE_FAILED/, '플랫폼이 새 작품을 받아 주지 않았어요.'],
@@ -111,7 +115,10 @@ const MESSAGES: [RegExp, string][] = [
     /BAD_LOREBOOK/,
     '로어북에 내용이 빈 항목이나 키워드 없는 키워드 항목이 있어요. 플랫폼이 그런 항목을 버려서 막았어요.'
   ],
-  [/BAD_FILE/, '파일을 읽지 못했어요. 글 칸은 .md / .txt, 로어북은 .json이고 1MB 이하여야 해요.'],
+  [
+    /BAD_FILE/,
+    '파일을 읽지 못했어요. 글 칸은 .md / .txt, 로어북·시작 상황·캐릭터는 .json(배열)이고 1MB 이하여야 해요.'
+  ],
   [
     /PLAN_NOT_FOUND/,
     '그 계획을 찾지 못했어요(30분이 지났거나 이미 썼어요). 계획 도구(…_plan)부터 다시 해 주세요.'
@@ -217,15 +224,143 @@ function pick<T>(items: T[], which: unknown): (T & { index: number })[] {
   const wanted = indexes(which, items.length)
   return (wanted ?? items.map((_, i) => i)).map((i) => ({ index: i, ...items[i] }))
 }
-function fieldsOf(body: WorkBody, wanted: unknown): Record<string, string> {
-  if (wanted == null) return {}
-  if (!Array.isArray(wanted)) throw new Error('BAD_FIELD')
-  const out: Record<string, string> = {}
-  for (const name of wanted) {
-    if (typeof name !== 'string' || !(name in body.fields)) throw new Error('BAD_FIELD')
-    out[name] = body.fields[name]
+
+// ───────────── 긴 본문 나눠 주기 ─────────────
+// 도구 결과가 너무 크면 부르는 AI 쪽에서 잘리거나 버려진다. 한 번에 주는 본문을 max_chars로 묶는다.
+
+export const READ_MAX_DEFAULT = 20_000
+const READ_MAX_MIN = 1_000
+const READ_MAX_MAX = 100_000
+
+/** max_chars 입력 → 실제 한도 (기본 20,000, 1,000~100,000 안으로 맞춘다) */
+export function maxChars(v: unknown): number {
+  if (v === undefined || v === null) return READ_MAX_DEFAULT
+  const n = Number(v)
+  if (!Number.isFinite(n)) throw new Error('BAD_RANGE max_chars')
+  return Math.min(READ_MAX_MAX, Math.max(READ_MAX_MIN, Math.floor(n)))
+}
+
+/** offset부터 max자까지. 이모지처럼 두 칸인 글자를 반으로 자르지 않는다 */
+function cut(text: string, offset: number, max: number): string {
+  let end = Math.min(text.length, offset + max)
+  if (end < text.length && end > offset + 1 && /[\uD800-\uDBFF]/.test(text[end - 1])) end--
+  return text.slice(offset, end)
+}
+
+interface FieldPart {
+  total: number
+  offset: number
+  next_offset: number | null
+}
+
+/**
+ * fields로 고른 칸의 본문. 칸 하나가 max_chars를 넘으면 그만큼만 주고 content_parts에 그 칸의
+ * total·offset·next_offset을 적는다(넘지 않는 칸은 예전 모양 그대로). offset은 칸을 하나만 골랐을 때만 받는다.
+ * sumLimit이면 칸들의 본문 합도 max_chars 안으로 묶어, 넘친 뒤 칸은 본문 없이 길이만 준다.
+ */
+function readFields(
+  body: WorkBody,
+  wanted: unknown,
+  args: Record<string, unknown>,
+  sumLimit = false
+): Record<string, unknown> {
+  const max = maxChars(args.max_chars)
+  const offsetGiven = args.offset !== undefined && args.offset !== null
+  if (wanted == null) {
+    if (offsetGiven) throw new Error('BAD_RANGE offset')
+    return { content: {} }
   }
-  return out
+  if (!Array.isArray(wanted)) throw new Error('BAD_FIELD')
+  for (const name of wanted)
+    if (typeof name !== 'string' || !(name in body.fields)) throw new Error('BAD_FIELD')
+  const names = wanted as string[]
+  let start = 0
+  if (offsetGiven) {
+    const n = Number(args.offset)
+    if (names.length !== 1 || !Number.isInteger(n) || n < 0) throw new Error('BAD_RANGE offset')
+    const total = body.fields[names[0]].length
+    if (n > 0 && n >= total) throw new Error('BAD_RANGE offset')
+    start = n
+  }
+  const content: Record<string, string> = {}
+  const parts: Record<string, FieldPart> = {}
+  const omitted: { field: string; length: number }[] = []
+  let used = 0
+  for (const name of names) {
+    const text = body.fields[name]
+    const piece = cut(text, start, max)
+    if (sumLimit && (omitted.length || (used > 0 && used + piece.length > max))) {
+      omitted.push({ field: name, length: textLength(text) })
+      continue
+    }
+    used += piece.length
+    content[name] = piece
+    const end = start + piece.length
+    if (start > 0 || end < text.length)
+      parts[name] = {
+        total: textLength(text),
+        offset: start,
+        next_offset: end < text.length ? end : null
+      }
+  }
+  return {
+    content,
+    ...(Object.keys(parts).length
+      ? {
+          content_parts: parts,
+          content_note:
+            'content_parts에 나온 칸은 일부만 줬어요. 이어 읽으려면 fields에 그 칸 하나와 offset(next_offset)을 주세요.'
+        }
+      : {}),
+    ...(omitted.length
+      ? {
+          truncated: true,
+          omitted_fields: omitted,
+          note:
+            '본문 합이 max_chars(' +
+            max +
+            '자)를 넘어 omitted_fields의 칸은 본문 없이 길이만 줬어요. fields에 칸을 나눠 다시 읽어 주세요.'
+        }
+      : {})
+  }
+}
+
+/**
+ * 로어북·시작 상황·캐릭터 목록 읽기. 본문 합이 max_chars를 넘으면 그 뒤 항목은 본문 없이 길이만 준다
+ * (첫 항목은 늘 본문째 준다).
+ */
+function budgeted<T>(
+  items: (T & { index: number })[],
+  bodyLength: (item: T) => number,
+  head: (item: T & { index: number }) => Record<string, unknown>,
+  max: number
+): { list: unknown[]; extra: Record<string, unknown> } {
+  let used = 0
+  const omitted: number[] = []
+  const list = items.map((item, i) => {
+    const length = bodyLength(item)
+    if (!omitted.length && (i === 0 || used + length <= max)) {
+      used += length
+      return item
+    }
+    omitted.push(item.index)
+    return { ...head(item), length, omitted: true }
+  })
+  return {
+    list,
+    extra: omitted.length
+      ? {
+          truncated: true,
+          omitted_indexes: omitted,
+          note:
+            '본문 합이 max_chars(' +
+            max +
+            '자)를 넘어 index ' +
+            omitted[0] +
+            '부터는 본문 없이 길이만 줬어요. indexes로 나눠 읽어 주세요.'
+        }
+      : {}
+  }
 }
 const lengths = (body: WorkBody): Record<string, number> =>
   Object.fromEntries(Object.entries(body.fields).map(([k, v]) => [k, textLength(v)]))
@@ -236,6 +371,17 @@ const indexList = {
   type: 'array',
   items: { type: 'integer' },
   description: '읽을 번호들 (work_read의 index). 비우면 전부'
+}
+const LIST_BUDGET_NOTE =
+  ' 본문 합이 max_chars(기본 20000)를 넘으면 뒤 항목은 본문 없이 길이만 주고 truncated: true를 붙인다(indexes로 나눠 읽는다).'
+const maxCharsInput = {
+  type: 'integer',
+  description: '한 번에 받을 본문 글자 수 한도 (기본 20000, 1000~100000)'
+}
+const offsetInput = {
+  type: 'integer',
+  description:
+    'fields에 칸을 하나만 줬을 때 그 칸을 이 글자 위치부터 읽는다 (content_parts의 next_offset)'
 }
 
 export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
@@ -274,7 +420,10 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
     return [
       {
         name: 'sites_list',
-        description: '작품 본문을 읽을 수 있는 플랫폼과 각 플랫폼이 지원하는 기능을 돌려준다.',
+        description:
+          '작품 본문을 읽을 수 있는 플랫폼과 각 플랫폼이 지원하는 기능을 돌려준다. guide에 플랫폼별 안내가 있다: ' +
+          'save = 저장하면 생기는 일, manual = 이 도구로 못 해서 사이트에서 직접 할 일, unverified = 실제 계정에서 ' +
+          '아직 확인하지 않은 동작. 처음 쓰는 플랫폼은 저장 전에 guide를 읽는다.',
         inputSchema: { type: 'object', properties: {} },
         async run() {
           return {
@@ -288,8 +437,16 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
               can_images: !!a.applyImages,
               can_cover: !!a.uploadCover,
               can_edition_save: !!a.saveEdition,
-              can_canvas: canCanvas(a)
-            }))
+              can_canvas: canCanvas(a),
+              guide: a.guide
+                ? {
+                    save: a.guide.save,
+                    manual: a.guide.manual,
+                    unverified: a.guide.unverified ?? []
+                  }
+                : null
+            })),
+            manual_everywhere: MANUAL_EVERYWHERE
           }
         }
       },
@@ -316,7 +473,9 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
         description:
           '작품 하나를 플랫폼에서 새로 읽는다. 기본은 개요(칸별 글자 수, 로어북·시작 상황·캐릭터 제목 목록, ' +
           '스냅샷 파일 경로)만 돌려준다. fields에 title / subtitle / description / main / creator_comment를 ' +
-          '넣으면 그 칸의 본문을 같이 준다. 읽을 때마다 플랫폼 원본 전체가 snapshot 경로의 JSON 파일로 남는다.',
+          '넣으면 그 칸의 본문을 같이 준다. 칸 하나가 max_chars(기본 20000)를 넘으면 그만큼만 주고 ' +
+          'content_parts에 total·offset·next_offset을 적는다. 이어 읽기는 fields에 그 칸 하나와 offset. ' +
+          '읽을 때마다 플랫폼 원본 전체가 snapshot 경로의 JSON 파일로 남는다.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -326,7 +485,9 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
               type: 'array',
               items: { type: 'string' },
               description: '본문을 받을 칸 (선택)'
-            }
+            },
+            max_chars: maxCharsInput,
+            offset: offsetInput
           },
           required: ['site', 'work_id']
         },
@@ -339,7 +500,7 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
             status: body.status,
             updated_at: body.updatedAt,
             field_lengths: lengths(body),
-            content: fieldsOf(body, args.fields),
+            ...readFields(body, args.fields, args),
             lorebook: body.lorebook.map((e, index) => ({
               index,
               title: e.title,
@@ -366,41 +527,65 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
       },
       {
         name: 'lorebook_read',
-        description: '로어북 항목의 본문. indexes를 비우면 전부, 주면 그 번호만 돌려준다.',
+        description:
+          '로어북 항목의 본문. indexes를 비우면 전부, 주면 그 번호만 돌려준다.' + LIST_BUDGET_NOTE,
         inputSchema: {
           type: 'object',
-          properties: { site, work_id: workId, indexes: indexList },
+          properties: { site, work_id: workId, indexes: indexList, max_chars: maxCharsInput },
           required: ['site', 'work_id']
         },
         async run(args) {
           const { body } = await load(args.site, args.work_id, false)
-          return { entries: pick(body.lorebook, args.indexes) }
+          const { list, extra } = budgeted(
+            pick(body.lorebook, args.indexes),
+            (e) => textLength(e.content),
+            (e) => ({ index: e.index, title: e.title, keys: e.keys, mode: e.mode }),
+            maxChars(args.max_chars)
+          )
+          return { entries: list, ...extra }
         }
       },
       {
         name: 'start_scenarios_read',
-        description: '시작 상황의 본문. indexes를 비우면 전부 돌려준다.',
+        description: '시작 상황의 본문. indexes를 비우면 전부 돌려준다.' + LIST_BUDGET_NOTE,
         inputSchema: {
           type: 'object',
-          properties: { site, work_id: workId, indexes: indexList },
+          properties: { site, work_id: workId, indexes: indexList, max_chars: maxCharsInput },
           required: ['site', 'work_id']
         },
         async run(args) {
           const { body } = await load(args.site, args.work_id, false)
-          return { scenarios: pick(body.startScenarios, args.indexes) }
+          const { list, extra } = budgeted(
+            pick(body.startScenarios, args.indexes),
+            (s) =>
+              textLength(s.content) +
+              textLength(s.subPrompt) +
+              textLength(s.dialogue) +
+              textLength(s.situation) +
+              textLength(s.description),
+            (s) => ({ index: s.index, id: s.id, title: s.title, isDefault: s.isDefault }),
+            maxChars(args.max_chars)
+          )
+          return { scenarios: list, ...extra }
         }
       },
       {
         name: 'characters_read',
-        description: '캐릭터 설정 본문. indexes를 비우면 전부 돌려준다.',
+        description: '캐릭터 설정 본문. indexes를 비우면 전부 돌려준다.' + LIST_BUDGET_NOTE,
         inputSchema: {
           type: 'object',
-          properties: { site, work_id: workId, indexes: indexList },
+          properties: { site, work_id: workId, indexes: indexList, max_chars: maxCharsInput },
           required: ['site', 'work_id']
         },
         async run(args) {
           const { body } = await load(args.site, args.work_id, false)
-          return { characters: pick(body.characters, args.indexes) }
+          const { list, extra } = budgeted(
+            pick(body.characters, args.indexes),
+            (c) => textLength(c.details) + textLength(c.info),
+            (c) => ({ index: c.index, id: c.id, name: c.name, isMain: c.isMain }),
+            maxChars(args.max_chars)
+          )
+          return { characters: list, ...extra }
         }
       },
       {
@@ -422,7 +607,8 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
         name: 'edition_read',
         description:
           '언어 판본 하나를 읽는다. 기본은 개요, fields를 주면 그 칸의 본문을 같이 준다. ' +
-          'language는 editions_list의 language (예: en, ja, zh-TW, zh-CN).',
+          'language는 editions_list의 language (예: en, ja, zh-TW, zh-CN). 긴 칸은 work_read처럼 ' +
+          'max_chars·offset으로 나눠 읽고, 칸들의 본문 합이 max_chars를 넘으면 뒤 칸은 길이만 준다(truncated).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -433,7 +619,9 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
               type: 'array',
               items: { type: 'string' },
               description: '본문을 받을 칸 (선택)'
-            }
+            },
+            max_chars: maxCharsInput,
+            offset: offsetInput
           },
           required: ['site', 'work_id', 'language']
         },
@@ -454,7 +642,7 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
             status: body.status,
             stale: body.stale,
             field_lengths: lengths(body),
-            content: fieldsOf(body, args.fields),
+            ...readFields(body, args.fields, args, true),
             lorebook_count: body.lorebook.length,
             start_scenario_count: body.startScenarios.length,
             character_count: body.characters.length,

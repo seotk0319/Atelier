@@ -135,6 +135,11 @@ function situations(html: string): WorkBody['startScenarios'] {
 export const lunaWorks: WorkAdapter = {
   id: 'luna',
   label: '루나톡',
+  guide: {
+    save: '읽기만 된다(목록과 공개 상세 페이지). 쓰기는 루나톡 공식 MCP(루나톡 제작 도우미)로 하고, 거기서도 수정본으로만 저장된다.',
+    manual: ['수정본을 원본에 반영', '공개', '이미지·JSX 에셋 등록', '삭제'],
+    unverified: ['이미지(itimg) 올리는 방식']
+  },
   // 공개 상세 페이지로 읽을 수 있는 것만 (메인 프롬프트·로어북·저장은 편집기 코드 미확보)
   capabilities: ['works_list', 'work_read', 'start_scenarios'],
 

@@ -888,6 +888,20 @@ function rplayImageGroups(raw: unknown): ImageGroup[] {
 export const rplayWorks: WorkAdapter = {
   id: 'rplay',
   label: '알플레이',
+  guide: {
+    save: '저장만 하고 스토리 컴파일은 하지 않는다. 컴파일은 사이트에서 한다.',
+    manual: [
+      '스토리 컴파일',
+      '처음 공개(업로드)',
+      '썸네일·이미지',
+      'storyengine.live 쪽 작품(로그인이 따로다)'
+    ],
+    unverified: [
+      '노드가 많은 실제 작품의 캔버스 가져오기(시험은 노드 3개짜리 새 작품으로 했다)',
+      '가져올 때 언어·공통 설정이 다른 경우의 선택(settings_choice, language)',
+      '공개 작품 저장 뒤 컴파일 없이 반영되는지'
+    ]
+  },
   capabilities: [
     'works_list',
     'work_read',

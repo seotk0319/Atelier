@@ -118,6 +118,17 @@ function body(work: Obj, characters: Obj[], images: Record<string, unknown>): Wo
 export const edenWorks: WorkAdapter = {
   id: 'eden',
   label: '에덴',
+  guide: {
+    save: '작품 통째 저장이다. 공개 상태는 읽은 값 그대로 보내고, 같은 값을 보내도 수정 시각은 바뀐다.',
+    manual: [],
+    unverified: [
+      '공개(public) 전환',
+      '공개작 저장이 독자에게 "업데이트됨"으로 보이는지',
+      '공개작에 없던 언어 판본을 새로 만들 때 바로 노출되는지',
+      '일본어·중국어 판본 저장',
+      '배경음·캐릭터 음성 칸이 저장 뒤 남는지'
+    ]
+  },
   capabilities: [
     'works_list',
     'work_read',

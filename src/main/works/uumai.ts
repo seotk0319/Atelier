@@ -213,6 +213,16 @@ function checkPublishable(w: Obj): void {
 export const uumaiWorks: WorkAdapter = {
   id: 'uumai',
   label: '우마이',
+  guide: {
+    save: '저장은 늘 초안(임시저장)이다. 이미 발행한 작품은 발행본이 그대로이고, visibility를 주면 그때 발행되며 초안 내용도 같이 나간다.',
+    manual: ['BGM·스킬·주사위·업적 편집(읽은 값 그대로 다시 보낸다)', '로어북 발동 테스트'],
+    unverified: [
+      '발행(visibility)',
+      '발행한 작품에 초안 저장 뒤 발행본이 그대로인지',
+      '초안 저장이 버전 수를 늘리는지',
+      '실제 채팅'
+    ]
+  },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'save', 'images'],
 
   readAllowed: (url) =>

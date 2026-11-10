@@ -62,6 +62,13 @@ const ALIASES: Record<string, string> = {
   'chatple.live': 'chatple'
 }
 
+/** 어느 플랫폼이든 이 도구로 못 하는 일 (스킬 references/mcp.md 「MCP가 못 하는 일」의 '전체' 줄) */
+export const MANUAL_EVERYWHERE = ['실제 채팅 시험(로어북 발동, 이미지 출력 확인)']
+
+/** 계획 도구 결과에 넣는 "이 플랫폼에서 저장하면 생기는 일" 한 줄 (안내가 없는 연결부는 빈 객체) */
+export const platformNote = (adapter: WorkAdapter): { platform_note?: string } =>
+  adapter.guide ? { platform_note: adapter.guide.save } : {}
+
 /** 작품 번호를 견주거나 저장 이름으로 쓸 때의 모양. 번호가 대소문자를 구분하는 플랫폼(티팟)은 그대로 둔다 */
 export const workKey = (adapter: WorkAdapter, id: string): string =>
   adapter.caseSensitiveIds ? id : id.toLowerCase()

@@ -3,7 +3,7 @@
 // 저장하면 그 겹친 내용이 통째로 판본에 들어간다 (편집기의 '번역 저장'과 같다).
 // 사이트의 자동 번역은 부르지 않는다. 번역문은 부르는 쪽이 직접 준다.
 import { randomBytes } from 'node:crypto'
-import { workAdapter, workKey } from './adapters'
+import { platformNote, workAdapter, workKey } from './adapters'
 import { CHANGE_PROPERTIES, diffBodies, parseChanges, PLAN_TTL } from './save-tools'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type { WorkAdapter, WorkBody, WorkChanges, WorkFetch } from './types'
@@ -30,7 +30,9 @@ const EDITION_KEYS = [
   'lorebook_remove',
   'lorebook_add',
   'start_scenarios',
-  'characters'
+  'start_scenarios_file',
+  'characters',
+  'characters_file'
 ] as const
 const properties = Object.fromEntries(
   EDITION_KEYS.map((key) => [key, (CHANGE_PROPERTIES as Record<string, unknown>)[key]])
@@ -78,7 +80,8 @@ export function createEditionTools(deps: WorkToolDeps): ToolDef[] {
       description:
         '언어 판본을 고치기 전에 무엇이 달라지는지 미리 본다. 플랫폼에는 아무것도 쓰지 않는다. ' +
         '순서: editions_list → edition_read → edition_plan → (사용자 확인) → edition_save. ' +
-        '입력은 work_plan과 같되 글만 바꿀 수 있다(fields / field_files / lorebook… / start_scenarios / characters). ' +
+        '입력은 work_plan과 같되 글만 바꿀 수 있다(fields / field_files / lorebook… / start_scenarios(_file) / ' +
+        'characters(_file)). ' +
         '시작 상황·캐릭터의 추가/삭제와 공개 상태는 원문을 따른다. 판본에 아직 없는 칸은 원문 글이 지금 값으로 ' +
         '보이고, 저장하면 바꾸지 않은 칸은 그 글 그대로 판본에 들어간다. 판본이 아직 없으면(exists: false) ' +
         '저장할 때 수동 번역 판본이 새로 생긴다. 사이트의 자동 번역은 쓰지 않으므로 번역문을 직접 준다.',
@@ -130,7 +133,8 @@ export function createEditionTools(deps: WorkToolDeps): ToolDef[] {
           changes: diff,
           note: edition.exists
             ? '아직 저장하지 않았어요. 사용자가 확인한 뒤 edition_save를 불러 주세요.'
-            : '아직 저장하지 않았어요. 이 판본은 아직 없어서, 저장하면 수동 번역 판본이 새로 생기고 바꾸지 않은 칸은 원문 글 그대로 들어가요.'
+            : '아직 저장하지 않았어요. 이 판본은 아직 없어서, 저장하면 수동 번역 판본이 새로 생기고 바꾸지 않은 칸은 원문 글 그대로 들어가요.',
+          ...platformNote(adapter)
         }
       }
     },

@@ -75,10 +75,25 @@ export interface EditionBody extends WorkBody {
   stale: boolean
 }
 
+/**
+ * 도구 결과만 보고도 그 플랫폼에서 저장하면 무슨 일이 생기는지, 무엇은 사이트에서 직접 해야 하는지 알 수 있게
+ * 하는 안내. 문장은 production-oneplan 스킬의 references/mcp.md와 sites/*.md 「작품 MCP」 절에 적힌 사실만 옮긴다.
+ */
+export interface WorkGuide {
+  /** 저장하면 생기는 일 (한두 문장) */
+  save: string
+  /** 이 도구로 못 해서 사이트에서 직접 해야 하는 일 */
+  manual: string[]
+  /** 실제 계정에서 아직 확인하지 않은 동작 */
+  unverified?: string[]
+}
+
 export interface WorkAdapter {
   id: string
   label: string
   capabilities: string[]
+  /** sites_list와 계획 도구 결과에 싣는 플랫폼 안내 */
+  guide?: WorkGuide
   /** 작품 번호가 대소문자를 구분한다 (공용 도구가 소문자로 바꾸지 않는다) */
   caseSensitiveIds?: boolean
   /** 이 연결부가 읽어도 되는 주소인지 (이 밖으로는 요청하지 않는다) */

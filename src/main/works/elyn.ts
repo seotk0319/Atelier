@@ -203,6 +203,15 @@ const exclusiveLocked = (form: Obj): boolean => {
 export const elynWorks: WorkAdapter = {
   id: 'elyn',
   label: '엘린',
+  guide: {
+    save: '판 저장 후 제출이다. 공개 작품은 저장하면 검수 요청이 되고, 검수 중에는 저장이 막힌다(IN_REVIEW). 비공개 작품은 바로 반영된다.',
+    manual: [],
+    unverified: [
+      '공개작 저장과 검수 흐름',
+      'public 전환',
+      '소개·첫 메시지가 여러 언어인 작품을 저장할 때 다른 언어 값이 남는지(저장은 한 언어만 보낸다)'
+    ]
+  },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'save', 'images'],
 
   readAllowed,

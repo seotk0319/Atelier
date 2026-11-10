@@ -3,7 +3,7 @@
 //  - work_save는 계획 번호가 있어야 하고, 계획을 세운 뒤 플랫폼 내용이 바뀌었으면 저장하지 않는다.
 //  - 저장 직전 원본을 스냅샷으로 남기고, 저장 뒤 다시 읽어 뜻대로 들어갔는지 견준다.
 import { randomBytes } from 'node:crypto'
-import { workAdapter, workKey } from './adapters'
+import { platformNote, workAdapter, workKey } from './adapters'
 import { loadImage } from './media-tools'
 import type { ToolDef, WorkToolDeps } from './tools'
 import {
@@ -159,7 +159,29 @@ async function readText(path: string, deps: WorkToolDeps, kinds: RegExp): Promis
   return (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).replace(/\r\n/g, '\n')
 }
 
-export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkChanges> {
+/** 로컬 JSON 파일 하나를 읽는다 (.json, UTF-8, 1MB 이하). 못 읽거나 JSON이 아니면 BAD_FILE */
+async function readJson(path: unknown, deps: WorkToolDeps): Promise<unknown> {
+  try {
+    return JSON.parse(await readText(str(path), deps, /\.json$/i))
+  } catch (error) {
+    throw error instanceof Error && error.message === 'BAD_FILE' ? error : new Error('BAD_FILE')
+  }
+}
+
+/** 파일로 받는 입력 → 같은 모양의 인라인 입력. 둘 다 주면 BAD_CHANGES */
+const FILE_INPUTS: [string, string][] = [
+  ['start_scenarios_file', 'start_scenarios'],
+  ['start_scenarios_add_file', 'start_scenarios_add'],
+  ['characters_file', 'characters']
+]
+
+export async function parseChanges(input: Obj, deps: WorkToolDeps): Promise<WorkChanges> {
+  let args = input
+  for (const [file, inline] of FILE_INPUTS) {
+    if (args[file] === undefined) continue
+    if (args[inline] !== undefined) throw new Error('BAD_CHANGES')
+    args = { ...args, [inline]: await readJson(args[file], deps) }
+  }
   const changes: WorkChanges = {}
   if (args.visibility !== undefined) {
     if (typeof args.visibility !== 'string') throw new Error('BAD_VISIBILITY')
@@ -186,11 +208,7 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
   let lorebook = args.lorebook
   if (args.lorebook_file !== undefined) {
     if (lorebook !== undefined) throw new Error('BAD_CHANGES')
-    try {
-      lorebook = JSON.parse(await readText(str(args.lorebook_file), deps, /\.json$/i))
-    } catch (error) {
-      throw error instanceof Error && error.message === 'BAD_FILE' ? error : new Error('BAD_FILE')
-    }
+    lorebook = await readJson(args.lorebook_file, deps)
   }
   const whole = (v: unknown): LoreEntry[] => {
     if (!Array.isArray(v)) throw new Error('BAD_CHANGES')
@@ -370,10 +388,19 @@ export const CHANGE_PROPERTIES = {
     }),
     description: '시작 상황 일부만 고친다'
   },
+  start_scenarios_file: {
+    type: 'string',
+    description:
+      'start_scenarios와 같은 모양의 배열이 담긴 로컬 JSON 파일 경로 (항목마다 index 필수)'
+  },
   characters: {
     type: 'array',
     items: withIndex({ name: text, details: text, info: text }),
     description: '캐릭터 일부만 고친다'
+  },
+  characters_file: {
+    type: 'string',
+    description: 'characters와 같은 모양의 배열이 담긴 로컬 JSON 파일 경로 (항목마다 index 필수)'
   },
   start_scenarios_remove: {
     type: 'array',
@@ -394,6 +421,10 @@ export const CHANGE_PROPERTIES = {
       }
     },
     description: '끝에 더할 새 시작 상황들'
+  },
+  start_scenarios_add_file: {
+    type: 'string',
+    description: 'start_scenarios_add와 같은 모양의 배열이 담긴 로컬 JSON 파일 경로'
   },
   characters_remove: {
     type: 'array',
@@ -424,7 +455,14 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
   const plans = new Map<string, Plan>()
   const deletions = new Map<
     string,
-    { site: string; workId: string; title: string; expires: number }
+    {
+      site: string
+      workId: string
+      title: string
+      /** work_delete의 title에 넣어야 하는 글. 보통 제목이고, 제목이 빈 작품은 작품 번호다 */
+      confirm: string
+      expires: number
+    }
   >()
   const frozen = (body: WorkBody): string => JSON.stringify({ ...body, updatedAt: null })
 
@@ -435,7 +473,9 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         '작품을 고치기 전에 무엇이 달라지는지 미리 본다. 플랫폼에는 아무것도 쓰지 않는다. ' +
         '적지 않은 칸은 지금 값 그대로 둔다. 결과의 changes를 사용자에게 보여 주고, 사용자가 ' +
         '저장하라고 한 뒤에만 plan_id로 work_save를 부른다. 긴 본문은 fields 대신 field_files에 ' +
-        '로컬 파일 경로(.md / .txt)를 주면 그 파일 내용을 쓴다.',
+        '로컬 파일 경로(.md / .txt)를 주면 그 파일 내용을 쓴다. 긴 시작 상황·캐릭터는 같은 모양의 JSON 배열 파일을 ' +
+        'start_scenarios_file / start_scenarios_add_file / characters_file로 준다. ' +
+        '결과의 platform_note는 그 플랫폼에서 저장하면 생기는 일이다.',
       inputSchema: {
         type: 'object',
         properties: { site, work_id: workId, ...CHANGE_PROPERTIES },
@@ -472,7 +512,12 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
           ...head,
           plan_id: planId,
           changes: diff,
-          note: '아직 저장하지 않았어요. 사용자가 확인한 뒤 work_save를 불러 주세요. 공개 상태는 바뀌지 않아요.'
+          note:
+            '아직 저장하지 않았어요. 사용자가 확인한 뒤 work_save를 불러 주세요. ' +
+            (changes.visibility !== undefined
+              ? '공개 상태도 바뀌어요(changes의 "공개 상태" 줄).'
+              : '공개 상태는 바뀌지 않아요.'),
+          ...platformNote(adapter)
         }
       }
     },
@@ -550,23 +595,33 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         const now = Date.now()
         for (const [key, plan] of deletions) if (plan.expires < now) deletions.delete(key)
         const planId = randomBytes(4).toString('hex')
+        // 제목이 빈 작품은 빈 글자로 확인이 통과되지 않게, 작품 번호를 글자 그대로 넣게 한다
+        const untitled = !body.title.trim()
+        const confirm = untitled ? id : body.title
         deletions.set(planId, {
           site: adapter.id,
           workId: id,
           title: body.title,
+          confirm,
           expires: now + PLAN_TTL
         })
         return {
           plan_id: planId,
           id: body.id,
           title: body.title,
+          confirm_title: confirm,
           visibility: body.visibility,
           status: body.status,
           main_length: textLength(body.fields.main ?? ''),
           lorebook_count: body.lorebook.length,
           start_scenario_count: body.startScenarios.length,
           character_count: body.characters.length,
-          note: '아직 지우지 않았어요. 지우면 되돌릴 수 없어요. 사용자가 확인한 뒤 work_delete에 plan_id와 작품 제목을 그대로 넣어 불러 주세요.'
+          note: untitled
+            ? '아직 지우지 않았어요. 지우면 되돌릴 수 없어요. 이 작품은 제목이 비어 있어서, 사용자가 확인한 뒤 work_delete의 title에 작품 번호 ' +
+              confirm +
+              '를 글자 그대로 넣어 불러 주세요.'
+            : '아직 지우지 않았어요. 지우면 되돌릴 수 없어요. 사용자가 확인한 뒤 work_delete에 plan_id와 작품 제목을 그대로 넣어 불러 주세요.',
+          ...platformNote(adapter)
         }
       }
     },
@@ -574,12 +629,16 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
       name: 'work_delete',
       description:
         'work_delete_plan으로 확인한 작품을 통째로 지운다. 되돌릴 수 없다. plan_id와 함께 그 작품의 ' +
-        '제목을 글자 그대로 넣어야 한다. 지우기 직전 원본을 backup 경로에 남긴다.',
+        '제목을 글자 그대로 넣어야 한다(제목이 빈 작품은 작품 번호를 넣는다. work_delete_plan의 confirm_title). ' +
+        '지우기 직전 원본을 backup 경로에 남긴다.',
       inputSchema: {
         type: 'object',
         properties: {
           plan_id: { type: 'string', description: 'work_delete_plan이 돌려준 plan_id' },
-          title: { type: 'string', description: '지울 작품의 제목 (글자 그대로)' }
+          title: {
+            type: 'string',
+            description: '지울 작품의 제목 (글자 그대로. 제목이 빈 작품은 작품 번호)'
+          }
         },
         required: ['plan_id', 'title']
       },
@@ -596,7 +655,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         const raw = await adapter.readRaw(read, plan.workId)
         const body = adapter.normalize(raw)
         // 계획 때와 같은 작품인지, 사용자가 말한 제목과 같은지 둘 다 본다
-        if (body.title !== plan.title || str(args.title) !== plan.title)
+        if (body.title !== plan.title || str(args.title) !== plan.confirm)
           throw new Error('TITLE_MISMATCH')
         const backup = await deps.snapshot(adapter.id, plan.workId, raw)
         deletions.delete(planId)
@@ -702,7 +761,7 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
           if (file === undefined) return inline
           if (inline !== undefined) throw new Error('BAD_CHANGES')
           try {
-            return JSON.parse(await readText(str(file), deps, /.json$/i))
+            return JSON.parse(await readText(str(file), deps, /\.json$/i))
           } catch (error) {
             throw error instanceof Error && error.message === 'BAD_FILE'
               ? error
