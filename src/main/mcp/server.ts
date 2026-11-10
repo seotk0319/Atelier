@@ -9,7 +9,7 @@ import { dirname } from 'node:path'
 import { createMcpHandler, type McpInfo } from './protocol'
 import type { ToolDef } from '../works/tools'
 
-export const MCP_DEFAULT_PORT = 39217
+export const MCP_DEFAULT_PORT = 39317
 const MAX_BODY = 1_000_000
 
 export interface McpConnection {

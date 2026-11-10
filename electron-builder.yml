@@ -1,11 +1,8 @@
-appId: com.sunanakgo.nais3custom
-productName: NAIS3 Custom
+appId: app.atelier.studio
+productName: Atelier
 directories:
   buildResources: build
-publish:
-  provider: github
-  owner: seotk0319
-  repo: NAIS3-Custom
+publish: null
 files:
   - '!integrations/**'
   - '!scripts/**'
@@ -31,7 +28,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: NAIS3-Custom
+  executableName: Atelier
   # Windows는 둥근 모서리·여백 규칙이 없어 mac용(여백 큼) 대신 여백 최소 버전 사용
   icon: build/icon-win.png
   target:

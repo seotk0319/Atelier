@@ -231,7 +231,7 @@ export function Titlebar(): React.JSX.Element {
         <img src={nais3Icon} alt="" className="ml-1 size-6 shrink-0 rounded-md" draggable={false} />
         {/* 1200px 미만에서는 앱 이름 글자를 숨기고 로고만 남겨 잔량 표시 자리를 만든다 */}
         <span className="hidden shrink-0 whitespace-nowrap text-[14px] font-bold text-ink min-[1200px]:inline">
-          {profileTitle ?? 'NAIS3 Custom'}
+          {profileTitle ?? 'Atelier'}
         </span>
         <UpdateButton />
         {(anlasBalance !== null || v5Usage) && (

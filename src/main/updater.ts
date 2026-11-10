@@ -13,6 +13,8 @@ const { autoUpdater } = electronUpdater
  * 자동 업데이트는 이 저장소의 GitHub 릴리스만 본다.
  * (1.0.13에서 원본 NAIS3 저장소를 보던 업데이터를 뺐다 — 커스텀판이 원본으로 덮이지 않게 주소를 여기서 고정한다)
  */
+/** 릴리스 저장소를 정하기 전까지 자동 업데이트를 끈다 */
+const ATELIER_UPDATES = false
 const OWNER = 'seotk0319'
 const REPO = 'NAIS3-Custom'
 export const RELEASE_PAGE = `https://github.com/${OWNER}/${REPO}/releases/latest`
@@ -82,6 +84,8 @@ function configure(): void {
 
 /** 설정의 "업데이트 확인" 버튼 */
 export async function checkForUpdate(): Promise<UpdateStatus> {
+  // Atelier는 아직 릴리스 저장소가 없다. NAIS3 Custom 릴리스로 덮이지 않게 확인 자체를 하지 않는다.
+  if (!ATELIER_UPDATES) return emit({ state: 'none' })
   if (!app.isPackaged) {
     return emit({ state: 'error', message: '개발 실행에서는 업데이트를 확인하지 않아요' })
   }
@@ -100,6 +104,7 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 
 /** 새 버전 받기. 포터블이면 릴리스 페이지를 연다 */
 export function startUpdateDownload(): void {
+  if (!ATELIER_UPDATES) return
   if (!isInstalled() || !configured) {
     void shell.openExternal(RELEASE_PAGE)
     emit({ ...last })

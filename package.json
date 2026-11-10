@@ -1,7 +1,7 @@
 {
-  "name": "nais3-custom",
-  "version": "2.13.0",
-  "description": "NAIS3 Custom - NovelAI Image Studio 3 (커스텀 개조판)",
+  "name": "atelier",
+  "version": "0.1.0",
+  "description": "Atelier - 캐릭터챗 작품 제작툴 (NAIS3 Custom 2.13.0에서 포크)",
   "main": "./out/main/index.js",
   "author": "sunanakgo",
   "license": "GPL-3.0",

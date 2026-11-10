@@ -32,7 +32,7 @@ export async function startMcp(): Promise<void> {
     const server = createMcpServer({
       port,
       token,
-      info: { name: 'nais3-works', version: app.getVersion() },
+      info: { name: 'atelier-works', version: app.getVersion() },
       tools: createWorkTools({
         // 통로 함수에 계정 번호 꺼내는 함수를 붙여 둔다 (알플레이·티팟은 주소에 내 계정 번호가 들어간다)
         reader: (platform) =>
