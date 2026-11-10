@@ -133,6 +133,18 @@ export async function workRead(platform: string, url: string): Promise<Response>
   return direct.workRead(platform, url)
 }
 
+/** 작품 저장 통로 (src/main/works). 허용 요청 검사와 로그인 연장은 collector가 한다. */
+export async function workWrite(
+  platform: string,
+  method: string,
+  url: string,
+  body: unknown
+): Promise<Response> {
+  await startInbox().catch(() => undefined)
+  if (!direct) throw new ReplyError('LOGIN_REQUIRED')
+  return direct.workWrite(platform, method, url, body)
+}
+
 let error: string | null = null
 
 // 썸네일 기준표(베이비챗 작품 이름·이미지). 파일로 남겨 두고 6시간마다 새로 읽는다.

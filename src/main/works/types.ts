@@ -85,6 +85,34 @@ export interface WorkAdapter {
   editions?(read: WorkFetch, workId: string): Promise<EditionInfo[]>
   readEditionRaw?(read: WorkFetch, workId: string, language: string): Promise<unknown>
   normalizeEdition?(raw: unknown): EditionBody
+  /** 이 연결부가 저장해도 되는 요청인지 (이 밖으로는 쓰지 않는다) */
+  writeAllowed?(method: string, url: string): boolean
+  /** 원본에 바꿀 내용을 얹은 새 원본을 돌려준다 (원본은 건드리지 않는다) */
+  applyChanges?(raw: unknown, changes: WorkChanges): unknown
+  /** 새 원본을 플랫폼에 저장한다. 공개 상태는 원본에 있던 값 그대로 보낸다. */
+  save?(write: WorkWrite, workId: string, next: unknown): Promise<void>
+}
+
+/** 로그인한 계정으로 쓰는 통로. 허용 요청 검사는 통로를 만드는 쪽(collector)이 한다. */
+export type WorkWrite = (method: 'PUT', url: string, body: unknown) => Promise<Response>
+
+/** 바꿀 내용. 적지 않은 칸은 플랫폼에 있던 값 그대로 둔다. */
+export interface WorkChanges {
+  /** 글 칸 통째 교체: title / subtitle / description / main / creator_comment */
+  fields?: Record<string, string>
+  /** 로어북 전체 교체 */
+  lorebook?: LoreEntry[]
+  /** 로어북 일부 항목만 고치기 (index는 work_read의 번호) */
+  lorebookPatch?: ({ index: number } & Partial<LoreEntry>)[]
+  /** 시작 상황 일부만 고치기 */
+  startScenarios?: ({ index: number } & Partial<
+    Pick<
+      StartScenario,
+      'title' | 'content' | 'subPrompt' | 'dialogue' | 'situation' | 'description'
+    >
+  >)[]
+  /** 캐릭터 일부만 고치기 */
+  characters?: ({ index: number } & Partial<Pick<WorkCharacter, 'name' | 'details' | 'info'>>)[]
 }
 
 /** 사이트 글자 수와 같은 기준(이모지는 2)으로 센 길이. JS 문자열 길이가 곧 그 값이다. */

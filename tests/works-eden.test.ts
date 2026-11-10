@@ -166,6 +166,8 @@ describe('작품 도구', () => {
     const snaps: string[] = []
     const all = createWorkTools({
       reader: () => read,
+      writer: () => async () => new Response('{}', { status: 500 }),
+      readFile: async () => '',
       snapshot: async (platform, name) => {
         snaps.push(platform + '/' + name)
         return 'C:/snap/' + name + '.json'

@@ -1,16 +1,17 @@
 // MCP 창구를 앱에 붙이는 곳. Custom 1(알림·로그인 연결이 있는 프로필)에서만 켠다.
 // 설정 mcp_enabled 가 '0'이면 열지 않고, mcp_port 로 포트를 바꿀 수 있다.
 import { app } from 'electron'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getSetting } from '../db/settings'
-import { workRead } from '../notifications/service'
+import { workRead, workWrite } from '../notifications/service'
 import { createWorkTools } from '../works/tools'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
 
 let running: ReturnType<typeof createMcpServer> | null = null
 
-const stamp = (): string => new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '')
+// 저장 직전 백업과 저장 뒤 확인본이 같은 초에 생겨도 서로 덮어쓰지 않게 밀리초까지 넣는다
+const stamp = (): string => new Date().toISOString().replace(/[-:.]/g, '').replace(/Z$/, '')
 
 export async function startMcp(): Promise<void> {
   if (running || getSetting('mcp_enabled') === '0') return
@@ -25,6 +26,8 @@ export async function startMcp(): Promise<void> {
       info: { name: 'nais3-works', version: app.getVersion() },
       tools: createWorkTools({
         reader: (platform) => (url) => workRead(platform, url),
+        writer: (platform) => (method, url, body) => workWrite(platform, method, url, body),
+        readFile: (path) => readFile(path, 'utf8'),
         async snapshot(platform, name, raw) {
           const safe = name.replace(/[^A-Za-z0-9_.-]/g, '_')
           const dir = join(root, 'snapshots', platform, safe)

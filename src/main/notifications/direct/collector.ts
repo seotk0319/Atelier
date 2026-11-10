@@ -40,7 +40,7 @@ import {
   type WorkRead
 } from './my-works'
 import type { InboxWork } from '../../../shared/inbox'
-import { workReadAllowed } from '../../works/adapters'
+import { workReadAllowed, workWriteAllowed } from '../../works/adapters'
 import {
   checkContent,
   findEdenReplies,
@@ -130,6 +130,11 @@ export function createDirectCollector(options: {
    * 연결 안 됐으면 LOGIN_REQUIRED.
    */
   workRead(platform: string, url: string): Promise<Response>
+  /**
+   * 그 플랫폼 작품을 로그인 계정으로 저장한다 (작품 저장으로 허용된 요청만, JSON 본문).
+   * 연결 안 됐으면 LOGIN_REQUIRED.
+   */
+  workWrite(platform: string, method: string, url: string, body: unknown): Promise<Response>
   /** 에덴 댓글 번호 → 사이트에서 내가 그 뒤에 단 답글 (읽기만 한다). */
   edenReplies(commentIds: string[]): Promise<Record<string, FoundReply>>
   status(): Promise<{
@@ -835,6 +840,36 @@ export function createDirectCollector(options: {
           signal: AbortSignal.timeout(20_000)
         })
       const response = await call()
+      if (
+        !response.ok &&
+        (await renewable(response.clone())) &&
+        (await renewPlatform(platform as DirectPlatformId, holder).catch(() => false))
+      )
+        return call()
+      return response
+    },
+    async workWrite(platform, method, url, body) {
+      if (!workWriteAllowed(platform, method, url)) throw new Error('UNAPPROVED_WRITE_ROUTE')
+      const s = await ready()
+      const current = s.platforms[platform as DirectPlatformId]
+      if (!current) throw new ReplyError('LOGIN_REQUIRED')
+      const holder = { profile: current.profile }
+      const origin = new URL(url).origin
+      const payload = JSON.stringify(body)
+      const call = (): Promise<Response> =>
+        ses.fetch(url, {
+          method,
+          headers: {
+            ...(holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}),
+            'content-type': 'application/json'
+          },
+          body: payload,
+          credentials: 'include',
+          redirect: 'error',
+          signal: AbortSignal.timeout(30_000)
+        })
+      const response = await call()
+      // 로그인 만료로 거절된 요청은 저장되지 않았으므로 로그인을 이어 붙인 뒤 한 번만 다시 보낸다.
       if (
         !response.ok &&
         (await renewable(response.clone())) &&

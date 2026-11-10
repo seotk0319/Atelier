@@ -27,3 +27,8 @@ export function workAdapter(site: string): WorkAdapter {
 export function workReadAllowed(platform: string, url: string): boolean {
   return WORK_ADAPTERS[platform]?.readAllowed(url) ?? false
 }
+
+/** 그 플랫폼 작품 저장 요청으로 허용된 것인지 (collector가 요청 전에 확인한다) */
+export function workWriteAllowed(platform: string, method: string, url: string): boolean {
+  return WORK_ADAPTERS[platform]?.writeAllowed?.(method, url) ?? false
+}
