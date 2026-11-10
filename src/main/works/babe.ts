@@ -68,6 +68,7 @@ const START_KEYS = {
   description: 'playGuide'
 } as const
 
+const MAX_EXTRA_STARTS = 2
 const keywords = (keys: string): string[] =>
   keys
     .split(',')
@@ -222,8 +223,39 @@ export const babeWorks: WorkAdapter = {
       }
       e.startingScenarios = extra
     }
+    if (changes.startScenariosRemove?.length) {
+      const extra = list(e.startingScenarios)
+      const gone = new Set(changes.startScenariosRemove.map((i) => at(i, extra.length + 1)))
+      // 0번은 기본 시작 설정이라 지울 수 없다
+      if (gone.has(0)) throw new Error('KEEP_DEFAULT')
+      e.startingScenarios = extra.filter((_, i) => !gone.has(i + 1))
+    }
+    if (changes.startScenariosAdd?.length) {
+      const extra = list(e.startingScenarios)
+      for (const draft of changes.startScenariosAdd) {
+        if (draft.subPrompt !== undefined || draft.situation !== undefined)
+          throw new Error('BAD_CHANGES')
+        // 편집기의 추가 버튼과 같은 모양: 번호 없이 보낸다
+        extra.push({
+          initialTitle: draft.title ?? '',
+          initialAction: draft.content ?? '',
+          initialMessage: draft.dialogue ?? '',
+          playGuide: draft.description ?? '',
+          replySuggestions: []
+        })
+      }
+      // 편집기는 추가 시작 설정을 2개까지만 받는다
+      if (extra.length > MAX_EXTRA_STARTS) throw new Error('START_LIMIT')
+      e.startingScenarios = extra
+    }
 
-    if (changes.characters?.length) throw new Error('BAD_CHANGES')
+    // 베이비챗은 작품 하나에 캐릭터 하나다
+    if (
+      changes.characters?.length ||
+      changes.charactersAdd?.length ||
+      changes.charactersRemove?.length
+    )
+      throw new Error('NO_CHARACTERS')
     return next
   },
 

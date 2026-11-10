@@ -433,6 +433,61 @@ describe('작품 계획·저장', () => {
     ).rejects.toThrow('BAD_CHANGES')
   })
 
+  it('시작 상황·캐릭터 추가와 삭제', async () => {
+    const s = site()
+    const t = tools(s)
+    const add = await t.run('work_plan', {
+      site: 'eden',
+      work_id: W,
+      start_scenarios_add: [{ title: '둘째 모드', content: '둘째 본문', sub_prompt: '보조' }],
+      characters_add: [{ name: '셋째', details: '셋째 설정' }]
+    })
+    expect((add.changes as { where: string; kind: string }[]).map((c) => c.kind)).toEqual([
+      'added',
+      'added'
+    ])
+    expect(await t.run('work_save', { plan_id: add.plan_id })).toMatchObject({ verified: true })
+    const starts = s.puts[0].start_scenarios as Obj[]
+    expect(starts).toHaveLength(2)
+    expect(starts[1]).toMatchObject({
+      title: '둘째 모드',
+      detailedSettings: '둘째 본문',
+      subPrompt: '보조',
+      isDefault: false,
+      imageCodes: [],
+      elementOrder: ['image', 'situation', 'dialogue']
+    })
+    expect(Number.isInteger(starts[1].id) && starts[1].id !== 1).toBe(true)
+    const chars = s.puts[0].characters as Obj[]
+    expect(chars).toHaveLength(3)
+    expect(chars[2]).toMatchObject({
+      character_name: '셋째',
+      character_details: '셋째 설정',
+      is_main_character: false,
+      character_order: 2,
+      images: []
+    })
+    expect(String(chars[2].id)).toMatch(/^[0-9a-f-]{36}$/)
+    expect('delete_missing' in s.puts[0]).toBe(false)
+
+    const remove = await t.run('work_plan', {
+      site: 'eden',
+      work_id: W,
+      start_scenarios_remove: [1],
+      characters_remove: [2]
+    })
+    expect(await t.run('work_save', { plan_id: remove.plan_id })).toMatchObject({ verified: true })
+    expect(s.puts[1].delete_missing).toBe(true)
+    expect((s.puts[1].characters as Obj[]).map((c) => c.character_name)).toEqual(['첫째', '둘째'])
+    expect(s.puts[1].start_scenarios).toHaveLength(1)
+
+    const plan = (args: Obj): Promise<Obj> =>
+      t.run('work_plan', { site: 'eden', work_id: W, ...args })
+    await expect(plan({ start_scenarios_remove: [0] })).rejects.toThrow('KEEP_DEFAULT')
+    await expect(plan({ characters_remove: [0] })).rejects.toThrow('KEEP_DEFAULT')
+    await expect(plan({ characters_add: [{ name: ' ' }] })).rejects.toThrow('EMPTY_FIELD')
+    await expect(plan({ characters_remove: [5] })).rejects.toThrow('BAD_INDEX')
+  })
   it('diffBodies: 로어북 추가·삭제를 알린다', async () => {
     const s = site()
     const before = edenWorks.normalize(await edenWorks.readRaw(s.read, W))

@@ -96,6 +96,10 @@ export interface WorkAdapter {
 /** 로그인한 계정으로 쓰는 통로. 허용 요청 검사는 통로를 만드는 쪽(collector)이 한다. */
 export type WorkWrite = (method: 'PUT' | 'POST', url: string, body: unknown) => Promise<Response>
 
+export type StartScenarioDraft = Partial<
+  Pick<StartScenario, 'title' | 'content' | 'subPrompt' | 'dialogue' | 'situation' | 'description'>
+>
+
 /** 바꿀 내용. 적지 않은 칸은 플랫폼에 있던 값 그대로 둔다. */
 export interface WorkChanges {
   /** 글 칸 통째 교체: title / subtitle / description / main / creator_comment */
@@ -115,6 +119,14 @@ export interface WorkChanges {
       'title' | 'content' | 'subPrompt' | 'dialogue' | 'situation' | 'description'
     >
   >)[]
+  /** 시작 상황 지우기 (index는 고치기 전 번호. 기본 시작 상황은 지울 수 없다) */
+  startScenariosRemove?: number[]
+  /** 시작 상황 끝에 새로 더하기 */
+  startScenariosAdd?: StartScenarioDraft[]
+  /** 캐릭터 지우기 (index는 고치기 전 번호. 주연은 지울 수 없다) */
+  charactersRemove?: number[]
+  /** 캐릭터 끝에 새로 더하기 */
+  charactersAdd?: { name: string; details?: string; info?: string }[]
   /** 캐릭터 일부만 고치기 */
   characters?: ({ index: number } & Partial<Pick<WorkCharacter, 'name' | 'details' | 'info'>>)[]
 }

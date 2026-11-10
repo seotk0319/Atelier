@@ -190,12 +190,15 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
     if (changes.lorebook) throw new Error('BAD_CHANGES')
     changes.lorebookPatch = patches(args.lorebook_patch, (item) => loreEntry(item, true))
   }
-  if (args.lorebook_remove !== undefined) {
-    const gone = args.lorebook_remove
-    if (changes.lorebook || !Array.isArray(gone)) throw new Error('BAD_CHANGES')
-    if (gone.some((i) => !Number.isInteger(i)) || new Set(gone).size !== gone.length)
+  const removal = (v: unknown): number[] => {
+    if (!Array.isArray(v)) throw new Error('BAD_CHANGES')
+    if (v.some((i) => !Number.isInteger(i)) || new Set(v).size !== v.length)
       throw new Error('BAD_INDEX')
-    changes.lorebookRemove = gone as number[]
+    return v as number[]
+  }
+  if (args.lorebook_remove !== undefined) {
+    if (changes.lorebook) throw new Error('BAD_CHANGES')
+    changes.lorebookRemove = removal(args.lorebook_remove)
   }
   if (args.lorebook_add !== undefined) {
     if (changes.lorebook) throw new Error('BAD_CHANGES')
@@ -220,6 +223,35 @@ export async function parseChanges(args: Obj, deps: WorkToolDeps): Promise<WorkC
         ['info', 'info']
       ])
     )
+  const START: [string, string][] = [
+    ['title', 'title'],
+    ['content', 'content'],
+    ['sub_prompt', 'subPrompt'],
+    ['dialogue', 'dialogue'],
+    ['situation', 'situation'],
+    ['description', 'description']
+  ]
+  const objects = (v: unknown): Obj[] => {
+    if (!Array.isArray(v) || !v.every(isObj)) throw new Error('BAD_CHANGES')
+    return v
+  }
+  if (args.start_scenarios_remove !== undefined)
+    changes.startScenariosRemove = removal(args.start_scenarios_remove)
+  if (args.start_scenarios_add !== undefined)
+    changes.startScenariosAdd = objects(args.start_scenarios_add).map((item) =>
+      optional(item, START)
+    )
+  if (args.characters_remove !== undefined)
+    changes.charactersRemove = removal(args.characters_remove)
+  if (args.characters_add !== undefined)
+    changes.charactersAdd = objects(args.characters_add).map((item) => {
+      if (typeof item.name !== 'string' || !item.name.trim()) throw new Error('EMPTY_FIELD')
+      return {
+        name: item.name,
+        ...(typeof item.details === 'string' ? { details: item.details } : {}),
+        ...(typeof item.info === 'string' ? { info: item.info } : {})
+      }
+    })
   if (!Object.keys(changes).length) throw new Error('NO_CHANGES')
   return changes
 }
@@ -324,6 +356,41 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
             type: 'array',
             items: withIndex({ name: text, details: text, info: text }),
             description: '캐릭터 일부만 고친다'
+          },
+          start_scenarios_remove: {
+            type: 'array',
+            items: { type: 'integer' },
+            description: '지울 시작 상황 번호들 (고치기 전 번호. 기본 시작 상황은 지울 수 없다)'
+          },
+          start_scenarios_add: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: text,
+                content: text,
+                sub_prompt: text,
+                dialogue: text,
+                situation: text,
+                description: text
+              }
+            },
+            description: '끝에 더할 새 시작 상황들'
+          },
+          characters_remove: {
+            type: 'array',
+            items: { type: 'integer' },
+            description:
+              '지울 캐릭터 번호들 (고치기 전 번호. 주연은 지울 수 없다). 그 캐릭터의 이미지도 함께 사라진다'
+          },
+          characters_add: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { name: text, details: text, info: text },
+              required: ['name']
+            },
+            description: '끝에 더할 새 캐릭터들 (이미지는 따로 올린다)'
           }
         },
         required: ['site', 'work_id']

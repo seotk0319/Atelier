@@ -264,6 +264,27 @@ describe('베이비챗 작품', () => {
     ])
   })
 
+  it('시작 설정 추가·삭제: 새 항목은 번호 없이 보내고 0번(기본)은 지울 수 없다', async () => {
+    const s = site()
+    const run = tools(s)
+    const add = await run('work_plan', {
+      site: 'babe',
+      work_id: W,
+      start_scenarios_add: [{ title: '셋째', content: '셋째 상황', dialogue: '셋째 대사' }]
+    })
+    expect((add.changes as Obj[])[0]).toMatchObject({ kind: 'added' })
+    await run('work_save', { plan_id: add.plan_id })
+    expect((s.sent[0].startingScenarios as Obj[])[1]).toEqual({
+      initialTitle: '셋째',
+      initialAction: '셋째 상황',
+      initialMessage: '셋째 대사',
+      playGuide: '',
+      replySuggestions: []
+    })
+    const remove = await run('work_plan', { site: 'babe', work_id: W, start_scenarios_remove: [1] })
+    await run('work_save', { plan_id: remove.plan_id })
+    expect((s.sent[1].startingScenarios as Obj[]).map((x) => x.initialTitle)).toEqual(['셋째'])
+  })
   it('미리보기에서 버전이 다르면 저장하지 않는다', async () => {
     const s = site()
     const raw = (await babeWorks.readRaw(s.read, W)) as { id: string; edit: Obj }
@@ -290,7 +311,14 @@ describe('베이비챗 작품', () => {
     )
     await expect(plan({ lorebook_remove: [0, 0] })).rejects.toThrow('BAD_INDEX')
     await expect(plan({ lorebook_remove: [3] })).rejects.toThrow('BAD_INDEX')
-    await expect(plan({ characters: [{ index: 0, details: 'x' }] })).rejects.toThrow('BAD_CHANGES')
+    await expect(plan({ characters: [{ index: 0, details: 'x' }] })).rejects.toThrow(
+      'NO_CHARACTERS'
+    )
+    await expect(plan({ characters_add: [{ name: 'x' }] })).rejects.toThrow('NO_CHARACTERS')
+    await expect(plan({ start_scenarios_remove: [0] })).rejects.toThrow('KEEP_DEFAULT')
+    await expect(plan({ start_scenarios_add: [{ title: 'a' }, { title: 'b' }] })).rejects.toThrow(
+      'START_LIMIT'
+    )
     await expect(plan({ fields: { subtitle: 'x' } })).rejects.toThrow('BAD_FIELD')
     await expect(plan({ lorebook_patch: [{ index: 0, keys: ' , ' }] })).rejects.toThrow(
       'BAD_LOREBOOK'

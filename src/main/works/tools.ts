@@ -43,6 +43,9 @@ const MESSAGES: [RegExp, string][] = [
   [/NO_EDITIONS/, '언어 판본이 없는 플랫폼이에요.'],
   [/UNAPPROVED_(READ|WRITE)_ROUTE/, '허용되지 않은 주소라 요청하지 않았어요.'],
   [/NO_SAVE/, '이 플랫폼은 아직 저장을 지원하지 않아요.'],
+  [/KEEP_DEFAULT/, '기본 시작 상황과 주연 캐릭터는 지울 수 없어요. 하나는 꼭 남아야 해요.'],
+  [/START_LIMIT/, '이 플랫폼은 추가 시작 설정을 2개까지만 받아요.'],
+  [/NO_CHARACTERS/, '이 플랫폼은 작품 하나에 캐릭터가 하나라 캐릭터를 더하거나 지울 수 없어요.'],
   [
     /NO_CHANGES/,
     '바꿀 내용이 없어요. fields·lorebook·start_scenarios·characters 중 하나는 주세요.'

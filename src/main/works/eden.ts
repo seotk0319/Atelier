@@ -6,6 +6,7 @@
 //   GET /api/works/{id}/translations             언어 판본 목록 {items[]}
 //   GET /api/works/{id}/translations/{lang}      판본 내용 {item:{work, characters}}
 // 저장은 PUT /api/works/{id} 통째 저장만 메인·로어북·시작 상황을 받는다 (PATCH는 400).
+import { randomUUID } from 'node:crypto'
 import type {
   EditionBody,
   EditionInfo,
@@ -282,7 +283,69 @@ export const edenWorks: WorkAdapter = {
       }
       work.start_scenarios = scenarios
     }
+    if (changes.startScenariosRemove?.length) {
+      const scenarios = list(work.start_scenarios)
+      const gone = new Set(changes.startScenariosRemove.map((i) => at(i, scenarios.length)))
+      // 기본 시작 상황과 마지막 하나는 남긴다 (편집기도 하나는 꼭 둔다)
+      if ([...gone].some((i) => scenarios[i].isDefault === true) || gone.size >= scenarios.length)
+        throw new Error('KEEP_DEFAULT')
+      work.start_scenarios = scenarios.filter((_, i) => !gone.has(i))
+    }
+    if (changes.startScenariosAdd?.length) {
+      const scenarios = list(work.start_scenarios)
+      for (const draft of changes.startScenariosAdd) {
+        // 편집기의 추가 버튼과 같은 모양: 안 겹치는 정수 번호를 새로 뽑는다
+        const used = new Set(scenarios.map((s) => s.id))
+        let id: number
+        do id = Math.floor(2e9 * Math.random()) + 1
+        while (used.has(id))
+        scenarios.push({
+          id,
+          title: draft.title ?? '',
+          description: draft.description ?? '',
+          detailedSettings: draft.content ?? '',
+          isDefault: !scenarios.some((s) => s.isDefault === true),
+          situation: draft.situation ?? '',
+          dialogue: draft.dialogue ?? '',
+          subPrompt: draft.subPrompt ?? '',
+          imageCode: '',
+          imageCodes: [],
+          elementOrder: ['image', 'situation', 'dialogue']
+        })
+      }
+      work.start_scenarios = scenarios
+    }
 
+    if (changes.charactersRemove?.length) {
+      const characters = list(next.characters)
+      const gone = new Set(changes.charactersRemove.map((i) => at(i, characters.length)))
+      if ([...gone].some((i) => characters[i].is_main_character === true))
+        throw new Error('KEEP_DEFAULT')
+      next.characters = characters.filter((_, i) => !gone.has(i))
+      // 저장 본문에서 빠진 캐릭터를 플랫폼이 지우게 한다 (편집기의 delete_missing)
+      next.deleteMissing = true
+    }
+    if (changes.charactersAdd?.length) {
+      const characters = list(next.characters)
+      const images = isObj(next.images) ? next.images : {}
+      for (const draft of changes.charactersAdd) {
+        if (!draft.name?.trim()) throw new Error('EMPTY_FIELD')
+        // 편집기도 새 캐릭터에 새 uuid를 붙여 통째 저장 본문에 넣는다
+        const id = randomUUID()
+        characters.push({
+          id,
+          character_name: draft.name,
+          character_details: draft.details ?? '',
+          character_info: draft.info ?? '',
+          is_main_character: false,
+          character_order: characters.length,
+          start_scenario: null
+        })
+        images[id] = []
+      }
+      next.characters = characters
+      next.images = images
+    }
     if (changes.characters?.length) {
       const characters = list(next.characters)
       for (const patch of changes.characters) {
@@ -396,6 +459,7 @@ export function edenSaveBody(raw: unknown): Obj {
           return [{ id: imageId, ...(/^https?:\/\//i.test(url) ? { url } : {}) }]
         })
       }
-    })
+    }),
+    ...(raw.deleteMissing === true ? { delete_missing: true } : {})
   }
 }
