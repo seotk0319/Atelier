@@ -170,7 +170,7 @@ function LockScreen({ onUnlocked }: { onUnlocked: () => void }): React.JSX.Eleme
             aria-valuemax={MAX}
             aria-valuenow={Math.round(x)}
             className={cn(
-              'absolute grid cursor-grab place-items-center rounded-full bg-accent text-white shadow-[0_4px_14px_rgba(91,91,214,0.4)] active:cursor-grabbing dark:text-paper',
+              'absolute grid cursor-grab place-items-center rounded-full bg-accent-fill text-on-accent shadow-[0_4px_14px_rgba(91,91,214,0.4)] active:cursor-grabbing',
               !dragging && 'transition-transform duration-300 ease-[cubic-bezier(0.22,1.4,0.36,1)]'
             )}
             style={{

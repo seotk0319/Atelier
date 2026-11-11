@@ -217,7 +217,7 @@ export function DirectorMode(): React.JSX.Element {
               alt=""
             />
             {isResult && (
-              <span className="absolute left-3 top-3 rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-medium text-white">
+              <span className="absolute left-3 top-3 rounded-full bg-accent-fill px-2.5 py-0.5 text-[11px] font-medium text-on-accent">
                 결과
               </span>
             )}

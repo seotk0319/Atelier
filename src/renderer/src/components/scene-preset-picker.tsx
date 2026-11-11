@@ -48,10 +48,13 @@ const treeKey = (row: PresetTreeRow<ScenePreset>): string =>
  */
 export function ScenePresetPicker({
   onManage,
-  onBind
+  onBind,
+  triggerClassName
 }: {
   onManage: () => void
   onBind: (p: ScenePreset) => void
+  /** 단추 모양 덧칠 (요약 줄에서 크게) */
+  triggerClassName?: string
 }): React.JSX.Element {
   const presets = useScenesStore((s) => s.presets)
   const folders = useScenesStore((s) => s.presetFolders)
@@ -146,7 +149,13 @@ export function ScenePresetPicker({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <button className="flex h-9 min-w-0 max-w-[420px] items-center gap-1.5 rounded-lg bg-paper px-3 text-[13px] font-semibold text-ink outline-none hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent/40">
+        <button
+          className={cn(
+            'flex h-9 min-w-0 max-w-[420px] items-center gap-1.5 rounded-lg bg-paper px-3 text-[13px] font-semibold text-ink outline-none hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent/40',
+            triggerClassName
+          )}
+          title="씬 프리셋 고르기"
+        >
           {activeParent && (
             <>
               <span className="min-w-0 max-w-[120px] shrink truncate font-medium text-muted">

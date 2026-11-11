@@ -282,7 +282,7 @@ export function CoverExportDialog({
             <div className="mt-3">
               <div className="h-1 overflow-hidden rounded-md bg-surface-2">
                 <div
-                  className="h-full bg-accent transition-[width]"
+                  className="h-full bg-mark transition-[width]"
                   style={{ width: percent + '%' }}
                 />
               </div>

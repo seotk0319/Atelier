@@ -46,8 +46,8 @@ export function GptView(): React.JSX.Element {
       .then(({ jobs }) => useGptStore.setState({ jobs }))
   }, [visible])
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
-      <div className="drag flex h-[60px] shrink-0 items-center gap-3 px-5">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
+      <div className="flex h-[60px] shrink-0 items-center gap-3 px-5">
         <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">GPT 이미지</h1>
         <div className="flex-1" />
         <LoginChip />
@@ -284,7 +284,7 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
           <button
             disabled={disabled}
             onClick={() => void s.generate()}
-            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50 dark:text-paper"
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-accent-fill text-[14px] font-semibold text-on-accent transition hover:opacity-90 disabled:opacity-50"
           >
             {s.edit ? <PencilLine size={16} /> : <Sparkles size={16} />}
             {s.edit ? '고치기' : '생성'} · {s.count}장

@@ -7,9 +7,47 @@ import { getSetting } from '../db/settings'
 import { workAccount, workRead, workSend, workWrite } from '../notifications/service'
 import { createWorkTools } from '../works/tools'
 import type { WorkReadInit, WorkRequest } from '../works/types'
+import type { McpActivity, McpStatus } from '../../shared/types'
+import { createActivityLog, withActivity, type ActivityLog } from './activity'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
 
 let running: ReturnType<typeof createMcpServer> | null = null
+/** 마지막으로 열려고 한 포트와, 열지 못했을 때의 이유 (화면 표시용) */
+let lastPort = 0
+let lastError: string | null = null
+
+let activity: ActivityLog | null = null
+let activityListener: ((item: McpActivity) => void) | null = null
+
+/** 도구 호출 기록을 받을 곳 (ipc가 렌더러로 보낸다) */
+export function onMcpActivity(listener: (item: McpActivity) => void): void {
+  activityListener = listener
+}
+
+function activityLog(): ActivityLog {
+  activity ??= createActivityLog({
+    file: join(app.getPath('userData'), 'mcp', 'activity.jsonl'),
+    onAdd: (item) => activityListener?.(item)
+  })
+  return activity
+}
+
+export function mcpStatus(): McpStatus {
+  return {
+    running: !!running,
+    port: lastPort,
+    url: running ? 'http://127.0.0.1:' + lastPort + '/mcp' : '',
+    error: lastError
+  }
+}
+
+export async function mcpActivity(limit?: number): Promise<{ items: McpActivity[] }> {
+  try {
+    return { items: await activityLog().list(limit) }
+  } catch {
+    return { items: [] }
+  }
+}
 
 // 저장 직전 백업과 저장 뒤 확인본이 같은 초에 생겨도 서로 덮어쓰지 않게 밀리초까지 넣는다
 const stamp = (): string => new Date().toISOString().replace(/[-:.]/g, '').replace(/Z$/, '')
@@ -27,50 +65,57 @@ export async function startMcp(): Promise<void> {
   const saved = Number(getSetting('mcp_port'))
   const port = Number.isInteger(saved) && saved >= 1024 && saved <= 65535 ? saved : MCP_DEFAULT_PORT
   const root = join(app.getPath('userData'), 'mcp')
+  lastPort = port
+  lastError = null
   try {
     const { token } = await loadConnection(join(root, 'connection.json'), port)
     const server = createMcpServer({
       port,
       token,
       info: { name: 'atelier-works', version: app.getVersion() },
-      tools: createWorkTools({
-        // 통로 함수에 계정 번호 꺼내는 함수를 붙여 둔다 (알플레이·티팟은 주소에 내 계정 번호가 들어간다)
-        reader: (platform) =>
-          withAccount(platform, (url: string, init?: WorkReadInit) =>
-            workRead(platform, url, init)
-          ),
-        writer: (platform) =>
-          withAccount(platform, (method: string, url: string, body?: unknown) =>
-            workWrite(platform, method, url, body)
-          ),
-        sender: (platform) =>
-          withAccount(platform, (request: WorkRequest) => workSend(platform, request)),
-        readFile: (path) => readFile(path, 'utf8'),
-        // 이미지 파일은 크기를 먼저 보고, 한도 안일 때만 읽는다
-        async readBinary(path, maxBytes) {
-          const info = await stat(path)
-          if (!info.isFile() || info.size > maxBytes) throw new Error('BAD_FILE')
-          return readFile(path)
-        },
-        async listFolder(path) {
-          const entries = await readdir(path, { withFileTypes: true })
-          return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
-        },
-        async snapshot(platform, name, raw) {
-          const safe = name.replace(/[^A-Za-z0-9_.-]/g, '_')
-          const dir = join(root, 'snapshots', platform, safe)
-          await mkdir(dir, { recursive: true })
-          const file = join(dir, stamp() + '.json')
-          await writeFile(file, JSON.stringify(raw, null, 2))
-          return file
-        }
-      })
+      tools: withActivity(
+        createWorkTools({
+          // 통로 함수에 계정 번호 꺼내는 함수를 붙여 둔다 (알플레이·티팟은 주소에 내 계정 번호가 들어간다)
+          reader: (platform) =>
+            withAccount(platform, (url: string, init?: WorkReadInit) =>
+              workRead(platform, url, init)
+            ),
+          writer: (platform) =>
+            withAccount(platform, (method: string, url: string, body?: unknown) =>
+              workWrite(platform, method, url, body)
+            ),
+          sender: (platform) =>
+            withAccount(platform, (request: WorkRequest) => workSend(platform, request)),
+          readFile: (path) => readFile(path, 'utf8'),
+          // 이미지 파일은 크기를 먼저 보고, 한도 안일 때만 읽는다
+          async readBinary(path, maxBytes) {
+            const info = await stat(path)
+            if (!info.isFile() || info.size > maxBytes) throw new Error('BAD_FILE')
+            return readFile(path)
+          },
+          async listFolder(path) {
+            const entries = await readdir(path, { withFileTypes: true })
+            return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+          },
+          async snapshot(platform, name, raw) {
+            const safe = name.replace(/[^A-Za-z0-9_.-]/g, '_')
+            const dir = join(root, 'snapshots', platform, safe)
+            await mkdir(dir, { recursive: true })
+            const file = join(dir, stamp() + '.json')
+            await writeFile(file, JSON.stringify(raw, null, 2))
+            return file
+          }
+        }),
+        activityLog()
+      )
     })
     await server.start()
     running = server
   } catch (error) {
     // 포트가 이미 쓰이는 등으로 못 열어도 앱의 다른 기능은 그대로 돈다.
-    console.error('[mcp] 창구를 열지 못했어요:', error instanceof Error ? error.message : error)
+    const message = error instanceof Error ? error.message : String(error)
+    lastError = message.slice(0, 200)
+    console.error('[mcp] 창구를 열지 못했어요:', message)
   }
 }
 

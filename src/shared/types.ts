@@ -549,6 +549,10 @@ export interface IpcInvokeMap {
   'queue:cancel': { req: { ids: string[] }; res: void }
   'queue:reset': { req: void; res: void }
   'queue:status': { req: void; res: QueueStatus }
+  /** 작품 MCP 창구 상태 (Atelier 화면용) */
+  'mcp:status': { req: void; res: McpStatus }
+  /** 작품 MCP가 한 일 — 최근 것부터 */
+  'mcp:activity': { req: { limit?: number }; res: { items: McpActivity[] } }
   'acceleration:set': { req: { enabled: boolean }; res: QueueStatus }
   'acceleration:setAccount': {
     req: { id: string; enabled: boolean }
@@ -918,6 +922,8 @@ export interface IpcInvokeMap {
 
 /** 메인 → 렌더러 이벤트 채널 */
 export interface IpcEventMap {
+  /** 작품 MCP 도구 호출이 하나 끝날 때마다 */
+  'mcp:activityAdded': McpActivity
   'queue:changed': QueueStatus
   /** 생성 완료 등으로 잔액이 갱신될 때 */
   'anlas:balance': { anlas: number; v5Usage?: V5UsageStatus | null }
@@ -950,4 +956,33 @@ export interface IpcEventMap {
     /** 포터블 복사본이면 자동 설치 대신 릴리스 페이지를 연다 */
     portable?: boolean
   }
+}
+
+/** 작품 MCP 창구 상태 */
+export interface McpStatus {
+  running: boolean
+  port: number
+  url: string
+  /** 시작하지 못했을 때의 이유 (없으면 null) */
+  error: string | null
+}
+
+/** 작품 MCP 도구 호출 한 건의 기록. 본문·토큰은 담지 않는다 */
+export interface McpActivity {
+  id: string
+  /** ISO 시각 */
+  at: string
+  /** 도구 이름 (work_save 등) */
+  tool: string
+  kind: 'read' | 'plan' | 'save' | 'create' | 'delete' | 'other'
+  /** 플랫폼 site 이름 (eden 등). 없으면 null */
+  site: string | null
+  workId: string | null
+  workTitle: string | null
+  ok: boolean
+  /** 저장 뒤 다시 읽어 같았는지. 해당 없으면 null */
+  verified: boolean | null
+  /** 화면에 보일 한 줄 (예: "로어북 4개 저장") */
+  summary: string
+  error: string | null
 }

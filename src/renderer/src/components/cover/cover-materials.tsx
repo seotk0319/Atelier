@@ -220,7 +220,7 @@ function MaterialsSection({
           {items.map((item, index) => (
             <li key={item.id} className="relative">
               {dropIndex === index && (
-                <span className="pointer-events-none absolute inset-x-1 -top-px z-10 h-0.5 rounded-full bg-accent" />
+                <span className="pointer-events-none absolute inset-x-1 -top-px z-10 h-0.5 rounded-full bg-mark" />
               )}
               <ItemRow
                 kind={kind}
@@ -259,7 +259,7 @@ function MaterialsSection({
           ))}
           {dropIndex === items.length && (
             <li className="pointer-events-none relative h-0">
-              <span className="absolute inset-x-1 -top-px h-0.5 rounded-full bg-accent" />
+              <span className="absolute inset-x-1 -top-px h-0.5 rounded-full bg-mark" />
             </li>
           )}
         </ul>

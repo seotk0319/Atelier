@@ -394,7 +394,7 @@ function Composer(): React.JSX.Element {
               title="보내기 (Enter)"
               disabled={!text.trim() || busy}
               onClick={send}
-              className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-white transition-opacity disabled:bg-surface-2 disabled:text-faint dark:text-paper"
+              className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent-fill text-on-accent transition-opacity disabled:bg-surface-2 disabled:text-faint"
             >
               {busy ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={16} />}
             </button>

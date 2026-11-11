@@ -112,8 +112,8 @@ export function CoverArchivePanel(): React.JSX.Element {
   }, [archive, filter, project?.id])
 
   return (
-    <aside className="flex h-full w-[240px] flex-col rounded-xl bg-surface">
-      <div className="drag flex h-14 shrink-0 items-center gap-2 px-4">
+    <aside className="flex h-full w-[240px] flex-col bg-surface">
+      <div className="flex h-14 shrink-0 items-center gap-2 px-4">
         <History size={15} className="text-muted" />
         <span className="text-[15px] font-bold">표지 기록</span>
         <span className="text-[12px] tabular-nums text-faint">
@@ -272,7 +272,7 @@ function ArchiveTile({
           </span>
           {used && (
             <span
-              className="pointer-events-none absolute left-1 top-1 grid size-4 place-items-center rounded-full bg-accent text-white"
+              className="pointer-events-none absolute left-1 top-1 grid size-4 place-items-center rounded-full bg-accent-fill text-on-accent"
               title="지금 작품에 들어 있어요"
             >
               <Check size={10} strokeWidth={3} />

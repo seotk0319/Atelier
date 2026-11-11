@@ -9,7 +9,7 @@ export function Slider({ className, ...props }: ComponentProps<typeof SliderPrim
       {...props}
     >
       <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-surface-2">
-        <SliderPrimitive.Range className="absolute h-full bg-accent" />
+        <SliderPrimitive.Range className="absolute h-full bg-mark" />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb className="block size-3.5 rounded-full border border-accent bg-paper shadow transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40" />
     </SliderPrimitive.Root>

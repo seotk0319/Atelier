@@ -61,9 +61,8 @@ export function HistoryPanel(): React.JSX.Element {
   }
 
   return (
-    <aside className="flex h-full w-[240px] flex-col rounded-xl bg-surface">
-      {/* 헤더는 창 드래그 영역 */}
-      <div className="drag flex h-14 shrink-0 items-center gap-2 px-4">
+    <aside className="flex h-full w-[240px] flex-col bg-surface">
+      <div className="flex h-14 shrink-0 items-center gap-2 px-4">
         <History size={15} className="text-muted" />
         <span className="text-[15px] font-bold">히스토리</span>
         <span className="text-[12px] tabular-nums text-faint">{historyTotal.toLocaleString()}</span>

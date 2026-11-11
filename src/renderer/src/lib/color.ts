@@ -24,3 +24,13 @@ export function mixHex(a: string, b: string, t: number): string {
   const lerp = (x: number, y: number): number => x + (y - x) * t
   return toHex({ r: lerp(ca.r, cb.r), g: lerp(ca.g, cb.g), b: lerp(ca.b, cb.b) })
 }
+
+/** 상대 휘도(0~1). 강조색 위 글자색을 고를 때 쓴다 */
+export function luminance(hex: string): number {
+  const { r, g, b } = parseHex(hex)
+  const ch = (v: number): number => {
+    const s = v / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+}

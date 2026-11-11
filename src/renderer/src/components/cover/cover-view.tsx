@@ -59,8 +59,8 @@ export function CoverView(): React.JSX.Element {
   const pngCount = bgCount * typoCount * COVER_CANVASES.length
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
-      <div className="drag flex h-[60px] shrink-0 items-center gap-3 px-5">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
+      <div className="flex h-[60px] shrink-0 items-center gap-3 px-5">
         <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">표지</h1>
         <CoverProjectPicker />
         <div className="flex-1" />

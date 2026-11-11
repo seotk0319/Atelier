@@ -748,7 +748,7 @@ export function CoverWebpDialog({
                 <div>
                   <div className="h-1 overflow-hidden rounded-md bg-surface-2">
                     <div
-                      className="h-full bg-accent transition-[width]"
+                      className="h-full bg-mark transition-[width]"
                       style={{ width: percent + '%' }}
                     />
                   </div>
@@ -884,7 +884,7 @@ function PickerTile({
         className="flex h-[120px] w-full items-center justify-center overflow-hidden rounded-md bg-surface-2"
       />
       {places.length > 0 && (
-        <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-semibold tabular-nums text-white dark:text-paper">
+        <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-accent-fill px-1 text-[11px] font-semibold tabular-nums text-on-accent">
           {badge}
         </span>
       )}

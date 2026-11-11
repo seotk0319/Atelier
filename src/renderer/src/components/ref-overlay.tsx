@@ -149,7 +149,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
           <span
             className={cn(
               'grid size-4 shrink-0 place-items-center rounded border-2',
-              checked ? 'border-accent bg-accent text-white' : 'border-line'
+              checked ? 'border-accent-fill bg-accent-fill text-on-accent' : 'border-line'
             )}
           >
             {checked && <span className="text-[11px] leading-none">✓</span>}

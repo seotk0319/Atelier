@@ -106,8 +106,10 @@ interface ScenesState {
   /** 즐겨찾기 제외 전체 삭제 (N5) */
   deleteNonFavorites: (sceneId: number) => Promise<number>
 
-  /** 모든 프리셋의 예약을 프리셋 순서대로 전부 큐에 넣는다 (프리셋별 캐릭터 바인드 적용) */
+  /** 지금 연 프리셋의 예약만 큐에 넣는다 */
   generateReserved: () => Promise<void>
+  /** 모든 프리셋의 예약을 프리셋 순서대로 전부 큐에 넣는다 (프리셋별 캐릭터 바인드 적용). 넣은 장수 */
+  generateAllReserved: () => Promise<number>
   /** 프리셋 캐릭터 바인드 (null = 해제) */
   setPresetCharacters: (id: number, characterIds: number[] | null) => Promise<void>
   /** 이 씬 1장 바로 생성 (예약 없이 — NAIS2식 즉석 생성) */
@@ -190,6 +192,18 @@ export function buildSceneRequest(
         }
       : undefined
   }
+}
+
+/**
+ * 씬 id → 프리셋 id. 대기열 표를 프리셋별로 묶을 때 쓴다.
+ * 이 화면이 불러온 씬과 이 화면이 큐에 넣은 예약만 안다 (따로 IPC를 부르지 않는다).
+ */
+const scenePresetIndex = new Map<number, number>()
+export function presetIdOfScene(sceneId: number): number | undefined {
+  return scenePresetIndex.get(sceneId)
+}
+function indexScenes(presetId: number, sceneIds: number[]): void {
+  for (const id of sceneIds) scenePresetIndex.set(id, presetId)
 }
 
 export const useScenesStore = create<ScenesState>((set, get) => ({
@@ -321,6 +335,10 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     const presetId = get().activePresetId
     const { items } = await window.nais.invoke('scenes:list', { presetId })
     void get().refreshReservedTotal() // 예약 총합(전 프리셋)도 함께 갱신
+    indexScenes(
+      presetId,
+      items.map((s) => s.id)
+    )
     if (seq !== loadSeq || get().activePresetId !== presetId) return // 더 최신 로드가 있으면 폐기
     set({ scenes: items })
   },
@@ -625,6 +643,10 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
         const { items } = await window.nais.invoke('scenes:list', { presetId: preset.id })
         const reserved = items.filter((s) => s.reserveCount > 0)
         if (reserved.length === 0) continue
+        indexScenes(
+          preset.id,
+          reserved.map((s) => s.id)
+        )
         requests.push(...buildReservedRequests(reserved, preset.characterIds))
         sentByPreset.push({
           presetId: preset.id,

@@ -201,6 +201,7 @@ import { basename, extname, join, resolve } from 'path'
 import sharp from 'sharp'
 import { verifyToken } from './nai/client'
 import { APP_TITLE, PROFILE } from './profile'
+import { mcpActivity, mcpStatus, onMcpActivity } from './mcp/service'
 import type { GenerationQueue } from './queue/generation-queue'
 import {
   assignLibraryEntries,
@@ -265,7 +266,15 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     handle('aiReply:backlogPreview', ({ days }) => previewBacklog(Number(days) || 0))
     handle('aiReply:backlogStart', (request) => startBacklog(request))
     handle('aiReply:backlogStop', () => stopBacklog())
+    onMcpActivity((item) => broadcast('mcp:activityAdded', item))
   }
+  // 작품 MCP는 Custom 1에서만 열리지만, 화면이 "No handler"를 받지 않게 처리기는 늘 둔다
+  handle('mcp:status', () =>
+    PROFILE === 1 ? mcpStatus() : { running: false, port: 0, url: '', error: null }
+  )
+  handle('mcp:activity', (req) =>
+    PROFILE === 1 ? mcpActivity(Number(req?.limit) || undefined) : { items: [] }
+  )
   const censorFolderFiles = new Set<string>()
   const censorPathKey = (filePath: string): string => resolve(filePath).toLowerCase()
   handle('db:status', () => ({ version: ctx.dbVersion, path: getDbPath() }))

@@ -86,8 +86,9 @@ let seq = 0
 const nextId = (): number => ++seq
 
 const VIEW_LABELS: Record<string, string> = {
-  main: '메인',
+  main: '생성',
   scene: '씬',
+  curation: '선별',
   director: '디렉터',
   library: '라이브러리',
   gpt: 'GPT 이미지',

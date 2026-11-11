@@ -1,16 +1,5 @@
-import {
-  Bell,
-  BookImage,
-  Image,
-  ImagePlus,
-  Images,
-  LayoutGrid,
-  Sparkles,
-  Type,
-  Wand2,
-  type LucideIcon
-} from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ImagePlus, Type } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { droppedImagePaths, hasImageDrop } from '../lib/image-drag'
 import { cn } from '../lib/utils'
@@ -19,20 +8,20 @@ import { useLayoutStore, type CenterMode } from '../stores/layout-store'
 
 type Page = CenterMode
 
-const PAGES: { id: Page; label: string; icon: LucideIcon }[] = [
-  { id: 'main', label: '메인', icon: Image },
-  { id: 'scene', label: '씬', icon: LayoutGrid },
-  { id: 'director', label: '디렉터', icon: Wand2 },
-  { id: 'library', label: '라이브러리', icon: Images },
-  { id: 'gpt', label: 'GPT 이미지', icon: Sparkles },
-  { id: 'cover', label: '표지', icon: BookImage },
-  { id: 'inbox', label: '알림', icon: Bell }
+const PAGES: { id: Page; label: string }[] = [
+  { id: 'main', label: '생성' },
+  { id: 'scene', label: '씬' },
+  { id: 'curation', label: '선별' },
+  { id: 'director', label: '디렉터' },
+  { id: 'library', label: '라이브러리' },
+  { id: 'gpt', label: 'GPT 이미지' },
+  { id: 'cover', label: '표지' },
+  { id: 'inbox', label: '알림' }
 ]
 
 /**
- * 상단 중앙 페이지 네비게이션 (NAIS2 AnimatedNavBar 이식).
- * 활성 탭 표시(pill)는 버튼 위치를 미리 재 두고 transform으로만 옮긴다.
- * (layoutId 방식은 탭을 바꿀 때마다 화면 배치를 강제로 다시 계산해 전환이 끊겼다)
+ * 머리줄 탭. 글자 탭이고, 지금 탭 아래에 2px 밑줄을 긋는다.
+ * 이미지를 끌고 탭 위에 잠깐 머물면 그 탭이 열린다.
  */
 export function PageNav(): React.JSX.Element {
   const centerMode = useLayoutStore((s) => s.centerMode)
@@ -45,35 +34,7 @@ export function PageNav(): React.JSX.Element {
   const visible = PAGES.filter(
     (p) => (p.id !== 'inbox' || profile === 1) && (p.id === 'main' || !hiddenPages.includes(p.id))
   )
-  const navRef = useRef<HTMLElement>(null)
-  const [boxes, setBoxes] = useState<Record<string, { x: number; w: number }>>({})
-  const [animate, setAnimate] = useState(false)
-  const visibleKey = visible.map((p) => p.id).join(',')
-  // 버튼 위치는 목록이 바뀌거나 크기가 바뀔 때만 잰다 (탭 전환 때는 재지 않음)
-  useLayoutEffect(() => {
-    const nav = navRef.current
-    if (!nav) return
-    const measure = (): void => {
-      const next: Record<string, { x: number; w: number }> = {}
-      nav.querySelectorAll<HTMLButtonElement>('button[data-page]').forEach((b) => {
-        next[b.dataset.page!] = { x: b.offsetLeft, w: b.offsetWidth }
-      })
-      setBoxes(next)
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(nav)
-    // 글꼴이 늦게 로드되면 폭이 바뀐다
-    void document.fonts?.ready.then(measure)
-    return () => ro.disconnect()
-  }, [visibleKey])
-  // 첫 위치는 애니메이션 없이, 그다음부터 미끄러지게
-  useEffect(() => {
-    const t = window.setTimeout(() => setAnimate(true), 50)
-    return () => window.clearTimeout(t)
-  }, [])
   const activePage: Page = centerMode
-  const pill = boxes[activePage]
   // 이미지를 끌고 탭 위에 잠깐 머물면 그 탭이 열린다 (라이브러리 → 표지·GPT 로 끌어 넣기)
   const springTimer = useRef(0)
   const [springPage, setSpringPage] = useState<Page | null>(null)
@@ -124,27 +85,15 @@ export function PageNav(): React.JSX.Element {
 
   return (
     <>
-      <nav
-        ref={navRef}
-        className="no-drag pointer-events-auto relative flex items-center gap-0.5 rounded-xl bg-surface-2 p-[3px]"
-      >
-        {pill && (
-          <div
-            aria-hidden
-            className={cn(
-              'pointer-events-none absolute left-0 top-[3px] h-[34px] rounded-lg bg-surface shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_1px_rgba(0,0,0,0.04)] motion-reduce:transition-none',
-              animate &&
-                'transition-[transform,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]'
-            )}
-            style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
-          />
-        )}
+      <nav className="no-drag flex h-full min-w-0 items-stretch overflow-x-auto no-scrollbar">
         {visible.map((page) => {
           const active = activePage === page.id
+          const springing = springPage === page.id || (page.id === 'cover' && coverDrop)
           return (
             <button
               key={page.id}
               data-page={page.id}
+              aria-current={active ? 'page' : undefined}
               onClick={() => setCenterMode(page.id)}
               onDragEnter={(e) => startSpring(e, page.id)}
               onDragOver={(e) => startSpring(e, page.id)}
@@ -154,16 +103,18 @@ export function PageNav(): React.JSX.Element {
               }}
               onDrop={cancelSpring}
               className={cn(
-                'relative h-[34px] whitespace-nowrap rounded-lg px-4 text-[13px] font-semibold transition-colors',
+                'relative shrink-0 whitespace-nowrap px-3 text-[14px] font-semibold outline-none transition-colors focus-visible:bg-surface-2',
                 active ? 'text-ink' : 'text-muted hover:text-ink',
-                (springPage === page.id || (page.id === 'cover' && coverDrop)) &&
-                  'bg-accent-soft text-accent'
+                springing && 'bg-accent-soft text-accent'
               )}
             >
-              <span className="pointer-events-none relative z-10 flex items-center gap-2">
-                <page.icon className={cn('size-4', active && 'text-accent')} />
-                {page.label}
-              </span>
+              {page.label}
+              {active && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 bg-mark"
+                />
+              )}
             </button>
           )
         })}

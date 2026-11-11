@@ -11,7 +11,7 @@ const buttonVariants = cva(
         default:
           'border border-transparent bg-surface-2 text-ink hover:brightness-[0.97] dark:hover:brightness-110',
         // 핵심 동작: 한 화면에 하나만
-        accent: 'bg-accent font-semibold text-white hover:opacity-90 dark:text-paper',
+        accent: 'bg-accent-fill font-semibold text-on-accent hover:opacity-90',
         // 두 번째로 중요한 동작: 연한 강조색 채움
         tint: 'bg-accent-soft font-semibold text-accent hover:opacity-85',
         // 테두리만 (입력칸 옆 같은 흰 바탕 위)
@@ -22,7 +22,7 @@ const buttonVariants = cva(
         // 삭제·되돌릴 수 없는 동작: 빨간 글씨, 누르면 연한 빨강
         danger: 'border border-transparent text-danger hover:bg-danger/10',
         // 확인 대화창의 최종 삭제 버튼만 빨간 채움
-        'danger-fill': 'bg-danger font-semibold text-white hover:opacity-90'
+        'danger-fill': 'bg-bad-fill font-semibold text-white hover:opacity-90'
       },
       size: {
         sm: 'h-7 px-2.5',

@@ -88,7 +88,7 @@ export function weightBackground(weight: number): string | null {
   const steps = Math.abs(Math.log(weight) / Math.log(STEP))
   const pct = Math.round(Math.min(12 + steps * 9, 48))
   return weight > 1
-    ? `color-mix(in srgb, var(--accent) ${pct}%, transparent)`
+    ? `color-mix(in srgb, var(--mark) ${pct}%, transparent)`
     : `color-mix(in srgb, var(--muted) ${pct}%, transparent)`
 }
 

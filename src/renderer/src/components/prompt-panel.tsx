@@ -113,10 +113,10 @@ export function PromptPanel(): React.JSX.Element {
 
   // 씬 모드: 생성은 예약된 씬들을 예약 수만큼 큐에 넣는다. 예약 0이면 생성 버튼 비활성.
   const centerMode = useLayoutStore((s) => s.centerMode)
-  // 모든 프리셋의 예약 총합 — 씬 생성 버튼 한 번으로 전부 실행
+  // 모든 프리셋의 예약 총합 — 「예약 N장 생성」 한 번으로 전부 넣는다 (숫자와 동작을 맞춘다)
   const sceneReserved = useScenesStore((s) => s.reservedTotal)
   const presetScenes = useScenesStore((s) => s.scenes)
-  const generateReserved = useScenesStore((s) => s.generateReserved)
+  const generateAllReserved = useScenesStore((s) => s.generateAllReserved)
   const isScene = centerMode === 'scene'
   // 프롬프트/네거티브 개별 접기 — 하나를 접으면 다른 하나가 넓어짐.
   // 네거티브는 기본으로 펼쳐 두고(이전 작업의 네거티브가 남은 걸 바로 보게), 접은 상태는 기억한다.
@@ -317,9 +317,7 @@ export function PromptPanel(): React.JSX.Element {
   }
 
   return (
-    <aside className="relative flex h-full w-full flex-col gap-3 rounded-xl bg-surface p-4">
-      {/* 상단 여백을 창 드래그 영역으로 (프롬프트 영역 위) */}
-      <div className="drag absolute inset-x-0 top-0 h-3" />
+    <aside className="relative flex h-full w-full flex-col gap-3 bg-surface p-4">
       {/* 오버레이는 프롬프트 영역만 덮는다 — 하단 버튼들은 항상 접근 가능 (NAIS2 2.0.7 교훈)
           셸 하나가 열림/닫힘만 애니메이션하고 내용은 즉시 전환 — 오버레이 간 전환 깜빡임 방지 */}
       <div className="relative flex min-h-0 flex-1 flex-col gap-2">
@@ -542,7 +540,9 @@ export function PromptPanel(): React.JSX.Element {
           label="바이브"
           badge={enabledVibes}
           disabled={v5Enabled}
-          title={v5Enabled ? 'V5에서는 바이브를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요' : undefined}
+          title={
+            v5Enabled ? 'V5에서는 바이브를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요' : undefined
+          }
           onClick={() => only('vibe')}
         />
         <ToolButton
@@ -552,7 +552,9 @@ export function PromptPanel(): React.JSX.Element {
           badge={enabledCrefs}
           disabled={v5Enabled}
           title={
-            v5Enabled ? 'V5에서는 레퍼런스를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요' : undefined
+            v5Enabled
+              ? 'V5에서는 레퍼런스를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요'
+              : undefined
           }
           onClick={() => only('cref')}
         />
@@ -578,7 +580,7 @@ export function PromptPanel(): React.JSX.Element {
         </button>
         {v5Enabled && request.transparentBackground && (
           <button
-            className="flex shrink-0 items-center gap-0.5 rounded-md bg-accent-soft px-1.5 py-0.5 text-[11px] font-bold text-accent hover:bg-accent hover:text-white"
+            className="flex shrink-0 items-center gap-0.5 rounded-md bg-accent-soft px-1.5 py-0.5 text-[11px] font-bold text-accent hover:bg-accent-fill hover:text-on-accent"
             title="투명 배경 켜짐 · 누르면 꺼요"
             onClick={() => patch({ transparentBackground: false })}
           >
@@ -588,9 +590,7 @@ export function PromptPanel(): React.JSX.Element {
         <button
           className={cn(
             'shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums',
-            summary.free
-              ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
-              : 'bg-danger/12 text-danger'
+            summary.free ? 'bg-good/12 text-good' : 'bg-danger/12 text-danger'
           )}
           title={summary.tip}
           onClick={() => setParamsOpen(true)}
@@ -658,6 +658,28 @@ export function PromptPanel(): React.JSX.Element {
         </label>
       </div>
 
+      {/* 요약: 예약 장수와 비용. 아래 생성 단추와 함께 패널 바닥에 붙어 있다 */}
+      <dl className="-mx-4 grid shrink-0 grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-t border-line px-4 pt-2.5 text-[12px] text-muted">
+        {isScene && (
+          <>
+            <dt>예약</dt>
+            <dd className="text-right font-semibold tabular-nums text-ink">
+              {sceneReserved.toLocaleString()}장 · 모든 프리셋
+            </dd>
+          </>
+        )}
+        <dt>비용</dt>
+        <dd
+          className={cn(
+            'text-right font-semibold tabular-nums',
+            summary.free ? 'text-good' : 'text-bad'
+          )}
+          title={summary.tip}
+        >
+          {summary.free ? '무료' : `${summary.cost.toLocaleString()} Anlas`}
+        </dd>
+      </dl>
+
       {/* 생성 행: 배치 / 생성 */}
       <div className="flex shrink-0 items-center gap-2">
         <div className="flex h-10 items-center rounded-lg bg-paper">
@@ -710,13 +732,9 @@ export function PromptPanel(): React.JSX.Element {
                   ? '씬에 예약(+)을 걸어야 생성할 수 있어요'
                   : `모든 프리셋의 예약 ${sceneReserved}장 생성 (프리셋 순서대로)`
             }
-            onClick={() => void generateReserved()}
+            onClick={() => void generateAllReserved()}
           >
-            씬 생성
-            {sceneReserved > 0 && (
-              // 한글 '장'이 mono 폴백(Windows Consolas)에서 깨져 보여 기본 폰트(Pretendard) 사용
-              <span className="text-[12px] opacity-75">{sceneReserved}장</span>
-            )}
+            예약 {sceneReserved.toLocaleString()}장 생성
           </Button>
         ) : (
           <Button
@@ -1033,7 +1051,7 @@ function ToolButton({
       className={cn(
         'flex h-8 min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 text-[12px] font-semibold transition-colors disabled:cursor-default disabled:opacity-50',
         active && !disabled
-          ? 'bg-accent text-white dark:text-paper'
+          ? 'bg-accent-fill text-on-accent'
           : inUse
             ? 'bg-accent-soft text-accent'
             : 'text-muted hover:bg-paper hover:text-ink'
@@ -1046,9 +1064,7 @@ function ToolButton({
         <span
           className={cn(
             'grid h-4 min-w-4 place-items-center rounded-full px-1 text-[11px] font-bold tabular-nums',
-            active
-              ? 'bg-white/25 text-white dark:text-paper'
-              : 'bg-accent text-white dark:text-paper'
+            active ? 'bg-white/25 text-white dark:text-paper' : 'bg-accent-fill text-on-accent'
           )}
         >
           {badge}

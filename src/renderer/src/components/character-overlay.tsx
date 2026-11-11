@@ -119,7 +119,7 @@ function PositionCanvas({
               className={cn(
                 'absolute grid size-6 -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border-2 text-[11px] font-bold shadow active:cursor-grabbing',
                 c.id === selectedId
-                  ? 'border-accent bg-accent text-white'
+                  ? 'border-accent-fill bg-accent-fill text-on-accent'
                   : 'border-ink/30 bg-surface text-ink',
                 overlapping.has(i) && 'ring-2 ring-danger'
               )}
@@ -170,7 +170,7 @@ function PositionPicker({
             key={`${x}-${y}`}
             className={cn(
               'size-6 rounded-[4px] border border-line transition-colors',
-              center.x === x && center.y === y ? 'bg-accent' : 'bg-paper'
+              center.x === x && center.y === y ? 'bg-mark' : 'bg-paper'
             )}
             title={`(${x}, ${y})`}
             onClick={() => onPick({ x, y })}
@@ -318,7 +318,7 @@ export function CharacterOverlay(): React.JSX.Element {
         <span
           className={cn(
             'grid size-4 shrink-0 place-items-center rounded border-2',
-            checked ? 'border-accent bg-accent text-white' : 'border-line'
+            checked ? 'border-accent-fill bg-accent-fill text-on-accent' : 'border-line'
           )}
         >
           {checked && <span className="text-[11px] leading-none">✓</span>}

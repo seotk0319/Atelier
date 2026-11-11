@@ -143,7 +143,7 @@ function PrivacySection(): React.JSX.Element {
                 className={cn(
                   'h-9 flex-1 rounded-lg text-[13px] font-semibold transition-colors',
                   minutes === m
-                    ? 'bg-accent text-white dark:text-paper'
+                    ? 'bg-accent-fill text-on-accent'
                     : 'bg-surface-2 text-muted hover:text-ink'
                 )}
               >
@@ -243,7 +243,7 @@ function AppearanceSection(): React.JSX.Element {
       <div className="py-2.5">
         <p className="text-[13px] text-ink">위쪽에 보일 탭</p>
         <p className="mt-0.5 text-[12px] text-faint">
-          끈 탭은 위쪽 줄에서 숨겨요. 메인은 늘 보여요.
+          끈 탭은 위쪽 줄에서 숨겨요. 생성 탭은 늘 보여요.
         </p>
         <PageToggles />
       </div>
@@ -269,6 +269,7 @@ function ThemeModePicker(): React.JSX.Element {
 
 const TOGGLABLE_PAGES: { id: CenterMode; label: string }[] = [
   { id: 'scene', label: '씬' },
+  { id: 'curation', label: '선별' },
   { id: 'director', label: '디렉터' },
   { id: 'library', label: '라이브러리' },
   { id: 'gpt', label: 'GPT 이미지' },

@@ -481,7 +481,7 @@ export function InboxView(): React.JSX.Element {
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             {unread && (
-              <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-label="안 읽음" />
+              <span className="size-1.5 shrink-0 rounded-full bg-mark" aria-label="안 읽음" />
             )}
             <span
               className={cn(
@@ -548,7 +548,7 @@ export function InboxView(): React.JSX.Element {
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-2">
               {unread && (
-                <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-label="안 읽음" />
+                <span className="size-1.5 shrink-0 rounded-full bg-mark" aria-label="안 읽음" />
               )}
               <span
                 className={cn(

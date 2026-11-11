@@ -136,7 +136,7 @@ export function ResolutionPicker({
               w && h ? `추가 (64 배수 스냅: ${snapDim(Number(w))}×${snapDim(Number(h))})` : '추가'
             }
             onClick={doAdd}
-            className="grid size-7 shrink-0 place-items-center rounded bg-accent text-paper hover:opacity-90"
+            className="grid size-7 shrink-0 place-items-center rounded bg-accent-fill text-on-accent hover:opacity-90"
           >
             <Plus size={14} />
           </button>

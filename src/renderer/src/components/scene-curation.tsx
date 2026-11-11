@@ -33,6 +33,7 @@ import { useMetadataStore } from '../stores/metadata-store'
 import { buildSceneRequest, useScenesStore } from '../stores/scenes-store'
 import { toast } from '../stores/toast-store'
 import { useLayoutStore } from '../stores/layout-store'
+import { formatCombo, useShortcutsStore } from '../stores/shortcuts-store'
 import { Button } from './ui/button'
 import {
   ContextMenu,
@@ -123,9 +124,14 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     null
   )
 
+  const favoriteKey = useShortcutsStore((s) => s.bindings.curationFavorite)
   const sceneIdRef = useRef(sceneId)
   const deletingRef = useRef(false)
   const [deleting, setDeleting] = useState(false)
+  // 선별 탭은 미리 열어 둘 수 있다: 씬 목록이 늦게 오거나 프리셋을 바꾸면 첫 씬으로 맞춘다
+  if (!deleting && scenes.length > 0 && !scenes.some((s) => s.id === sceneId))
+    setSceneId(scenes[0].id)
+  if (scenes.length === 0 && sceneId !== null && !deleting) setSceneId(null)
   const loadedSceneId = useRef<number | null>(null)
   const reloadVersion = useRef(0)
   sceneIdRef.current = sceneId
@@ -191,7 +197,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (inpaint) return
-      if (useLayoutStore.getState().centerMode !== 'scene') return // 다른 탭에 숨어 있을 때
+      if (useLayoutStore.getState().centerMode !== 'curation') return // 다른 탭에 숨어 있을 때
       if (useMetadataStore.getState().open) return // 메타데이터 팝업 중엔 이동 금지
       const t = e.target as HTMLElement | null
       if (
@@ -223,6 +229,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   // 선별 토글 단축키 (설정 → 단축키에서 변경 가능)
   useEffect(() => {
     const handler = (): void => {
+      if (useLayoutStore.getState().centerMode !== 'curation') return // 다른 탭에 숨어 있을 때
       const img = currentRef.current
       if (img) void toggleFavorite(img)
     }
@@ -438,13 +445,24 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   return (
     // 타이틀바와 다른 일반 콘텐츠 흐름에서 렌더링한다. 뷰포트 fixed/portal 및 별도 drag
     // 영역을 사용하지 않아 Chromium DOM 좌표와 Windows 네이티브 hit-test 좌표를 일치시킨다.
-    <div className="no-drag flex min-h-0 flex-1 flex-col bg-black/60 p-3 backdrop-blur-sm">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-2xl">
+    <div className="no-drag flex min-h-0 flex-1 flex-col bg-surface">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 헤더 — 제목 + 레퍼 설정 행(한 줄 유지, 좁으면 줄바꿈) + 선별 작업 + 닫기 */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-2">
           <div className="flex shrink-0 items-center gap-2">
             <ListChecks size={16} className="text-accent" />
-            <h2 className="text-[14px] font-semibold">선별 작업</h2>
+            <h2 className="text-[14px] font-semibold">{scene?.name ?? '선별'}</h2>
+            <span className="text-[12px] tabular-nums text-faint">
+              {scene
+                ? `씬 ${scenes.findIndex((s) => s.id === sceneId) + 1} / ${scenes.length}`
+                : `씬 ${scenes.length}`}
+              {images.length > 0 && ` · ${index + 1} / ${images.length}장`}
+            </span>
+            <span className="hidden items-center gap-1 text-[12px] text-faint xl:flex">
+              <kbd>↑</kbd>
+              <kbd>↓</kbd> 씬 이동 <kbd className="ml-1">←</kbd>
+              <kbd>→</kbd> 그림 이동
+            </span>
           </div>
           <div className="h-5 w-px shrink-0 bg-line" />
           <label
@@ -519,10 +537,18 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
             variant="danger"
             className="shrink-0 gap-1"
             disabled={
-              images.length === 0 || loading || deleting || loadedSceneId.current !== sceneId
+              images.length === 0 ||
+              loading ||
+              deleting ||
+              loadedSceneId.current !== sceneId ||
+              liveForScene > 0
             }
             onClick={() => void deleteAllAndNext()}
-            title="이 씬의 이미지를 전부 삭제하고 다음 씬으로 이동"
+            title={
+              liveForScene > 0
+                ? '이 씬을 생성하는 중이에요. 끝난 뒤에 지울 수 있어요'
+                : '이 씬의 이미지를 전부 삭제하고 다음 씬으로 이동'
+            }
           >
             <Trash2 size={14} /> 선별 없음
           </Button>
@@ -531,20 +557,29 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
             variant="ghost"
             className="shrink-0 gap-1"
             disabled={
-              images.length === 0 || loading || deleting || loadedSceneId.current !== sceneId
+              images.length === 0 ||
+              loading ||
+              deleting ||
+              loadedSceneId.current !== sceneId ||
+              liveForScene > 0
             }
             onClick={() => void deleteAndNext()}
+            title={
+              liveForScene > 0
+                ? '이 씬을 생성하는 중이에요. 끝난 뒤에 지울 수 있어요'
+                : '선별하지 않은 그림을 지우고 다음 씬으로 이동'
+            }
           >
             <Trash2 size={14} /> 삭제 후 다음 씬
           </Button>
           <Button
-            size="icon"
+            size="sm"
             variant="ghost"
             className="shrink-0"
             onClick={onClose}
-            aria-label="닫기"
+            title="씬 탭으로 돌아가기"
           >
-            <X size={16} />
+            씬으로
           </Button>
         </div>
 
@@ -632,7 +667,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                     <Loader2 size={30} className="animate-spin" />
                   </div>
                 )}
-                <span className="absolute left-2 top-2 rounded-full bg-accent px-2.5 py-1 text-[12px] font-medium text-white shadow">
+                <span className="absolute left-2 top-2 rounded-full bg-accent-fill px-2.5 py-1 text-[12px] font-medium text-on-accent shadow">
                   인페인트 생성 중
                   {jobProgress ? ` ${jobProgress.stepIx}/${jobProgress.totalSteps}` : '…'}
                 </span>
@@ -662,6 +697,11 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                       >
                         <Star size={14} fill={current.favorite ? 'currentColor' : 'none'} />
                         {current.favorite ? '선별됨' : '선별'}
+                        {favoriteKey && (
+                          <kbd className="ml-1 border-current text-current opacity-80">
+                            {formatCombo(favoriteKey)}
+                          </kbd>
+                        )}
                       </Button>
                       {inpaintLoading && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">

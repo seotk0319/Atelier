@@ -17,6 +17,9 @@ import { MetadataDialog } from './components/metadata-dialog'
 import { TagHelperDialog } from './components/tag-helper-dialog'
 import { PromptPanel } from './components/prompt-panel'
 import { SceneMode } from './components/scene-mode'
+import { SceneCuration } from './components/scene-curation'
+import { SummaryStrip } from './components/summary-strip'
+import { BottomDock } from './components/bottom-dock'
 import { Titlebar } from './components/titlebar'
 import { SettingsDialog } from './components/token-dialog'
 import { TextPromptHost } from './components/text-prompt-host'
@@ -28,7 +31,7 @@ import { useCharactersStore } from './stores/characters-store'
 import { useFragmentsStore } from './stores/fragments-store'
 import { useCharRefsStore, useVibesStore } from './stores/refs-store'
 import { bindGenerationEvents, useGenerationStore } from './stores/generation-store'
-import { bindSceneEvents } from './stores/scenes-store'
+import { bindSceneEvents, useScenesStore } from './stores/scenes-store'
 import { bindShortcuts, refreshWork, useShortcutsStore } from './stores/shortcuts-store'
 import { bindUpdateEvents } from './stores/update-store'
 import { bindNavMouse } from './lib/nav-history'
@@ -60,6 +63,8 @@ export default function App(): React.JSX.Element {
             <CoverView />
           ) : mode === 'scene' ? (
             <SceneMode />
+          ) : mode === 'curation' ? (
+            <CurationView />
           ) : mode === 'director' ? (
             <DirectorMode />
           ) : mode === 'library' ? (
@@ -76,6 +81,11 @@ export default function App(): React.JSX.Element {
   // 표지 탭은 생성 패널만 막는다. 오른쪽 히스토리는 열어서 그림을 끌어다 쓴다
   const showLeft = leftOpen && !fullWidth && centerMode !== 'cover'
   const showRight = rightOpen && !fullWidth
+  // 요약 줄은 생성·씬·선별, 아래 칸(대기열 | AI가 한 일)은 생성·씬에서
+  const showStrip = centerMode === 'main' || centerMode === 'scene' || centerMode === 'curation'
+  const showDock = centerMode === 'main' || centerMode === 'scene'
+  // 아직 패널 모양으로 바꾸지 않은 화면은 카드끼리 띄워 둔다
+  const padded = centerMode === 'director' || centerMode === 'inbox'
   const [leftMounted, setLeftMounted] = useState(showLeft)
   const [rightMounted, setRightMounted] = useState(showRight)
   if (showLeft && !leftMounted) setLeftMounted(true)
@@ -173,14 +183,18 @@ export default function App(): React.JSX.Element {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen flex-col bg-paper">
+      {/* 패널끼리 1px 선(--line)으로 붙인다: 바탕을 선 색으로 두고 패널 사이를 1px 띄운다 */}
+      <div className="flex h-screen flex-col gap-px bg-line">
         <Titlebar />
-        <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3">
+        <SummaryStrip visible={showStrip} />
+        <div className="flex min-h-0 flex-1 gap-px">
           {/* 폭은 한 번에 바뀌고(가운데 화면 배치 1회) 안쪽만 transform으로 미끄러져 들어온다 */}
           {leftMounted && (
             <div
               className={
-                showLeft ? 'panel-in-left relative h-full shrink-0 overflow-hidden' : 'hidden'
+                showLeft
+                  ? 'panel-in-left relative h-full shrink-0 overflow-hidden bg-surface'
+                  : 'hidden'
               }
               style={{ width: sidebarWidth }}
             >
@@ -189,33 +203,46 @@ export default function App(): React.JSX.Element {
               </div>
               {/* 폭 조절 핸들 */}
               <div
-                className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-accent/30"
+                className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-mark/40"
                 onMouseDown={startResize}
               />
             </div>
           )}
-          {/* 가운데 화면 + 그 아래 가운데에 떠 있는 AI 비서 명령 바 */}
-          <div className="relative flex min-h-0 min-w-0 flex-1">
-            {views.map(({ mode, node }) => (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-px">
+            <div className="flex min-h-0 flex-1 gap-px">
+              {/* 가운데 화면 + 그 아래 가운데에 떠 있는 AI 비서 명령 바 */}
               <div
-                key={mode}
-                className={mode === centerMode ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}
+                className={
+                  padded
+                    ? 'relative flex min-h-0 min-w-0 flex-1 bg-paper p-3'
+                    : 'relative flex min-h-0 min-w-0 flex-1 bg-surface'
+                }
               >
-                {node}
+                {views.map(({ mode, node }) => (
+                  <div
+                    key={mode}
+                    className={mode === centerMode ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}
+                  >
+                    {node}
+                  </div>
+                ))}
+                {ready && <AssistantDock />}
               </div>
-            ))}
-            {ready && <AssistantDock />}
-          </div>
-          {rightMounted && (
-            <div
-              className={
-                showRight ? 'panel-in-right h-full w-[240px] shrink-0 overflow-hidden' : 'hidden'
-              }
-            >
-              {/* 표지 탭에서는 표지에 썼던 그림·타이포만 */}
-              {centerMode === 'cover' ? <CoverArchivePanel /> : <HistoryPanel />}
+              {rightMounted && (
+                <div
+                  className={
+                    showRight
+                      ? 'panel-in-right h-full w-[240px] shrink-0 overflow-hidden bg-surface'
+                      : 'hidden'
+                  }
+                >
+                  {/* 표지 탭에서는 표지에 썼던 그림·타이포만 */}
+                  {centerMode === 'cover' ? <CoverArchivePanel /> : <HistoryPanel />}
+                </div>
+              )}
             </div>
-          )}
+            <BottomDock visible={showDock} />
+          </div>
         </div>
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         <TextPromptHost />
@@ -230,4 +257,23 @@ export default function App(): React.JSX.Element {
       </div>
     </TooltipProvider>
   )
+}
+
+/** 선별 탭: 지금 씬 프리셋의 씬들을 차례로 보고 고른다 */
+function CurationView(): React.JSX.Element {
+  const hasScenes = useScenesStore((s) => s.scenes.length > 0)
+  const setCenterMode = useLayoutStore((s) => s.setCenterMode)
+  if (!hasScenes)
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-surface text-[13px] text-faint">
+        이 프리셋에는 아직 씬이 없어요
+        <button
+          className="rounded-md px-2 py-1 text-[13px] font-semibold text-accent hover:bg-surface-2"
+          onClick={() => setCenterMode('scene')}
+        >
+          씬 탭으로
+        </button>
+      </div>
+    )
+  return <SceneCuration onClose={() => setCenterMode('scene')} />
 }

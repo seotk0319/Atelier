@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { recordNav } from '../lib/nav-history'
 
-export type CenterMode = 'main' | 'scene' | 'director' | 'library' | 'inbox' | 'gpt' | 'cover'
+export type CenterMode =
+  'main' | 'scene' | 'curation' | 'director' | 'library' | 'inbox' | 'gpt' | 'cover'
 
 type PanelPrefs = Record<CenterMode, { left: boolean; right: boolean }>
 
@@ -12,6 +13,8 @@ type PanelPrefs = Record<CenterMode, { left: boolean; right: boolean }>
 const DEFAULT_PANELS: PanelPrefs = {
   main: { left: true, right: true },
   scene: { left: true, right: true },
+  // 선별은 그림을 크게 본다
+  curation: { left: false, right: false },
   director: { left: false, right: true },
   library: { left: false, right: false },
   inbox: { left: false, right: false },

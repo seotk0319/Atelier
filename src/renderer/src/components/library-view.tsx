@@ -239,8 +239,8 @@ export function LibraryView(): React.JSX.Element {
   }, [mode, selectedDate, selectedFolder, stacks])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-xl bg-surface">
-      <div className="drag flex h-[60px] shrink-0 items-center gap-2.5 px-5">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
+      <div className="flex h-[60px] shrink-0 items-center gap-2.5 px-5">
         <h1 className="text-[20px] font-bold tracking-tight">라이브러리</h1>
         <span className="text-[13px] tabular-nums text-muted">{total.toLocaleString()}장</span>
         {selectedDate && (

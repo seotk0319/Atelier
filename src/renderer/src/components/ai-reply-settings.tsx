@@ -163,7 +163,7 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
           </p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
             <div
-              className="h-full rounded-full bg-accent transition-[width]"
+              className="h-full rounded-full bg-mark transition-[width]"
               style={{ width: `${run.total ? (run.done / run.total) * 100 : 0}%` }}
             />
           </div>

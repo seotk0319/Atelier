@@ -1,4 +1,4 @@
-import { mixHex } from './color'
+import { luminance, mixHex } from './color'
 
 export type ThemeMode = 'dark' | 'light'
 
@@ -17,6 +17,19 @@ export interface Palette {
   surface?: string
   surface2?: string
   line?: string
+  /** 선택: 직접 지정하면 계산값 대신 쓴다 (Atelier 기본 테마) */
+  surface3?: string
+  muted?: string
+  faint?: string
+  imageBg?: string
+  /** 작은 글자·테두리용 강조색 (없으면 primary) */
+  accentText?: string
+  /** 밑줄·진행 막대·고른 테두리 (없으면 primary) */
+  mark?: string
+  /** 강조색 채움 위 글자 (없으면 밝기로 고름) */
+  onAccent?: string
+  /** 상태 채움(빨강 단추). 없으면 error */
+  errorFill?: string
 }
 
 export interface ThemePreset {
@@ -30,41 +43,94 @@ export function buildWhimsTokens(palette: Palette, mode: ThemeMode): Record<stri
   const dark = mode === 'dark'
   const m = (amount: number): string => mixHex(palette.neutral, palette.ink, amount)
   const dim = (amount: number): string => mixHex(palette.ink, palette.neutral, amount)
+  const soft = (color: string, pct: number): string =>
+    `color-mix(in srgb, ${color} ${pct}%, transparent)`
+  const surface2 = palette.surface2 ?? m(dark ? 0.095 : 0.08)
+  const accentText = palette.accentText ?? palette.primary
+  const onAccent =
+    palette.onAccent ?? (luminance(palette.primary) > 0.45 ? palette.neutral : '#ffffff')
 
   return {
     '--paper': palette.neutral,
     '--surface': palette.surface ?? m(dark ? 0.045 : 0.035),
-    '--surface-2': palette.surface2 ?? m(dark ? 0.095 : 0.08),
+    '--surface-2': surface2,
+    '--surface-3': palette.surface3 ?? m(dark ? 0.15 : 0.13),
+    '--image-bg': palette.imageBg ?? surface2,
     '--ink': palette.ink,
-    '--muted': dim(dark ? 0.42 : 0.46),
-    '--faint': dim(dark ? 0.62 : 0.58),
+    '--muted': palette.muted ?? dim(dark ? 0.42 : 0.46),
+    '--faint': palette.faint ?? dim(dark ? 0.62 : 0.58),
     '--line': palette.line ?? m(dark ? 0.14 : 0.16),
     '--accent': palette.primary,
-    '--accent-soft': `color-mix(in srgb, ${palette.primary} ${dark ? 18 : 13}%, transparent)`,
-    '--dialogue': palette.primary,
-    '--dialogue-bg': `color-mix(in srgb, ${palette.primary} 16%, transparent)`,
+    '--on-accent': onAccent,
+    '--accent-text': accentText,
+    '--mark': palette.mark ?? palette.primary,
+    '--accent-soft': soft(palette.primary, dark ? 14 : 12),
+    '--good': palette.success,
+    '--warn': palette.warning,
+    '--warn-soft': soft(palette.warning, 14),
+    '--bad': palette.error,
+    '--bad-fill': palette.errorFill ?? palette.error,
+    '--bad-soft': soft(palette.error, dark ? 14 : 12),
+    '--info': palette.info,
+    '--danger': palette.error,
+    '--dialogue': accentText,
+    '--dialogue-bg': soft(palette.primary, 16),
     '--quote': palette.warning,
-    '--quote-bg': `color-mix(in srgb, ${palette.warning} 16%, transparent)`,
+    '--quote-bg': soft(palette.warning, 16),
     '--onomatopoeia': palette.accent
   }
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
   {
-    // NAIS3 기본 테마 — 옅은 회색 바탕 위 카드 + 인디고 강조색(primary가 --accent를 구동).
+    // Atelier 기본 테마 (토스 색) — id는 저장된 설정이 그대로 맞도록 'nais3'을 유지한다.
     id: 'nais3',
-    name: 'NAIS3',
+    name: 'Atelier',
     dark: {
-      neutral: '#0d0d11', ink: '#e8e8ee', primary: '#8b8cf5', accent: '#8b8cf5',
-      success: '#5cc896', warning: '#e0b25a', error: '#ef6f78', info: '#8fa4d5',
-      syntaxKeyword: '#a6a8c2', syntaxComment: '#606070',
-      surface: '#16161c', surface2: '#202029', line: '#2a2a34'
+      neutral: '#17171c',
+      ink: '#e4e4e5',
+      primary: '#3182f6',
+      accent: '#4593fc',
+      success: '#15c47e',
+      warning: '#ffa927',
+      error: '#f66570',
+      info: '#4593fc',
+      syntaxKeyword: '#9e9ea4',
+      syntaxComment: '#7e7e87',
+      surface: '#1f1f25',
+      surface2: '#2c2c35',
+      surface3: '#3a3a45',
+      line: '#2f2f38',
+      muted: '#9e9ea4',
+      faint: '#7e7e87',
+      imageBg: '#2c2c35',
+      accentText: '#4593fc',
+      mark: '#4593fc',
+      onAccent: '#ffffff',
+      errorFill: '#f04452'
     },
     light: {
-      neutral: '#f3f3f7', ink: '#191f28', primary: '#5b5bd6', accent: '#5b5bd6',
-      success: '#1fa56a', warning: '#b7791f', error: '#e5484d', info: '#4f6bd5',
-      syntaxKeyword: '#5b5d78', syntaxComment: '#8f8fa0',
-      surface: '#ffffff', surface2: '#ececf2', line: '#e4e4ec'
+      neutral: '#f2f4f6',
+      ink: '#191f28',
+      primary: '#3182f6',
+      accent: '#1b64da',
+      success: '#029359',
+      warning: '#b35c00',
+      error: '#d22030',
+      info: '#1b64da',
+      syntaxKeyword: '#4e5968',
+      syntaxComment: '#6b7684',
+      surface: '#ffffff',
+      surface2: '#f2f4f6',
+      surface3: '#e5e8eb',
+      line: '#e5e8eb',
+      muted: '#4e5968',
+      faint: '#6b7684',
+      imageBg: '#e5e8eb',
+      accentText: '#1b64da',
+      mark: '#3182f6',
+      onAccent: '#ffffff',
+      errorFill: '#f04452'
     }
   },
   {

@@ -66,7 +66,7 @@ export function PreviewPane(): React.JSX.Element {
   return (
     <div
       className={cn(
-        'relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-xl border bg-surface p-2 transition-colors',
+        'relative flex min-w-0 flex-1 items-center justify-center overflow-hidden border bg-surface p-2 transition-colors',
         dragOver ? 'border-accent' : 'border-transparent'
       )}
       onDragOver={(e) => {
@@ -101,8 +101,6 @@ export function PreviewPane(): React.JSX.Element {
         reader.readAsDataURL(file)
       }}
     >
-      {/* 상단 스트립을 창 드래그 영역으로 (이미지 위쪽) */}
-      <div className="drag absolute inset-x-0 top-0 z-20 h-6" />
       {src ? (
         // 긴 쪽이 박스 테두리에 닿도록 꽉 채움 (object-contain으로 비율 유지).
         // 완성작(파일)이 표시 중일 때만 우클릭 메뉴 — 스트리밍 미리보기(previewPng)는 파일이 아님
@@ -145,7 +143,7 @@ export function PreviewPane(): React.JSX.Element {
           ) : (
             <div className="h-1.5 w-36 overflow-hidden rounded-full bg-surface-2">
               <div
-                className="h-full rounded-full bg-accent transition-all"
+                className="h-full rounded-full bg-mark transition-all"
                 style={{ width: `${pct}%` }}
               />
             </div>

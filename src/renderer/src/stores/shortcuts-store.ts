@@ -105,9 +105,9 @@ function runAction(action: ShortcutAction): void {
   switch (action) {
     case 'generate': {
       if (layout.centerMode === 'scene') {
-        // 모든 프리셋의 예약 총합 기준 (씬 생성 버튼과 동일)
+        // 모든 프리셋의 예약을 넣는다 (「예약 N장 생성」 단추와 같은 동작)
         if (useScenesStore.getState().reservedTotal > 0)
-          void useScenesStore.getState().generateReserved()
+          void useScenesStore.getState().generateAllReserved()
       } else {
         void useGenerationStore.getState().generate()
       }

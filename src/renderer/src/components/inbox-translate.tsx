@@ -414,7 +414,7 @@ export function ReplyComposer({
           <button
             disabled={!canSend}
             onClick={onSend}
-            className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-accent px-3.5 text-[13px] font-bold text-white transition-colors disabled:bg-surface-2 disabled:text-faint dark:text-paper @min-[400px]:ml-0"
+            className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-accent-fill px-3.5 text-[13px] font-bold text-on-accent transition-colors disabled:bg-surface-2 disabled:text-faint @min-[400px]:ml-0"
           >
             <Send size={14} /> {sending ? '보내는 중…' : '보내기'}
           </button>
