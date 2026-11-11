@@ -1,7 +1,7 @@
 import { app, shell } from 'electron'
 import { join } from 'node:path'
 import { createStore, type InboxStore } from './core/store.mjs'
-import { awaitingReply, displayText, queryInbox, sourceUrl } from './query'
+import { awaitingReply, displayText, isRecent, queryInbox, sourceUrl } from './query'
 import { createDirectCollector } from './direct/collector'
 import { countByGroup, groupWorks } from './work-groups'
 import { isDirectPlatform } from './direct/platforms'
@@ -148,7 +148,7 @@ export async function getInboxWorks(refresh = false, cached = false): Promise<In
         groups,
         view.items
           .filter((item) => view.selection?.[item.platform] !== false)
-          .filter((item) => awaitingReply(item, replied.items))
+          .filter((item) => awaitingReply(item, replied.items) && isRecent(item, Date.now()))
           .map((item) => ({
             platform: item.platform,
             work: item.work

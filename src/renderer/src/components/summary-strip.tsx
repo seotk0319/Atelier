@@ -34,9 +34,9 @@ function Cell({
   className?: string
 }): React.JSX.Element {
   return (
-    <span className="flex h-[60px] shrink-0 flex-col justify-center leading-tight" title={title}>
+    <span className="flex h-9 shrink-0 items-baseline gap-1.5 leading-9" title={title}>
       <small className="text-[12px] text-faint">{label}</small>
-      <b className={cn('text-[14px] font-semibold tabular-nums text-ink', className)}>{children}</b>
+      <b className={cn('text-[13px] font-semibold tabular-nums text-ink', className)}>{children}</b>
     </span>
   )
 }
@@ -106,13 +106,13 @@ export function SummaryStrip({ visible }: { visible: boolean }): React.JSX.Eleme
   return (
     <div
       className={cn(
-        'flex h-[60px] shrink-0 items-center gap-7 overflow-hidden whitespace-nowrap bg-surface px-4',
+        'flex h-9 shrink-0 items-center gap-5 overflow-hidden whitespace-nowrap bg-surface px-4',
         !visible && 'hidden'
       )}
     >
       {/* 왼쪽 칸들은 자리가 모자라면 다음 줄로 넘어가 가려진다 (오른쪽 Anlas·V5는 늘 보인다) */}
-      <div className="flex h-[60px] min-w-0 flex-1 flex-wrap items-center gap-x-7 overflow-hidden">
-        <span className="flex h-[60px] min-w-0 shrink items-center">
+      <div className="flex h-9 min-w-0 flex-1 flex-wrap items-center gap-x-5 overflow-hidden">
+        <span className="flex h-9 min-w-0 shrink items-center">
           <PresetDropdown triggerClassName="-ml-2 h-9 max-w-[360px] bg-transparent px-2 text-[15px] font-bold hover:bg-surface-2" />
         </span>
         {showRun && (

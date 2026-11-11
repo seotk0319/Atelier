@@ -83,6 +83,18 @@ export function awaitingReply(item: InboxItem, replied: Record<string, InboxRepl
   )
 }
 
+/** 작품 탭의 댓글 수는 최근 것만 센다 — 오래 쌓인 미답글이 "지금 답할 것"을 가리지 않게 */
+export const RECENT_COMMENT_DAYS = 30
+
+export function isRecent(
+  item: { at?: string | null; firstSeen?: string | null },
+  now: number,
+  days = RECENT_COMMENT_DAYS
+): boolean {
+  const time = Date.parse(item.at || item.firstSeen || '')
+  return Number.isFinite(time) && now - time <= days * 86_400_000
+}
+
 export function queryInbox(
   view: InboxView,
   query: InboxQuery = {},

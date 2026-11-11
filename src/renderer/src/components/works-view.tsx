@@ -383,7 +383,7 @@ export function WorksView(): React.JSX.Element {
                     {row.unanswered > 0 ? (
                       <span
                         className="font-semibold text-bad"
-                        title={'답글 안 단 댓글 ' + row.unanswered + '개'}
+                        title={'최근 30일, 답글 안 단 댓글 ' + row.unanswered + '개'}
                       >
                         {row.unanswered.toLocaleString()}
                       </span>
@@ -425,7 +425,7 @@ export function WorksView(): React.JSX.Element {
       <p className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-faint">
         ✓ 올라가 있음 (누르면 사이트에서 열어요)
         {freshness && ' · 낡음 = 에덴이 그 뒤에 바뀜'} · — 안 올림 (에덴 작품은 누르면 이식 문구
-        복사) · 로그인 풀림 = 다시 로그인해야 목록을 새로 읽어요 · 댓글 = 답글 안 단 댓글
+        복사) · 로그인 풀림 = 다시 로그인해야 목록을 새로 읽어요 · 댓글 = 최근 30일 안에 온, 답글 안 단 댓글
       </p>
       <ActivitySection items={mcp.items} status={mcp.status} known={mcp.known} />
     </div>
