@@ -1,180 +1,192 @@
 <!doctype html>
-<html lang="ko" data-theme="light">
+<html lang="ko" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atelier 시안</title>
 <style>
-:root{--paper:#f3f3f7;--surface:#fff;--surface-2:#ececf2;--ink:#191f28;--muted:#6b7280;--faint:#8b919c;--line:#e4e4ec;--accent:#5b5bd6;--accent-soft:rgba(91,91,214,.13);--on-accent:#fff;--danger:#d93a40;
- --ok:#1f8f5c;--ok-soft:#e3f4ea;--warn:#96640a;--warn-soft:#fbefd0;--info:#3d63c9;--info-soft:#e4ebfb;--bad-soft:#fde6e7;--image:#e6e6ea;color-scheme:light}
-:root[data-theme=dark]{--paper:#0d0d11;--surface:#16161c;--surface-2:#202029;--ink:#e8e8ee;--muted:#8e8e9a;--faint:#6f6f7c;--line:#2a2a34;--accent:#8b8cf5;--accent-soft:rgba(139,140,245,.18);--on-accent:#0d0d11;--danger:#ef6f78;
- --ok:#5cc896;--ok-soft:#14291f;--warn:#e0b25a;--warn-soft:#2e2510;--info:#8fa4f0;--info-soft:#1a2140;--bad-soft:#3a171a;--image:#1c1c22;color-scheme:dark}
+:root{--bg:#131316;--panel:#1c1c20;--panel-2:#26262b;--panel-3:#32323a;--line:#2c2c33;--ink:#f1f1f3;--muted:#a3a3ad;--faint:#74747f;
+ --accent:#1fe5c1;--on-accent:#04241e;--accent-soft:rgba(31,229,193,.12);--accent-text:#1fe5c1;
+ --warn:#f0b90b;--warn-soft:rgba(240,185,11,.13);--bad:#f6465d;--bad-soft:rgba(246,70,93,.14);--info:#6ea8ff;--info-soft:rgba(110,168,255,.14);--image:#222226;color-scheme:dark}
+:root[data-theme=light]{--bg:#eeeef1;--panel:#fff;--panel-2:#f3f3f6;--panel-3:#e6e6eb;--line:#e1e1e7;--ink:#17171a;--muted:#5b5b66;--faint:#7c7c88;
+ --accent:#12c9a8;--on-accent:#04241e;--accent-soft:rgba(18,201,168,.14);--accent-text:#087f6a;
+ --warn:#9a6b00;--warn-soft:rgba(240,185,11,.2);--bad:#cf304a;--bad-soft:rgba(246,70,93,.12);--info:#2f6fd6;--info-soft:rgba(47,111,214,.12);--image:#e4e4e9;color-scheme:light}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
-body{background:var(--paper);color:var(--ink);font:13px/1.5 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .num{font-variant-numeric:tabular-nums}.muted{color:var(--muted)}.faint{color:var(--faint)}.sp{flex:1}
-kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--muted);background:var(--surface)}
-.app{display:grid;grid-template-rows:56px 1fr 30px;height:100vh}
-/* 제목줄: 지금 앱 그대로 */
-.title{display:flex;align-items:center;gap:10px;padding:0 14px}
-.brand{font-weight:700;display:flex;gap:8px;align-items:center}.brand i{width:20px;height:20px;border-radius:6px;background:var(--ink);display:block}
-.pillbox{background:var(--surface);border-radius:12px;padding:0 12px;height:34px;display:flex;align-items:center;gap:10px;font-weight:600}
-.nav{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:2px;background:var(--surface-2);border-radius:12px;padding:3px}
-.nav button{height:30px;padding:0 13px;border-radius:9px;color:var(--muted);font-weight:600;display:flex;gap:6px;align-items:center;white-space:nowrap}
-.nav button.on{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.nav .new{color:var(--ink)}
-.cnt{min-width:17px;height:17px;border-radius:9px;padding:0 5px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:inline-grid;place-items:center}
-.ic{height:32px;padding:0 9px;border-radius:8px;color:var(--muted)}.ic:hover{background:var(--surface-2);color:var(--ink)}
-.body{min-height:0;padding:0 12px 12px}
-.view{display:none;height:100%;gap:12px}.view.on{display:grid}
-.card{background:var(--surface);border-radius:14px;min-height:0;min-width:0}
-.btn{height:32px;padding:0 12px;border-radius:8px;background:var(--surface-2);font-weight:600;white-space:nowrap}
-.btn.accent{background:var(--accent);color:var(--on-accent)}.btn.ghost{background:none;color:var(--muted)}.btn.ghost:hover{background:var(--surface-2);color:var(--ink)}
-.btn.sm{height:28px;font-size:12px;padding:0 10px}
-/* 씬 화면 */
-#v-scene{grid-template-columns:330px minmax(0,1fr) 200px}
-.left{padding:14px;display:flex;flex-direction:column;gap:8px}
-.fld{background:var(--paper);border-radius:10px;padding:9px 11px;color:var(--faint);font-size:12px}
-.gen{margin-top:auto;display:flex;gap:8px}.gen .btn{flex:1;height:40px;border-radius:10px;font-size:14px}
-.center{display:flex;flex-direction:column}
-.bar{display:flex;align-items:center;gap:8px;padding:12px 14px}
-.bar h2{margin:0 4px 0 0;font-size:15px}
-.grid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:0 14px 14px;align-content:start}
-.sc .th{aspect-ratio:1;border-radius:8px;background:var(--image);position:relative}
-.sc .nm{display:flex;align-items:center;gap:6px;padding:6px 2px 0;font-weight:600;font-size:12px}
-.tag{position:absolute;left:6px;top:6px;height:20px;padding:0 7px;border-radius:5px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;background:var(--surface);color:var(--ink)}
-.tag.run{background:var(--accent);color:var(--on-accent)}
-.right{padding:12px;overflow:auto}.right .th{aspect-ratio:1;border-radius:8px;background:var(--image);margin-bottom:8px}
-/* 선별 */
-#v-cull{grid-template-columns:minmax(0,1fr)}
-.cull{display:grid;grid-template-rows:auto 1fr auto 96px;height:100%}
-.stage{background:var(--image);margin:0 14px;border-radius:10px;display:grid;place-items:center;color:var(--faint)}
-.acts{display:flex;justify-content:center;gap:6px;padding:10px}
-.acts .btn{display:flex;gap:7px;align-items:center}
-.film{display:flex;gap:6px;padding:0 14px 12px;overflow:auto}
-.film div{height:84px;aspect-ratio:1;border-radius:6px;background:var(--image);flex:none;position:relative;border:2px solid transparent}
-.film .cur{border-color:var(--accent)}.film .keep::after{content:"✓";position:absolute;right:4px;top:0;color:var(--ok);font-weight:800}.film .drop{opacity:.3}
-/* 작품 */
-#v-works{grid-template-columns:minmax(0,1fr)}
-.works{overflow:auto;padding-bottom:6px}
+kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:3px;padding:0 4px;color:var(--muted)}
+.app{display:grid;grid-template-rows:48px 46px 1fr;height:100vh;gap:1px;background:var(--line)}
+.app>*{background:var(--panel)}
+/* 머리 */
+.head{display:flex;align-items:center;gap:6px;padding:0 16px}
+.logo{font-weight:800;font-size:15px;letter-spacing:-.01em;margin-right:14px;display:flex;gap:8px;align-items:center}
+.logo i{width:16px;height:16px;background:var(--accent);display:block;transform:rotate(45deg);border-radius:2px}
+.nav button{height:48px;padding:0 12px;color:var(--muted);font-weight:600;position:relative}
+.nav button:hover{color:var(--ink)}
+.nav button.on{color:var(--ink)}.nav button.on::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:2px;background:var(--accent)}
+.cnt{min-width:16px;height:16px;border-radius:8px;padding:0 4px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;display:inline-grid;place-items:center;vertical-align:1px;margin-left:3px}
+.hbtn{height:30px;padding:0 10px;border-radius:4px;color:var(--muted)}.hbtn:hover{background:var(--panel-2);color:var(--ink)}
+/* 요약 줄 */
+.tick{display:flex;align-items:center;gap:26px;padding:0 16px;overflow:hidden;white-space:nowrap}
+.pair{font-size:15px;font-weight:700;display:flex;gap:8px;align-items:center;height:30px;padding:0 8px;margin-left:-8px;border-radius:4px}.pair:hover{background:var(--panel-2)}
+.kv{display:flex;flex-direction:column;line-height:1.25}.kv small{font-size:11px;color:var(--faint)}.kv b{font-weight:600}
+.up{color:var(--accent-text)}
+/* 작업 영역 */
+.work{display:none;min-height:0;gap:1px;background:var(--line)}.work.on{display:grid}
+.work>*{background:var(--panel);min-width:0;min-height:0}
+#v-scene{grid-template-columns:320px minmax(0,1fr) 210px;grid-template-rows:minmax(0,1fr) 214px}
+.ph{display:flex;align-items:center;gap:4px;height:38px;padding:0 12px;border-bottom:1px solid var(--line)}
+.ph b{font-weight:650}
+.tabs button{height:38px;padding:0 10px;color:var(--muted);font-weight:600;position:relative}
+.tabs button.on{color:var(--ink)}.tabs button.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:2px;background:var(--accent)}
+.btn{height:28px;padding:0 10px;border-radius:4px;background:var(--panel-2);font-weight:600;font-size:12px;white-space:nowrap}
+.btn:hover{background:var(--panel-3)}.btn.go{background:var(--accent);color:var(--on-accent)}.btn.txt{background:none;color:var(--muted)}.btn.txt:hover{color:var(--ink)}
+.btn.lg{height:40px;font-size:14px;width:100%}
+.form{grid-row:1/3;display:flex;flex-direction:column}
+.form .in{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1;overflow:auto}
+.fld{background:var(--panel-2);border-radius:4px;padding:8px 10px;color:var(--faint);font-size:12px}
+.fld b{display:block;color:var(--muted);font-size:11px;font-weight:600;margin-bottom:2px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--panel-2);border-radius:4px;padding:2px}
+.seg button{height:26px;border-radius:3px;color:var(--muted);font-weight:600;font-size:12px}.seg button.on{background:var(--panel-3);color:var(--ink)}
+.sum{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;color:var(--muted);padding:10px 12px;border-top:1px solid var(--line)}
+.sum b{text-align:right;color:var(--ink);font-weight:600}
+.grid{overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:10px;align-content:start;height:calc(100% - 38px)}
+.sc .th{aspect-ratio:1;border-radius:4px;background:var(--image);position:relative}
+.sc .nm{display:flex;gap:6px;padding:5px 1px 0;font-size:12px}
+.sc.live .th{outline:1px solid var(--accent)}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:3px;font-size:11px;font-weight:650;white-space:nowrap}
+.tag.q{background:var(--panel-3);color:var(--ink)}.tag.live{background:var(--accent);color:var(--on-accent)}
+.th .tag{position:absolute;left:5px;top:5px}
+.tag.old{color:var(--warn);background:var(--warn-soft)}.tag.me{color:#fff;background:var(--bad)}.tag.err{color:var(--bad);background:var(--bad-soft)}.tag.run{color:var(--info);background:var(--info-soft)}
+.okm{color:var(--faint)}
+.hist{overflow:auto;padding:8px;height:calc(100% - 38px);display:grid;gap:6px;align-content:start}.hist div{aspect-ratio:1;background:var(--image);border-radius:4px}
+.dock{grid-column:2/4;display:flex;flex-direction:column}
+.rows{overflow:auto;flex:1}
 table{width:100%;border-collapse:collapse}
-th{font-size:11px;font-weight:600;color:var(--faint);text-align:left;padding:8px 6px;white-space:nowrap;border-bottom:1px solid var(--line)}
-td{padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
-td:first-child,th:first-child{padding-left:16px}tbody tr:hover{background:var(--paper)}
-.st{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:600}
-.st.ok{color:var(--ok);background:var(--ok-soft)}.st.old{color:var(--warn);background:var(--warn-soft)}.st.run{color:var(--info);background:var(--info-soft)}
-.st.me{color:#fff;background:var(--danger)}.st.err{color:var(--danger);background:var(--bad-soft)}.st.no{color:var(--faint)}
-button.st:hover{filter:brightness(.95)}
-.log{display:grid;grid-template-columns:54px 1fr auto;gap:10px;padding:8px 16px;border-top:1px solid var(--line);align-items:center}
-/* 승인 창 */
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;place-items:center;z-index:5}.modal.on{display:grid}
-.dlg{width:min(880px,92vw);height:min(600px,84vh);background:var(--surface);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
-.dlg header,.dlg footer{display:flex;align-items:center;gap:8px;padding:12px 16px}
-.dlg header{border-bottom:1px solid var(--line)}.dlg footer{border-top:1px solid var(--line)}
-.diff{flex:1;overflow:auto;padding:10px 0;font:12.5px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
-.diff div{padding:0 16px;white-space:pre-wrap}.diff .a{background:var(--ok-soft)}.diff .d{background:var(--bad-soft)}.diff .at{color:var(--faint);padding-top:6px}
-/* 아래 줄 */
-.status{display:flex;align-items:center;gap:4px;padding:0 10px;font-size:12px;color:var(--muted)}
-.status button{height:24px;padding:0 8px;border-radius:6px;display:flex;gap:8px;align-items:center;white-space:nowrap}.status button:hover{background:var(--surface-2);color:var(--ink)}
-.pg{width:110px;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}.pg i{display:block;height:100%;background:var(--accent)}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}.dot.bad{background:var(--danger)}
-.pop{position:fixed;left:12px;bottom:36px;width:440px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:none;padding:12px 14px;z-index:4}.pop.on{display:block}
-.q{display:grid;grid-template-columns:70px 1fr 78px 44px;gap:10px;align-items:center;height:34px}.q .pg{width:100%}
-.pal{position:fixed;left:50%;top:90px;transform:translateX(-50%);width:520px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:none;z-index:6;overflow:hidden}.pal.on{display:block}
-.pal input{width:100%;height:44px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);font:inherit;font-size:14px;padding:0 14px;outline:0}
-.pal div{padding:8px 14px;display:flex;gap:10px}.pal div.on{background:var(--accent-soft)}
-@media(max-width:1000px){#v-scene{grid-template-columns:minmax(0,1fr)}.left,.right{display:none}.nav{position:static;transform:none}}
+th{font-size:11px;font-weight:500;color:var(--faint);text-align:left;padding:7px 8px;white-space:nowrap;position:sticky;top:0;background:var(--panel)}
+td{padding:6px 8px;white-space:nowrap;border-top:1px solid var(--line)}
+td:first-child,th:first-child{padding-left:12px}td:last-child,th:last-child{padding-right:12px;text-align:right}
+tbody tr:hover{background:var(--panel-2)}
+.pg{width:120px;height:4px;background:var(--panel-3);display:inline-block;vertical-align:middle;margin-right:8px}.pg i{display:block;width:0;height:100%;background:var(--accent)}
+.x{color:var(--muted)}.x:hover{color:var(--bad)}
+.dock [data-pane]{display:none}.dock [data-pane].on{display:table}
+/* 선별 */
+#v-cull{grid-template-columns:minmax(0,1fr) 260px;grid-template-rows:minmax(0,1fr) 104px}
+.stagewrap{display:flex;flex-direction:column}
+.stage{flex:1;margin:10px;background:var(--image);border-radius:4px;display:grid;place-items:center;color:var(--faint)}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:12px}
+.acts .btn{height:38px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
+.acts .keep{background:var(--accent);color:var(--on-accent)}.acts .drop{background:var(--bad-soft);color:var(--bad)}
+.film{grid-column:1/3;display:flex;gap:6px;padding:10px;overflow:auto;align-items:center}
+.film div{height:82px;aspect-ratio:1;border-radius:4px;background:var(--image);flex:none;position:relative;border:2px solid transparent}
+.film .cur{border-color:var(--accent)}.film .k::after{content:"✓";position:absolute;right:4px;top:0;color:var(--accent-text);font-weight:800}.film .d{opacity:.25}
+/* 작품 */
+#v-works{grid-template-columns:minmax(0,1fr) 380px}
+.side{display:flex;flex-direction:column}
+.diff{flex:1;overflow:auto;padding:8px 0;font:12px/1.8 ui-monospace,Consolas,"Malgun Gothic",monospace}
+.diff div{padding:0 12px;white-space:pre-wrap}.diff .a{background:var(--accent-soft)}.diff .d{background:var(--bad-soft)}.diff .at{color:var(--faint);padding-top:6px}
+.foot{display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--line)}.foot .btn{height:34px;flex:1}
+@media(max-width:1100px){#v-scene{grid-template-columns:minmax(0,1fr)}.form,.histp{display:none}.dock{grid-column:1}#v-works,#v-cull{grid-template-columns:minmax(0,1fr)}.side,.cside{display:none}.film{grid-column:1}}
 </style>
 </head>
 <body>
 <div class="app">
-<header class="title">
-  <span class="brand"><i></i>Atelier</span>
-  <span class="pillbox num"><span>19,620</span><span class="muted">V5 76%</span></span>
-  <nav class="nav">
-    <button data-go="scene">메인</button><button class="on" data-go="scene">씬</button><button data-go="cull">선별</button><button>디렉터</button><button>라이브러리</button><button>표지</button>
-    <button data-go="works">알림 <span class="cnt">7</span></button><button class="new" data-go="works">작품 <span class="cnt">1</span></button>
-  </nav>
+<header class="head">
+  <span class="logo"><i></i>Atelier</span>
+  <nav class="nav"><button data-go="scene">생성</button><button class="on" data-go="scene">씬</button><button data-go="cull">선별</button><button>디렉터</button><button>라이브러리</button><button>표지</button><button data-go="works">작품<span class="cnt">1</span></button><button data-go="works">알림<span class="cnt">7</span></button></nav>
   <span class="sp"></span>
-  <button class="ic" id="palBtn">찾기 <kbd>Ctrl K</kbd></button><button class="ic" id="theme">밝게/어둡게</button><button class="ic">설정</button>
+  <button class="hbtn">찾기 <kbd>Ctrl K</kbd></button><button class="hbtn" id="theme">밝게 / 어둡게</button><button class="hbtn">설정</button>
 </header>
+<div class="tick">
+  <button class="pair">대나무숲 / 은비 <span class="faint">▾</span></button>
+  <span class="kv"><small>진행</small><b class="num up">132 / 420장</b></span>
+  <span class="kv"><small>남은 시간</small><b class="num">46분</b></span>
+  <span class="kv"><small>속도</small><b class="num">분당 6.2장</b></span>
+  <span class="kv"><small>씬</small><b class="num">139개</b></span>
+  <span class="kv"><small>선별 대기</small><b class="num">30씬</b></span>
+  <span class="sp"></span>
+  <span class="kv"><small>Anlas</small><b class="num">19,620</b></span>
+  <span class="kv"><small>V5 잔량</small><b class="num">76%</b></span>
+  <span class="kv"><small>로그인</small><b class="num" style="color:var(--bad)">10 / 11</b></span>
+</div>
 
-<main class="body">
-<section class="view on" id="v-scene">
-  <div class="card left">
-    <div class="fld">생성 모델 · V4.5 / V5</div><div class="fld">프롬프트 프리셋</div>
-    <div class="fld" style="height:120px">프롬프트</div><div class="fld" style="height:120px">네거티브</div>
-    <div class="fld">캐릭터 · 조각 · 바이브 · 레퍼런스 · AI 태그</div><div class="fld">1024 × 1024 · 28스텝 · 시드 무작위</div>
-    <div class="faint" style="font-size:12px;padding:4px 2px">왼쪽 생성 칸은 지금 앱과 같아요.</div>
-    <div class="gen"><button class="btn accent" id="genBtn">씬 생성 420장</button></div>
-  </div>
-  <div class="card center">
-    <div class="bar"><h2>씬</h2><button class="btn">대나무숲 › 은비 ▾</button><span class="sp"></span>
-      <button class="btn" data-go="cull">선별</button><button class="btn">불러오기</button><button class="btn">폴더 열기</button></div>
+<main class="work on" id="v-scene">
+  <section class="form">
+    <div class="ph tabs"><button class="on">프롬프트</button><button>캐릭터</button><button>조각</button><button>레퍼런스</button></div>
+    <div class="in">
+      <div class="seg"><button>V4.5</button><button class="on">V5</button></div>
+      <div class="fld"><b>프리셋</b>v5 테스트</div>
+      <div class="fld" style="min-height:110px"><b>프롬프트</b>1girl, …</div>
+      <div class="fld" style="min-height:90px"><b>네거티브</b>bad anatomy, …</div>
+      <div class="fld"><b>설정</b>1024 × 1024 · 28스텝 · 시드 무작위</div>
+    </div>
+    <div class="sum"><span>예약</span><b class="num">420장 · 프리셋 3개</b><span>비용</span><b class="up">무료</b></div>
+    <div style="padding:0 12px 12px"><button class="btn go lg">예약 420장 생성</button></div>
+  </section>
+  <section>
+    <div class="ph"><b>씬</b><span class="faint num">139</span><span class="sp"></span><button class="btn txt">전체</button><button class="btn txt">이미지 없음</button><button class="btn txt">예약됨</button><span style="width:8px"></span><button class="btn" data-go="cull">선별</button><button class="btn">불러오기</button><button class="btn">폴더 열기</button></div>
     <div class="grid" id="grid"></div>
-  </div>
-  <div class="card right"><div class="muted" style="font-weight:600;margin-bottom:8px">히스토리</div><div class="th"></div><div class="th"></div><div class="th"></div><div class="th"></div></div>
-</section>
-
-<section class="view" id="v-cull"><div class="card cull">
-  <div class="bar"><h2>선별</h2><button class="btn">대나무숲 › 은비 ▾</button><span class="muted num">씬 12 / 139 · 놀람 · 3 / 15장 · 고른 것 96장</span><span class="sp"></span><button class="btn accent">고른 그림 반입</button></div>
-  <div class="stage">이미지</div>
-  <div class="acts"><button class="btn"><kbd>F</kbd>고르기</button><button class="btn"><kbd>X</kbd>버리기</button><button class="btn"><kbd>G</kbd>1장 더 뽑기</button><button class="btn ghost"><kbd>Z</kbd>되돌리기</button><button class="btn ghost"><kbd>↑</kbd><kbd>↓</kbd>씬 이동</button></div>
-  <div class="film" id="film"></div>
-</div></section>
-
-<section class="view" id="v-works"><div class="card works">
-  <div class="bar"><h2>작품</h2><span class="muted">에덴 정식판과 견줘서, 플랫폼마다 지금 상태예요.</span><span class="sp"></span><button class="btn sm">낡은 것만</button><button class="btn sm">내 차례만</button></div>
-  <table><thead><tr><th>작품</th><th>에덴</th><th>바베</th><th>젠잇</th><th>루나</th><th>엘린</th><th>네코</th><th>티팟</th><th>크랙</th><th>알플</th><th>우마이</th><th>챗플</th><th>댓글</th></tr></thead><tbody id="tb"></tbody></table>
-  <div class="bar" style="padding-bottom:6px"><h2>AI가 한 일</h2><span class="sp"></span><button class="btn sm ghost">전체 보기</button></div>
-  <div id="logs"></div>
-</div></section>
+  </section>
+  <section class="histp"><div class="ph"><b>히스토리</b></div><div class="hist"><div></div><div></div><div></div></div></section>
+  <section class="dock">
+    <div class="ph tabs"><button class="on" data-tab="q">대기열 <span class="faint num">3</span></button><button data-tab="ai">AI가 한 일</button><button data-tab="ok">승인 대기<span class="cnt">1</span></button><span class="sp"></span><button class="btn txt">일시정지</button><button class="btn txt" style="color:var(--bad)">전부 취소</button></div>
+    <div class="rows">
+      <table data-pane="q" class="on"><thead><tr><th>묶음</th><th>상태</th><th>진행</th><th>모델</th><th>크기</th><th></th></tr></thead><tbody>
+        <tr><td><b>은비</b></td><td><span class="tag live">생성 중</span></td><td class="num"><span class="pg"><i style="width:94%"></i></span>132 / 140</td><td>V5</td><td class="num">1024 × 1024</td><td><button class="x">취소</button></td></tr>
+        <tr><td><b>유라</b></td><td class="muted">대기</td><td class="num"><span class="pg"><i></i></span>0 / 140</td><td>V5</td><td class="num">1024 × 1024</td><td><button class="x">취소</button></td></tr>
+        <tr><td><b>서진</b></td><td class="muted">대기</td><td class="num"><span class="pg"><i></i></span>0 / 140</td><td>V5</td><td class="num">832 × 1216</td><td><button class="x">취소</button></td></tr></tbody></table>
+      <table data-pane="ai"><thead><tr><th>시각</th><th>플랫폼</th><th>작품</th><th>한 일</th><th>결과</th></tr></thead><tbody>
+        <tr><td class="num faint">02:14</td><td>우마이</td><td>대나무숲의 빌런이 되었다.</td><td>로어북 4개 저장</td><td class="up">저장 확인</td></tr>
+        <tr><td class="num faint">01:40</td><td>바베</td><td>비 오는 날, 여고생을 줍다.</td><td>공개작 저장안</td><td><span class="tag me">승인 필요</span></td></tr>
+        <tr><td class="num faint">어제</td><td>티팟</td><td>—</td><td>읽기</td><td><span class="tag err">로그인 풀림</span></td></tr></tbody></table>
+      <table data-pane="ok"><thead><tr><th>플랫폼</th><th>작품</th><th>종류</th><th>바뀐 곳</th><th></th></tr></thead><tbody>
+        <tr><td>바베</td><td>비 오는 날, 여고생을 줍다.</td><td>공개작 저장</td><td>본문 +2 −1 · 로어북 +6 · 소개 +1 −1</td><td><button class="btn go" data-go="works">내용 보기</button></td></tr></tbody></table>
+    </div>
+  </section>
 </main>
 
-<footer class="status">
-  <button id="qBtn"><span class="pg"><i style="width:31%"></i></span><span class="num">생성 132 / 420장 · 46분 남음</span></button>
-  <span class="sp"></span>
-  <button data-go="works"><span class="cnt">1</span> 승인 대기</button>
-  <button><i class="dot bad"></i>로그인 10 / 11</button>
-  <button><i class="dot"></i>MCP 켜짐</button>
-</footer>
+<main class="work" id="v-cull">
+  <section class="stagewrap"><div class="ph"><b>은비 · 놀람</b><span class="faint num">씬 12 / 139 · 3 / 15장</span><span class="sp"></span><button class="btn txt"><kbd>↑</kbd> <kbd>↓</kbd> 씬 이동</button><button class="btn txt"><kbd>Z</kbd> 되돌리기</button></div><div class="stage">이미지</div></section>
+  <section class="cside" style="display:flex;flex-direction:column">
+    <div class="ph"><b>선별</b></div>
+    <div class="sum" style="border:0"><span>고른 그림</span><b class="num">96장</b><span>끝낸 씬</span><b class="num">11 / 139</b><span>이 씬</span><b class="num">고름 1 · 버림 1</b></div>
+    <div class="acts"><button class="btn keep"><kbd style="border-color:transparent;color:inherit">F</kbd>고르기</button><button class="btn drop"><kbd style="border-color:transparent;color:inherit">X</kbd>버리기</button></div>
+    <div style="padding:0 12px"><button class="btn lg" style="height:34px;font-size:12px"><kbd>G</kbd>&nbsp; 이 씬 1장 더 뽑기</button></div>
+    <p class="faint" style="padding:10px 12px;font-size:12px;margin:0">고르거나 버리면 다음 장으로 넘어가요. 버린 그림은 씬을 넘길 때 지워져요.</p>
+    <span class="sp"></span><div style="padding:12px"><button class="btn go lg">고른 96장 반입</button></div>
+  </section>
+  <section class="film" id="film"></section>
+</main>
+
+<main class="work" id="v-works">
+  <section style="display:flex;flex-direction:column">
+    <div class="ph tabs"><button class="on">전체 <span class="faint num">5</span></button><button>낡은 것 <span class="faint num">1</span></button><button>내 차례<span class="cnt">2</span></button><span class="sp"></span><span class="faint" style="font-size:12px">✓ 에덴과 같음 · 낡음 = 에덴이 그 뒤에 바뀜</span></div>
+    <div class="rows"><table><thead><tr><th>작품</th><th>에덴</th><th>바베</th><th>젠잇</th><th>루나</th><th>엘린</th><th>네코</th><th>티팟</th><th>크랙</th><th>알플</th><th>우마이</th><th>챗플</th><th>이미지</th><th>댓글</th></tr></thead><tbody id="tb"></tbody></table></div>
+  </section>
+  <section class="side">
+    <div class="ph"><b>바베 · 공개작 저장</b><span class="sp"></span><span class="tag me">승인 필요</span></div>
+    <div class="ph tabs" style="height:34px"><button class="on" style="height:34px">본문 +2 −1</button><button style="height:34px">로어북 +6</button><button style="height:34px">소개</button></div>
+    <div class="diff"><div class="at">관계 엔진 · 218줄</div><div>  호감도는 장면의 결과로만 움직인다.</div><div class="d">- 상태창은 매 응답 끝에 출력한다.</div><div class="a">+ 상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div><div class="a">+ 응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div><div class="at">글자 수</div><div>  9,812 → 9,871 (한도 10,000)</div></div>
+    <div class="sum"><span>독자에게</span><b>저장 즉시 보임</b><span>백업</span><b>저장 전 상태 자동 보관</b></div>
+    <div class="foot"><button class="btn">돌려보내기</button><button class="btn go" id="ok">승인하고 저장</button></div>
+  </section>
+</main>
 </div>
-
-<div class="pop" id="pop">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b>생성 대기열</b><span class="sp"></span><button class="btn sm">일시정지</button><button class="btn sm ghost" style="color:var(--danger)">전부 취소</button></div>
-  <div class="q"><b>은비</b><span class="pg"><i style="width:94%"></i></span><span class="num muted">132 / 140</span><button class="btn sm ghost">취소</button></div>
-  <div class="q"><b>유라</b><span class="pg"><i style="width:0"></i></span><span class="num muted">0 / 140</span><button class="btn sm ghost">취소</button></div>
-  <div class="q"><b>서진</b><span class="pg"><i style="width:0"></i></span><span class="num muted">0 / 140</span><button class="btn sm ghost">취소</button></div>
-</div>
-
-<div class="pal" id="pal"><input placeholder="화면, 작품, 프리셋 이름으로 찾기">
-  <div class="on">씬 › 대나무숲 › 은비<span class="sp"></span><span class="faint">프리셋</span></div><div>비 오는 날, 여고생을 줍다.<span class="sp"></span><span class="faint">작품</span></div><div>선별 열기<span class="sp"></span><span class="faint">화면</span></div></div>
-
-<div class="modal" id="modal"><div class="dlg">
-  <header><b>바베 · 비 오는 날, 여고생을 줍다.</b><span class="muted">공개작 저장 · 3곳 바뀜</span><span class="sp"></span><button class="btn sm accent">본문</button><button class="btn sm">로어북</button><button class="btn sm">소개</button></header>
-  <div class="diff"><div class="at">관계 엔진 · 218줄</div><div>  호감도는 장면의 결과로만 움직인다.</div><div class="d">- 상태창은 매 응답 끝에 출력한다.</div><div class="a">+ 상태창은 장면이나 수치가 바뀐 응답 끝에만 출력한다.</div><div class="a">+ 응답이 길어지면 본문을 줄이고 상태창을 끝까지 낸다.</div><div class="at">글자 수</div><div>  9,812 → 9,871 (한도 10,000)</div></div>
-  <footer><span class="muted">저장하면 독자에게 바로 보여요. 저장 전 상태는 백업돼요.</span><span class="sp"></span><button class="btn ghost" id="mClose">닫기</button><button class="btn">돌려보내기</button><button class="btn accent" id="mOk">승인하고 저장</button></footer>
-</div></div>
-
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-$('#grid').innerHTML=Array.from({length:14},(_,i)=>`<div class="sc"><div class="th">${i===5?'<span class="tag run">생성 중 3 / 5</span>':i>5?'<span class="tag">예약 5</span>':''}</div><div class="nm">은비-${i+1}<span class="sp"></span><span class="faint num">${i<6?15:0}장</span></div></div>`).join('');
-$('#film').innerHTML=Array.from({length:15},(_,i)=>`<div class="${i===2?'cur':i===0?'keep':i===1?'drop':''}"></div>`).join('');
-const L={ok:'최신',old:'낡음',run:'진행 중',me:'승인 필요',err:'로그인 풀림',no:'—'};
-const W=[['대나무숲의 빌런이 되었다.','ok old old old old no old old old ok no',3],['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok err ok ok no no',4],['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok no no',0],['오프파코','ok ok ok no ok no ok ok run no no',0],['생활비','ok ok no no no no no no no no no',0]];
-$('#tb').innerHTML=W.map(([t,s,c])=>`<tr><td><b>${t}</b></td>${s.split(' ').map(k=>`<td>${k==='me'?`<button class="st me" data-open>${L[k]}</button>`:`<span class="st ${k}">${L[k]}</span>`}</td>`).join('')}<td>${c?`<span class="cnt">${c}</span>`:'<span class="faint">—</span>'}</td></tr>`).join('');
-$('#logs').innerHTML=[['02:14','우마이 「대나무숲…」 로어북 4개 저장','ok','저장 확인'],['01:40','바베 「비 오는 날…」 공개작 저장안','me','승인 필요'],['01:22','에덴 「대나무숲…」 읽음 · 로컬과 같음','',''],['어제','티팟 읽기 실패','err','로그인 풀림']].map(([t,m,k,l])=>`<div class="log"><span class="faint num">${t}</span><span>${m}</span>${k==='me'?`<button class="st me" data-open>${l}</button>`:k?`<span class="st ${k}">${l}</span>`:'<span></span>'}</div>`).join('');
-const idx={scene:1,cull:2,works:7};
-function go(v){$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));$$('.nav button').forEach((b,i)=>b.classList.toggle('on',i===idx[v]))}
-document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);if(e.target.closest('[data-open]'))$('#modal').classList.add('on')});
+$('#grid').innerHTML=Array.from({length:18},(_,i)=>`<div class="sc${i===5?' live':''}"><div class="th">${i===5?'<span class="tag live">생성 중 3 / 5</span>':i>5?'<span class="tag q">예약 5</span>':''}</div><div class="nm"><b>은비-${i+1}</b><span class="sp"></span><span class="faint num">${i<6?15:0}장</span></div></div>`).join('');
+$('#film').innerHTML=Array.from({length:15},(_,i)=>`<div class="${i===2?'cur':i===0?'k':i===1?'d':''}"></div>`).join('');
+const C={ok:'<span class="okm">✓</span>',old:'<span class="tag old">낡음</span>',run:'<span class="tag run">진행 중</span>',me:'<span class="tag me">승인 필요</span>',err:'<span class="tag err">로그인 풀림</span>',no:'<span class="faint">—</span>'};
+$('#tb').innerHTML=[['대나무숲의 빌런이 되었다.','ok old old old old no old old old ok no','2,530',3],['비 오는 날, 여고생을 줍다.','ok me ok ok ok ok err ok ok no no','1,204',4],['음란한 나의 공주님','ok ok ok ok ok ok ok ok ok no no','884',0],['오프파코','ok ok ok no ok no ok ok run no no','1,960',0],['생활비','ok ok no no no no no no no no no','310',0]].map(([t,s,n,c])=>`<tr><td><b>${t}</b></td>${s.split(' ').map(k=>`<td>${C[k]}</td>`).join('')}<td class="num muted">${n}</td><td>${c?`<span class="cnt">${c}</span>`:'<span class="faint">—</span>'}</td></tr>`).join('');
+const idx={scene:1,cull:2,works:6};
+function go(v){$$('.work').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));$$('.nav button').forEach((b,i)=>b.classList.toggle('on',i===idx[v]))}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);
+ const d=e.target.closest('[data-tab]');if(d){$$('[data-tab]').forEach(b=>b.classList.toggle('on',b===d));$$('[data-pane]').forEach(p=>p.classList.toggle('on',p.dataset.pane===d.dataset.tab))}});
 $('#theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'};
-$('#qBtn').onclick=$('#genBtn').onclick=()=>$('#pop').classList.toggle('on');
-$('#palBtn').onclick=()=>{$('#pal').classList.toggle('on');$('#pal input').focus()};
-$('#mClose').onclick=()=>$('#modal').classList.remove('on');
-$('#mOk').onclick=()=>{$('#modal').classList.remove('on');$$('.st.me').forEach(b=>{b.className='st ok';b.textContent='최신'})};
-document.addEventListener('keydown',e=>{if(e.key==='Escape')['#pop','#pal','#modal'].forEach(s=>$(s).classList.remove('on'));if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();$('#palBtn').click()}});
-if(location.hash)go(location.hash.slice(1));if(location.search.includes('dark'))document.documentElement.dataset.theme='dark';if(location.search.includes('q'))$('#pop').classList.add('on');if(location.search.includes('m'))$('#modal').classList.add('on');
+$('#ok').onclick=e=>{e.target.textContent='저장됨 · 다시 읽어 확인';e.target.className='btn';e.target.disabled=true};
+if(location.hash)go(location.hash.slice(1));if(location.search.includes('light'))document.documentElement.dataset.theme='light';
 </script>
 </body>
 </html>
