@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atelier 시안</title>
 <style>
-:root{--bg:#131316;--panel:#1c1c20;--panel-2:#26262b;--panel-3:#32323a;--line:#2c2c33;--ink:#f1f1f3;--muted:#a3a3ad;--faint:#74747f;
- --accent:#1fe5c1;--on-accent:#04241e;--accent-soft:rgba(31,229,193,.12);--accent-text:#1fe5c1;
- --warn:#f0b90b;--warn-soft:rgba(240,185,11,.13);--bad:#f6465d;--bad-soft:rgba(246,70,93,.14);--info:#6ea8ff;--info-soft:rgba(110,168,255,.14);--image:#222226;color-scheme:dark}
+:root{--bg:#19191c;--panel:#202024;--panel-2:#2a2a2f;--panel-3:#35353c;--line:#303036;--ink:#e3e3e7;--muted:#a0a0a9;--faint:#85858f;
+ --accent:#5cc4ae;--on-accent:#0c2620;--accent-soft:rgba(92,196,174,.12);--accent-text:#7fd3c0;
+ --warn:#d2b062;--warn-soft:rgba(210,176,98,.13);--bad:#e0707c;--bad-soft:rgba(224,112,124,.14);--info:#8fb0e0;--info-soft:rgba(143,176,224,.13);--image:#26262a;color-scheme:dark}
 :root[data-theme=light]{--bg:#eeeef1;--panel:#fff;--panel-2:#f3f3f6;--panel-3:#e6e6eb;--line:#e1e1e7;--ink:#17171a;--muted:#5b5b66;--faint:#7c7c88;
- --accent:#12c9a8;--on-accent:#04241e;--accent-soft:rgba(18,201,168,.14);--accent-text:#087f6a;
+ --accent:#4fb8a2;--on-accent:#06261f;--accent-soft:rgba(63,174,152,.14);--accent-text:#1f7d6b;
  --warn:#9a6b00;--warn-soft:rgba(240,185,11,.2);--bad:#cf304a;--bad-soft:rgba(246,70,93,.12);--info:#2f6fd6;--info-soft:rgba(47,111,214,.12);--image:#e4e4e9;color-scheme:light}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:13px/1.45 "Pretendard Variable",Pretendard,"Malgun Gothic",system-ui,sans-serif;overflow:hidden}
@@ -26,7 +26,7 @@ kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);borde
 .nav button{height:48px;padding:0 12px;color:var(--muted);font-weight:600;position:relative}
 .nav button:hover{color:var(--ink)}
 .nav button.on{color:var(--ink)}.nav button.on::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:2px;background:var(--accent)}
-.cnt{min-width:16px;height:16px;border-radius:8px;padding:0 4px;background:var(--bad);color:#fff;font-size:10px;font-weight:700;display:inline-grid;place-items:center;vertical-align:1px;margin-left:3px}
+.cnt{min-width:16px;height:16px;border-radius:8px;padding:0 4px;background:var(--bad);color:var(--bg);font-size:10px;font-weight:700;display:inline-grid;place-items:center;vertical-align:1px;margin-left:3px}
 .hbtn{height:30px;padding:0 10px;border-radius:4px;color:var(--muted)}.hbtn:hover{background:var(--panel-2);color:var(--ink)}
 /* 요약 줄 */
 .tick{display:flex;align-items:center;gap:26px;padding:0 16px;overflow:hidden;white-space:nowrap}
@@ -59,7 +59,7 @@ kbd{font:11px ui-monospace,Consolas,monospace;border:1px solid var(--line);borde
 .tag{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:3px;font-size:11px;font-weight:650;white-space:nowrap}
 .tag.q{background:var(--panel-3);color:var(--ink)}.tag.live{background:var(--accent);color:var(--on-accent)}
 .th .tag{position:absolute;left:5px;top:5px}
-.tag.old{color:var(--warn);background:var(--warn-soft)}.tag.me{color:#fff;background:var(--bad)}.tag.err{color:var(--bad);background:var(--bad-soft)}.tag.run{color:var(--info);background:var(--info-soft)}
+.tag.old{color:var(--warn);background:var(--warn-soft)}.tag.me{color:var(--bad);background:var(--bad-soft);box-shadow:inset 0 0 0 1px var(--bad)}.tag.err{color:var(--bad);background:var(--bad-soft)}.tag.run{color:var(--info);background:var(--info-soft)}
 .okm{color:var(--faint)}
 .hist{overflow:auto;padding:8px;height:calc(100% - 38px);display:grid;gap:6px;align-content:start}.hist div{aspect-ratio:1;background:var(--image);border-radius:4px}
 .dock{grid-column:2/4;display:flex;flex-direction:column}
