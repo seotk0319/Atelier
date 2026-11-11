@@ -38,6 +38,7 @@ export function activityKind(tool: string): Kind {
     tool.endsWith('_read') ||
     tool.endsWith('_list') ||
     tool === 'sites_list' ||
+    tool === 'works_status' ||
     tool === 'canvas_export'
   )
     return 'read'
@@ -47,6 +48,7 @@ export function activityKind(tool: string): Kind {
 const LABELS: Record<string, string> = {
   sites_list: '플랫폼 목록 읽음',
   works_list: '작품 목록 읽음',
+  works_status: '작품 현황 읽음',
   work_read: '작품 읽음',
   lorebook_read: '로어북 읽음',
   start_scenarios_read: '시작 상황 읽음',
@@ -119,6 +121,10 @@ function describe(
     case 'works_list': {
       const n = num(result.count) ?? len(result.works)
       return n === null ? label(tool) : '작품 목록 ' + n + '개 읽음'
+    }
+    case 'works_status': {
+      const n = num(result.count)
+      return n === null ? label(tool) : '작품 현황 ' + n + '개 읽음'
     }
     case 'work_read': {
       const n = isObj(result.content) ? Object.keys(result.content).length : 0

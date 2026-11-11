@@ -87,8 +87,7 @@ export function SceneMode(): React.JSX.Element {
   return <SceneGrid />
 }
 
-/** 프리셋 드롭다운 — 작품 폴더별 목록 + 검색 (scene-preset-picker) */
-/** 씬 프리셋 고르기 (요약 줄에서 쓴다) + 프리셋 관리·캐릭터 연결 창 */
+/** 씬 프리셋 고르기 (씬·선별 머리줄) + 프리셋 관리·캐릭터 연결 창 */
 export function PresetDropdown({
   triggerClassName
 }: {
@@ -147,9 +146,7 @@ function PresetCharacterDialog({
         </p>
         <div className="max-h-80 space-y-1 overflow-y-auto">
           {characters.length === 0 && (
-            <p className="py-6 text-center text-[12px] text-faint">
-              캐릭터 라이브러리가 비어 있어요
-            </p>
+            <p className="py-6 text-center text-[12px] text-faint">캐릭터 없음</p>
           )}
           {characters.map((c) => {
             const checked = selected.has(c.id)
@@ -554,6 +551,7 @@ function SceneGrid(): React.JSX.Element {
           <span className="text-[13px] tabular-nums text-faint">
             {scenes.length.toLocaleString()}
           </span>
+          <PresetDropdown />
           <div className="min-w-2 flex-1" />
           <Button
             className="h-9 shrink-0 px-3"
@@ -1206,7 +1204,7 @@ function SceneCardBody({
               <div className="mt-0.5 truncate text-[11px] tabular-nums text-faint">
                 {scene.imageCount > 0
                   ? `이미지 ${scene.imageCount.toLocaleString()}장`
-                  : '아직 이미지 없음'}
+                  : '이미지 없음'}
               </div>
             </div>
             {/* 바로 뽑기: 3열까지는 이름 옆, 더 좁으면 이미지 위 */}
@@ -1408,7 +1406,7 @@ function QuickTray({
         disabled={pendingIds.length === 0}
         onClick={() => cancel(pendingIds)}
       >
-        대기 모두 취소
+        대기 취소
       </Button>
     </div>
   )

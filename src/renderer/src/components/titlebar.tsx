@@ -1,7 +1,23 @@
-import { Download, Loader2, Minus, PanelLeft, PanelRight, Settings, Square, X } from 'lucide-react'
+import {
+  Coins,
+  Download,
+  Loader2,
+  Minus,
+  PanelLeft,
+  PanelRight,
+  Settings,
+  Square,
+  X
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { estimateAnlas } from '@shared/anlas'
+import { isMediumEffort, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
+import type { V5UsageStatus } from '@shared/types'
+import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
 import { cn } from '../lib/utils'
+import { useGenerationStore } from '../stores/generation-store'
 import { useLayoutStore } from '../stores/layout-store'
+import { useCharRefsStore, useVibesStore } from '../stores/refs-store'
 import { useUpdateStore } from '../stores/update-store'
 import { PageNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
@@ -52,6 +68,128 @@ function UpdateButton(): React.JSX.Element | null {
   return null
 }
 
+function formatDuration(seconds: number): string {
+  const value = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(value / 3600)
+  const minutes = Math.floor((value % 3600) / 60)
+  const secs = value % 60
+  if (hours > 0) return `${hours}시간 ${minutes}분 ${secs}초`
+  if (minutes > 0) return `${minutes}분 ${secs}초`
+  return `${secs}초`
+}
+
+function v5Tooltip(usage: V5UsageStatus, model: string): string {
+  const medium = isMediumEffort(model)
+  const images = estimateV5Images(usage, model)
+  const secondsPerPercent = usage.timeUntilNextPercent
+  const refillRate = secondsPerPercent > 0 ? Math.round((3600 / secondsPerPercent) * 10) / 10 : 0
+  const percentToFull = usage.isNegative ? usage.percent + 100 : 100 - usage.percent
+  const fullIn = percentToFull * secondsPerPercent
+  return `V5 생성 한도 잔량 ${usage.percent}%\n${
+    usage.percent >= 100
+      ? '충전 완료'
+      : `충전 속도 ${refillRate}%/시간 · 1%당 ${formatDuration(secondsPerPercent)}\n100%까지 약 ${formatDuration(fullIn)}`
+  }\n약 ${images.toLocaleString()}장: ${medium ? '절약 모드 기준(일반보다 약 42% 적게 씀) · ' : ''}${V5_ESTIMATE_BASIS}`
+}
+
+/**
+ * 머리줄 오른쪽 Anlas 잔액(-N 예상 소모)과 V5 잔량. 값이 없으면 그 칸은 그리지 않는다.
+ * 창이 좁아지면 「약 N장」→ 막대 순으로 숨기고 숫자는 늘 남긴다.
+ */
+function HeaderMeters(): React.JSX.Element | null {
+  const anlasBalance = useGenerationStore((s) => s.anlasBalance)
+  const v5Usage = useGenerationStore((s) => s.v5Usage)
+  const refreshAnlas = useGenerationStore((s) => s.refreshAnlas)
+  const request = useGenerationStore((s) => s.request)
+  const batchCount = useGenerationStore((s) => s.batchCount)
+  const tier = useGenerationStore((s) => s.subscriptionTier)
+  const enabledCrefs = useCharRefsStore((s) => s.items.filter((c) => c.enabled).length)
+  const unencodedVibes = useVibesStore(
+    (s) => s.items.filter((v) => v.enabled && !v.encodedReady).length
+  )
+  // 이번 생성에 소모될 Anlas 추정 (고해상도·캐릭터 레퍼런스·미인코딩 바이브 등)
+  const anlasCost = estimateAnlas({
+    width: request.width,
+    height: request.height,
+    steps: isMediumEffort(request.model) ? MEDIUM_EFFORT_STEPS : request.steps,
+    model: request.model,
+    strength: request.source ? (request.i2iStrength ?? 0.7) : 1,
+    charRefCount: enabledCrefs,
+    isOpus: tier === 'opus',
+    batchCount,
+    unencodedVibes
+  }).total
+
+  useEffect(() => {
+    if (!v5Usage || v5Usage.percent >= 100) return
+    // timeUntilNextPercent는 카운트다운이 아니라 1%당 초다. 한 주기마다 서버 비율만 새로 읽는다.
+    const refreshInMs = Math.max(60_000, v5Usage.timeUntilNextPercent * 1000)
+    const timer = window.setTimeout(() => void refreshAnlas(), refreshInMs)
+    return () => window.clearTimeout(timer)
+  }, [v5Usage, refreshAnlas])
+
+  if (anlasBalance === null && !v5Usage) return null
+  return (
+    <div className="no-drag mr-1 flex shrink-0 items-center gap-2 whitespace-nowrap text-[13px] min-[1240px]:gap-3">
+      {anlasBalance !== null && (
+        <span
+          className="flex items-center gap-1.5"
+          title={
+            anlasCost > 0
+              ? `Anlas 잔액 (생성할 때마다 갱신)\n이번 생성에 ${anlasCost}만큼 써요 (고해상도 · 캐릭터 레퍼런스 · 미인코딩 바이브 포함)`
+              : 'Anlas 잔액 (생성할 때마다 갱신)'
+          }
+        >
+          <Coins size={13} className="text-[#c9a34f]" aria-label="Anlas" />
+          <b className="font-semibold tabular-nums text-ink">{anlasBalance.toLocaleString()}</b>
+          {anlasCost > 0 && (
+            <span className="rounded-md bg-bad-soft px-1.5 text-[12px] font-semibold tabular-nums text-bad">
+              -{anlasCost}
+            </span>
+          )}
+        </span>
+      )}
+      {anlasBalance !== null && v5Usage && (
+        <span className="hidden h-3.5 w-px shrink-0 bg-line min-[1240px]:block" />
+      )}
+      {v5Usage && (
+        <span className="flex items-center gap-1.5" title={v5Tooltip(v5Usage, request.model)}>
+          <span className="font-medium text-muted">V5</span>
+          <b
+            className={cn(
+              'font-semibold tabular-nums',
+              v5Usage.isNegative ? 'text-bad' : 'text-ink'
+            )}
+          >
+            {v5Usage.isNegative ? '−' : ''}
+            {v5Usage.percent}%
+          </b>
+          <span
+            className="hidden h-1 w-10 shrink-0 overflow-hidden bg-surface-3 min-[1240px]:inline-block"
+            role="meter"
+            aria-label="V5 잔량"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={v5Usage.isNegative ? 0 : Math.min(100, v5Usage.percent)}
+          >
+            <i
+              className="block h-full bg-mark"
+              style={{
+                width: `${v5Usage.isNegative ? 0 : Math.max(0, Math.min(100, v5Usage.percent))}%`
+              }}
+            />
+          </span>
+          <span className="hidden text-[12px] tabular-nums text-muted min-[1360px]:inline">
+            {v5Usage.isNegative
+              ? '제한됨'
+              : `약 ${estimateV5Images(v5Usage, request.model).toLocaleString()}장`}
+          </span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 function BarButton({
   className,
   active,
@@ -99,8 +237,9 @@ export function Titlebar(): React.JSX.Element {
       <PageNav />
       <div className="min-w-4 flex-1" />
 
-      {/* 오른쪽: 업데이트 · 테마 · 패널 · 설정 · 창 컨트롤 */}
+      {/* 오른쪽: Anlas · V5 · 업데이트 · 테마 · 패널 · 설정 · 창 컨트롤 */}
       <div className="flex shrink-0 items-center gap-1">
+        <HeaderMeters />
         <UpdateButton />
         <div className="no-drag mx-0.5 shrink-0">
           <ThemeToggle />

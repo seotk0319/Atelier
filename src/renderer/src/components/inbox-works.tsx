@@ -145,11 +145,13 @@ export function InboxWorks({
             <SegmentedCount>{rows.length}</SegmentedCount>
           </SegmentedItem>
           <SegmentedItem value="missing" className="px-3 text-[13px]">
-            {focus ? platformName(focus) + ' 미이식' : '이식 남은 작품'}
+            {focus ? platformName(focus) + ' 미이식' : '미이식'}
             <SegmentedCount>{missingCount}</SegmentedCount>
           </SegmentedItem>
         </Segmented>
-        <span className="text-[12px] text-faint">마지막 확인 {ago(data?.fetchedAt ?? null)}</span>
+        <span className="text-[12px] text-faint">
+          {data?.fetchedAt ? ago(data.fetchedAt) + ' 확인' : '확인 안 함'}
+        </span>
         {errors.map(([p, message]) => (
           <span
             key={p}
@@ -168,7 +170,7 @@ export function InboxWorks({
             title="플랫폼에서 내 작품을 다시 읽어요"
           >
             <RefreshCw size={14} className={cn(loading && 'animate-spin')} />
-            {loading ? '읽는 중' : '새로 고침'}
+            {loading ? '읽는 중' : '새로고침'}
           </Button>
         </div>
       </div>
@@ -179,17 +181,17 @@ export function InboxWorks({
       >
         {!data ? (
           <p className="p-10 text-center text-[13px] text-muted">
-            플랫폼에서 내 작품을 읽고 있어요… 처음엔 몇 초 걸려요.
+            읽는 중…
           </p>
         ) : !rows.length ? (
           <p className="p-10 text-center text-[13px] text-muted">
             {supported.has(ORIGIN)
-              ? '에덴에서 찾은 작품이 없어요.'
+              ? '에덴 작품 없음'
               : '에덴을 연결하면 작품별 이식 현황을 볼 수 있어요.'}
           </p>
         ) : !visible.length ? (
           <p className="p-10 text-center text-[13px] text-muted">
-            {filter === 'missing' ? '모두 이식했어요.' : '조건에 맞는 작품이 없어요.'}
+            {filter === 'missing' ? '미이식 없음' : '결과 없음'}
           </p>
         ) : (
           visible.map((r) => (

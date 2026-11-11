@@ -11,6 +11,8 @@ import {
   WORK_PLATFORMS
 } from '../src/renderer/src/lib/works-table'
 import { countByGroup } from '../src/main/notifications/work-groups'
+import { worksStatusResult } from '../src/main/works/status-tool'
+import type { EditionRecord } from '../src/shared/work-freshness'
 
 function w(platform: string, id: string, title: string, extra: Partial<InboxWork> = {}): InboxWork {
   return {
@@ -155,7 +157,144 @@ describe('작품 표 행 만들기', () => {
   })
 })
 
-describe('마지막 AI 작업', () => {
+describe('낡음: 수집기 시각과 MCP 저장 기록', () => {
+  const rec = (site: string, workId: string, lastSavedAt: string): EditionRecord => ({
+    site,
+    workId,
+    title: 'A',
+    lastSavedAt,
+    lastTool: 'work_save'
+  })
+  const row = (works: InboxWork[], saved?: EditionRecord[]): ReturnType<typeof buildWorkRows>[0] =>
+    buildWorkRows(data([{ key: 'a', title: 'A', thumbnail: null, works }], { saved }))[0]
+  const cell = (r: ReturnType<typeof row>, p: string): ReturnType<typeof row>['cells'][0] =>
+    r.cells.find((c) => c.platform === p)!
+
+  it('수집기 시각만 있을 때', () => {
+    const r = row([
+      w('eden', 'e', 'A', { updatedAt: '2026-11-05T00:00:00.000Z' }),
+      w('crack', 'c', 'A', { updatedAt: '2026-11-01T00:00:00.000Z' }),
+      w('babe', 'b', 'A', { updatedAt: '2026-11-06T00:00:00.000Z' })
+    ])
+    expect(r.edenChangedAt).toBe('2026-11-05T00:00:00.000Z')
+    expect(cell(r, 'crack')).toMatchObject({ state: 'stale', source: 'site' })
+    expect(cell(r, 'babe')).toMatchObject({ state: 'present', source: 'site' })
+  })
+
+  it('MCP 기록만 있을 때', () => {
+    const r = row(
+      [w('eden', 'e', 'A'), w('crack', 'c', 'A'), w('babe', 'b', 'A')],
+      [
+        rec('eden', 'e', '2026-11-05T00:00:00.000Z'),
+        rec('crack', 'c', '2026-11-01T00:00:00.000Z'),
+        rec('babe', 'b', '2026-11-06T00:00:00.000Z')
+      ]
+    )
+    expect(r.edenChangedAt).toBe('2026-11-05T00:00:00.000Z')
+    expect(cell(r, 'crack')).toMatchObject({
+      state: 'stale',
+      source: 'mcp',
+      changedAt: '2026-11-01T00:00:00.000Z'
+    })
+    expect(cell(r, 'babe').state).toBe('present')
+    expect(hasFreshness([r])).toBe(true)
+  })
+
+  it('섞여 있으면 각 쪽에서 늦은 시각을 쓴다', () => {
+    const r = row(
+      [
+        w('eden', 'e', 'A', { updatedAt: '2026-11-01T00:00:00.000Z' }),
+        w('crack', 'c', 'A', { updatedAt: '2026-11-03T00:00:00.000Z' }),
+        w('babe', 'b', 'A', { updatedAt: '2026-11-02T00:00:00.000Z' })
+      ],
+      [
+        // 에덴은 MCP로 11-04에 저장 → 크랙(11-03, 사이트)보다 늦다
+        rec('eden', 'e', '2026-11-04T00:00:00.000Z'),
+        // 베이비챗은 MCP로 11-05에 저장 → 에덴보다 늦다
+        rec('babe', 'b', '2026-11-05T00:00:00.000Z'),
+        // 다른 작품 번호의 기록은 쓰지 않는다
+        rec('crack', 'zz', '2026-11-09T00:00:00.000Z')
+      ]
+    )
+    expect(r.edenChangedAt).toBe('2026-11-04T00:00:00.000Z')
+    expect(cell(r, 'eden')).toMatchObject({ state: 'present', source: 'mcp' })
+    expect(cell(r, 'crack')).toMatchObject({ state: 'stale', source: 'site' })
+    expect(cell(r, 'babe')).toMatchObject({ state: 'present', source: 'mcp' })
+    expect(isStale(r.eden, cell(r, 'crack').work, [rec('eden', 'e', '2026-11-04T00:00:00Z')])).toBe(
+      true
+    )
+  })
+
+  it('한쪽이라도 모르면 낡음으로 보지 않는다', () => {
+    const noEden = row(
+      [w('eden', 'e', 'A'), w('crack', 'c', 'A', { updatedAt: '2026-11-01T00:00:00.000Z' })],
+      [rec('crack', 'c', '2026-10-01T00:00:00.000Z')]
+    )
+    expect(noEden.edenChangedAt).toBeNull()
+    expect(cell(noEden, 'crack').state).toBe('present')
+    const noPort = row(
+      [w('eden', 'e', 'A', { updatedAt: '2026-11-05T00:00:00.000Z' }), w('crack', 'c', 'A')],
+      [rec('eden', 'e', '2026-11-06T00:00:00.000Z')]
+    )
+    expect(cell(noPort, 'crack')).toMatchObject({ state: 'present', changedAt: null, source: null })
+    expect(hasFreshness([noEden, noPort])).toBe(false)
+  })
+})
+
+describe('works_status 결과', () => {
+  it('플랫폼별 등록·낡음·시각·출처를 저장된 자료만으로 만든다', () => {
+    const out = worksStatusResult({
+      works: data([
+        {
+          key: 'a',
+          title: 'A',
+          thumbnail: null,
+          works: [
+            w('eden', 'e', 'A', { updatedAt: '2026-11-05T00:00:00.000Z' }),
+            w('crack', 'c', 'A')
+          ]
+        }
+      ]),
+      saved: [
+        {
+          site: 'crack',
+          workId: 'c',
+          title: 'A',
+          lastSavedAt: '2026-11-01T00:00:00.000Z',
+          lastTool: 'work_save'
+        }
+      ]
+    }) as { count: number; groups: Record<string, unknown>[]; note: string }
+    expect(out.count).toBe(1)
+    expect(out.groups[0]).toEqual({
+      title: 'A',
+      eden_changed_at: '2026-11-05T00:00:00.000Z',
+      platforms: {
+        eden: {
+          registered: true,
+          work_id: 'e',
+          stale: null,
+          synced_at: '2026-11-05T00:00:00.000Z',
+          source: 'site'
+        },
+        babe: { registered: false, work_id: null, stale: null, synced_at: null, source: null },
+        crack: {
+          registered: true,
+          work_id: 'c',
+          stale: true,
+          synced_at: '2026-11-01T00:00:00.000Z',
+          source: 'mcp'
+        }
+      }
+    })
+    expect(out.note).toContain('플랫폼에 묻지 않아요')
+  })
+  it('자료가 없으면 빈 목록', () => {
+    expect(worksStatusResult({ works: null, saved: [] })).toMatchObject({ count: 0, groups: [] })
+  })
+})
+
+describe('최근 작업', () => {
   const works = [w('eden', 'e1', '비 오는 날'), w('crack', 'c1', '비 오는 날')]
   it('작품 번호(같은 플랫폼) 또는 제목이 맞는 것 중 가장 최근', () => {
     const items = [

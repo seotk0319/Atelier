@@ -65,13 +65,13 @@ function TopicBadge({ topic }: { topic: InboxTopic }): React.JSX.Element {
 }
 
 const statusLabels: Record<string, string> = {
-  ok: '수집 정상',
-  partial: '일부 수집',
-  pending: '연결 대기',
-  login: '계정 재연결 필요',
-  error: '수집 오류',
-  auth_required: '계정 재연결 필요',
-  unauthorized: '계정 재연결 필요'
+  ok: '정상',
+  partial: '일부',
+  pending: '대기',
+  login: '재연결 필요',
+  error: '오류',
+  auth_required: '재연결 필요',
+  unauthorized: '재연결 필요'
 }
 type View = InboxEventGroup | 'all'
 const views: { id: View; label: string }[] = [
@@ -675,7 +675,7 @@ export function InboxView(): React.JSX.Element {
             }}
           >
             <SegmentedItem value="alerts" className="px-3 text-[13px]">
-              알림 목록
+              알림
             </SegmentedItem>
             <SegmentedItem value="works" className="px-3 text-[13px]">
               내 작품
@@ -962,8 +962,8 @@ export function InboxView(): React.JSX.Element {
                   [
                     ...(view === 'reaction'
                       ? []
-                      : [['답글 안 단 것만', unrepliedOnly, setUnrepliedOnly] as const]),
-                    ['안 읽은 것만', unreadOnly, setUnreadOnly] as const
+                      : [['미답글만', unrepliedOnly, setUnrepliedOnly] as const]),
+                    ['안 읽음만', unreadOnly, setUnreadOnly] as const
                   ] as const
                 ).map(([label, on, setOn]) => (
                   <label
@@ -1019,7 +1019,7 @@ export function InboxView(): React.JSX.Element {
                   {!data.total
                     ? '연결된 계정의 첫 알림을 기다리고 있어요.'
                     : unrepliedQuery
-                      ? '답글을 기다리는 댓글이 없어요.'
+                      ? '미답글 없음'
                       : unreadOnly
                         ? '안 읽은 알림이 없어요.'
                         : '조건에 맞는 알림이 없어요.'}

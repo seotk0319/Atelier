@@ -44,6 +44,7 @@ export function createMcpHandler(
           instructions:
             '캐릭터챗 플랫폼에 올린 내 작품을 읽고 고치는 도구예요. 먼저 sites_list와 works_list로 ' +
             '플랫폼과 작품 번호를 찾고, work_read로 개요를 본 뒤 필요한 칸만 읽어 주세요. ' +
+            '작품별로 어느 플랫폼에 올라가 있고 에덴보다 낡았는지는 works_status가 저장된 자료만으로 알려 줘요. ' +
             '바꾸는 일은 모두 계획 → 사용자 확인 → 적용 순서예요: 본문은 work_plan → work_save, ' +
             '언어 판본은 edition_plan → edition_save, 이미지는 images_plan → images_apply, ' +
             '표지는 cover_plan → cover_apply, 삭제는 work_delete_plan → work_delete.'

@@ -1,6 +1,12 @@
 // 작품 탭 표: 행 = 작품 묶음(inbox:works), 열 = 플랫폼. 데이터에 있는 것만으로 칸 상태를 정한다.
 import type { InboxWork, InboxWorksResult } from '@shared/inbox'
 import type { McpActivity } from '@shared/types'
+import {
+  changedAt,
+  groupFreshness,
+  type EditionRecord,
+  type FreshnessSource
+} from '@shared/work-freshness'
 
 /** 원작은 에덴. 나머지는 이식 대상 (알림 「내 작품」과 같은 순서) */
 export const ORIGIN = 'eden'
@@ -22,7 +28,7 @@ export const WORK_PLATFORMS = [ORIGIN, ...PORTS]
  * absent: 연결돼 있고 목록을 읽었는데 그 작품이 없음
  * unknown: 연결 안 됨 등으로 목록을 못 읽어 있는지 모름 (화면에는 똑같이 —)
  * present: 올라가 있음 (그 밖에 아는 것 없음)
- * stale: 에덴 수정 시각이 이 플랫폼 수정 시각보다 뒤
+ * stale: 에덴 변경 시각이 이 플랫폼 변경 시각보다 뒤 (변경 시각 = 수집기 수정 시각과 MCP 저장 중 늦은 쪽)
  */
 export type CellState = 'absent' | 'unknown' | 'present' | 'stale'
 
@@ -30,6 +36,9 @@ export interface WorkCell {
   platform: string
   state: CellState
   work: InboxWork | null
+  /** 이 플랫폼의 마지막 변경 시각과 출처 (모르면 null) */
+  changedAt: string | null
+  source: FreshnessSource | null
 }
 
 export interface WorkTableRow {
@@ -38,6 +47,8 @@ export interface WorkTableRow {
   thumbnail: string | null
   /** 에덴 작품 (없으면 에덴에 없는 작품) */
   eden: InboxWork | null
+  /** 에덴 쪽 마지막 변경 시각 (수집기·MCP 중 늦은 쪽, 모르면 null) */
+  edenChangedAt: string | null
   cells: WorkCell[]
   /** 에덴을 뺀, 올라가 있는 이식본 (PORTS 순서) — 이식 문구 복사용 */
   ported: InboxWork[]
@@ -62,11 +73,18 @@ const time = (iso: string | null | undefined): number | null => {
   return Number.isFinite(t) ? t : null
 }
 
-/** 두 수정 시각이 다 있을 때만 판정한다. 하나라도 없으면 false (모름) */
-export function isStale(eden: InboxWork | null, work: InboxWork | null): boolean {
+/**
+ * 두 변경 시각이 다 있을 때만 판정한다. 하나라도 없으면 false (모름).
+ * 변경 시각 = 수집기가 읽은 수정 시각과 MCP 저장 기록 중 늦은 쪽.
+ */
+export function isStale(
+  eden: InboxWork | null,
+  work: InboxWork | null,
+  saved: readonly EditionRecord[] = []
+): boolean {
   if (!eden || !work || work.platform === ORIGIN) return false
-  const a = time(eden.updatedAt)
-  const b = time(work.updatedAt)
+  const a = time(changedAt(eden, saved).at)
+  const b = time(changedAt(work, saved).at)
   return a !== null && b !== null && a > b
 }
 
@@ -95,28 +113,32 @@ export function buildWorkRows(
 ): WorkTableRow[] {
   if (!data) return []
   const supported = new Set(data.supported)
+  const saved = data.saved ?? []
   const edenRows: { row: WorkTableRow; i: number }[] = []
   const others: WorkTableRow[] = []
   data.groups.forEach((g, i) => {
     const byPlatform = new Map<string, InboxWork>()
     for (const w of g.works) if (!byPlatform.has(w.platform)) byPlatform.set(w.platform, w)
     const eden = byPlatform.get(ORIGIN) ?? null
+    const fresh = groupFreshness(g.works, saved)
     const cells: WorkCell[] = WORK_PLATFORMS.map((p) => {
       const work = byPlatform.get(p) ?? null
+      const f = fresh.platforms.get(p)
       const state: CellState = work
-        ? isStale(eden, work)
+        ? f?.stale === true
           ? 'stale'
           : 'present'
         : supported.has(p)
           ? 'absent'
           : 'unknown'
-      return { platform: p, state, work }
+      return { platform: p, state, work, changedAt: f?.at ?? null, source: f?.source ?? null }
     })
     const row: WorkTableRow = {
       key: g.key,
       title: eden?.title ?? g.title,
       thumbnail: g.thumbnail,
       eden,
+      edenChangedAt: fresh.edenChangedAt,
       cells,
       ported: PORTS.map((p) => byPlatform.get(p)).filter((w): w is InboxWork => !!w),
       missing: cells.filter((c) => c.state === 'absent').map((c) => c.platform),
@@ -138,8 +160,8 @@ export function buildWorkRows(
 export function hasFreshness(rows: WorkTableRow[]): boolean {
   return rows.some(
     (r) =>
-      time(r.eden?.updatedAt) !== null &&
-      r.cells.some((c) => c.platform !== ORIGIN && time(c.work?.updatedAt) !== null)
+      time(r.edenChangedAt) !== null &&
+      r.cells.some((c) => c.platform !== ORIGIN && time(c.changedAt) !== null)
   )
 }
 

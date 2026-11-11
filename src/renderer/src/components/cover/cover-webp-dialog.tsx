@@ -721,7 +721,7 @@ export function CoverWebpDialog({
                     })}
                   </div>
                 ) : (
-                  <p className="text-[12px] text-faint">타이포가 없어요.</p>
+                  <p className="text-[12px] text-faint">타이포 없음</p>
                 )}
               </section>
 

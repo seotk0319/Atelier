@@ -110,6 +110,12 @@ export function QueueChip(): React.JSX.Element | null {
   const showing = live > 0 && open
   // 대기열이 비면 창도 닫아 둔다 (다음 생성 때 저절로 열리지 않게)
   if (live === 0 && open) setOpen(false)
+  // 묶음 이름(씬 프리셋)은 프리셋 목록이 있어야 나온다. 씬 탭을 안 열었어도 읽어 둔다
+  const presetsLoaded = useScenesStore((s) => s.presets.length > 0)
+  const hasLive = live > 0
+  useEffect(() => {
+    if (hasLive && !presetsLoaded) void useScenesStore.getState().loadPresets()
+  }, [hasLive, presetsLoaded])
 
   useEffect(() => {
     if (!showing) return
@@ -150,6 +156,16 @@ export function QueueChip(): React.JSX.Element | null {
           <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line pl-3 pr-2">
             <b className="text-[13px] font-semibold text-ink">대기열</b>
             <span className="text-[12px] tabular-nums text-faint">{live.toLocaleString()}장</span>
+            {run?.perMinute && (
+              <span className="text-[12px] tabular-nums text-muted" title="최근 완료 속도">
+                분당 {Math.round(run.perMinute).toLocaleString()}장
+              </span>
+            )}
+            {run && run.failed > 0 && (
+              <span className="text-[12px] font-semibold tabular-nums text-bad">
+                실패 {run.failed.toLocaleString()}장
+              </span>
+            )}
             <span className="flex-1" />
             <Button
               size="sm"

@@ -117,7 +117,7 @@ export function AssistantSection(): React.JSX.Element {
         <div className="mt-3 flex items-center gap-3 rounded-xl border border-line p-3">
           <BookText size={16} className="shrink-0 text-muted" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] text-ink">{status?.guideName ?? '아직 없어요'}</p>
+            <p className="truncate text-[13px] text-ink">{status?.guideName ?? '없음'}</p>
             {!!status?.guideChars && (
               <p className="text-[11.5px] text-faint">{status.guideChars.toLocaleString()}자</p>
             )}

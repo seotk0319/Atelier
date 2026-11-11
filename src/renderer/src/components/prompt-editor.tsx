@@ -637,7 +637,7 @@ function CheckPanel({
         <div className="no-scrollbar max-h-72 overflow-y-auto border-t border-line py-1">
           {state.rows.length === 0 ? (
             <p className="px-3 py-4 text-center text-[12px] text-faint">
-              {state.error || '확인할 태그가 없어요'}
+              {state.error || '태그 없음'}
             </p>
           ) : shown.length === 0 ? (
             <p className="px-3 py-4 text-center text-[12px] text-faint">

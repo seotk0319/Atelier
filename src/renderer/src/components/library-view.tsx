@@ -333,7 +333,7 @@ export function LibraryView(): React.JSX.Element {
           {items.length === 0 && visibleStacks.length === 0 && !loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-faint">
               <Images size={40} strokeWidth={1.3} className="opacity-40" />
-              <p className="text-[13px]">이 분류에는 이미지가 없어요</p>
+              <p className="text-[13px]">이미지 없음</p>
             </div>
           ) : fit === 'natural' ? (
             <div style={{ columnCount: cols, columnGap: '8px' }}>

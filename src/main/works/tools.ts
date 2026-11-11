@@ -6,6 +6,7 @@ import { canCanvas, createCanvasTools } from './canvas-tools'
 import { createEditionTools } from './edition-tools'
 import { createMediaTools } from './media-tools'
 import { createSaveTools } from './save-tools'
+import { createStatusTool, type WorksStatusSource } from './status-tool'
 import { textLength, type WorkBody, type WorkFetch, type WorkSend, type WorkWrite } from './types'
 
 export interface WorkToolDeps {
@@ -23,6 +24,8 @@ export interface WorkToolDeps {
   readBinary(path: string, maxBytes: number): Promise<Uint8Array>
   /** 폴더 바로 아래 파일 이름들 (하위 폴더는 보지 않는다) */
   listFolder(path: string): Promise<string[]>
+  /** works_status용: 저장해 둔 작품 목록과 MCP 저장 기록 (플랫폼에 묻지 않는다) */
+  worksStatus?(): Promise<WorksStatusSource>
 }
 
 export interface ToolDef {
@@ -409,6 +412,7 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
 
   return [
     ...readTools(),
+    createStatusTool(deps.worksStatus ? () => deps.worksStatus!() : undefined),
     // 저장하면 들고 있던 본문이 낡으므로 버린다
     ...createSaveTools(deps, (key) => cache.delete(key)),
     ...createEditionTools(deps),

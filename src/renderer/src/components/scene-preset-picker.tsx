@@ -53,7 +53,7 @@ export function ScenePresetPicker({
 }: {
   onManage: () => void
   onBind: (p: ScenePreset) => void
-  /** 단추 모양 덧칠 (요약 줄에서 크게) */
+  /** 단추 모양 덧칠 */
   triggerClassName?: string
 }): React.JSX.Element {
   const presets = useScenesStore((s) => s.presets)
@@ -196,7 +196,7 @@ export function ScenePresetPicker({
         <div className="no-scrollbar max-h-[min(60vh,480px)] overflow-y-auto overflow-x-hidden">
           {q ? (
             matches.length === 0 ? (
-              <p className="px-3 py-6 text-center text-[12px] text-faint">맞는 프리셋이 없어요</p>
+              <p className="px-3 py-6 text-center text-[12px] text-faint">결과 없음</p>
             ) : (
               matches.map((p) => (
                 <button
@@ -449,9 +449,7 @@ function FolderRow({
                   <span className="min-w-0 flex-1 truncate">{f.name}</span>
                 </MoveItem>
               ))}
-              {tops.length === 0 && (
-                <p className="px-2 py-1.5 text-[12px] text-faint">다른 폴더가 없어요</p>
-              )}
+              {tops.length === 0 && <p className="px-2 py-1.5 text-[12px] text-faint">폴더 없음</p>}
             </div>
           )}
           {depth === 1 && (

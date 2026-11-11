@@ -80,7 +80,7 @@ export function HistoryPanel(): React.JSX.Element {
       {/* 스크롤바 숨김(공간 0) → 좌우 대칭. 트랙패드/휠로 스크롤 */}
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {history.length === 0 ? (
-          <p className="mt-8 text-center text-[12px] text-faint">아직 없음</p>
+          <p className="mt-8 text-center text-[12px] text-faint">없음</p>
         ) : (
           <div className="grid grid-cols-2 gap-1.5">
             {history.map((item) => (

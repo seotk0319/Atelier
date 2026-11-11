@@ -34,6 +34,7 @@ import { buildSceneRequest, useScenesStore } from '../stores/scenes-store'
 import { toast } from '../stores/toast-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { formatCombo, useShortcutsStore } from '../stores/shortcuts-store'
+import { PresetDropdown } from './scene-mode'
 import { Button } from './ui/button'
 import {
   ContextMenu,
@@ -449,6 +450,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 헤더 — 제목 + 레퍼 설정 행(한 줄 유지, 좁으면 줄바꿈) + 선별 작업 + 닫기 */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-2">
+          <PresetDropdown triggerClassName="h-8 max-w-[260px]" />
           <div className="flex shrink-0 items-center gap-2">
             <ListChecks size={16} className="text-accent" />
             <h2 className="text-[14px] font-semibold">{scene?.name ?? '선별'}</h2>
@@ -752,7 +754,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
               </>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-faint">
-                {loading ? '불러오는 중…' : '이 씬에는 아직 그림이 없어요'}
+                {loading ? '불러오는 중…' : '그림 없음'}
                 {!loading && scene && (
                   <GenerateHereButton live={liveForScene} onClick={generateHere} inline />
                 )}

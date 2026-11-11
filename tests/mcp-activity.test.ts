@@ -37,6 +37,7 @@ const TOOL_NAMES = createWorkTools({
 const EXPECTED_KIND: Record<string, McpActivity['kind']> = {
   sites_list: 'read',
   works_list: 'read',
+  works_status: 'read',
   work_read: 'read',
   lorebook_read: 'read',
   start_scenarios_read: 'read',
@@ -61,8 +62,8 @@ const EXPECTED_KIND: Record<string, McpActivity['kind']> = {
 }
 
 describe('activityKind', () => {
-  it('실제 도구 23개 전부를 알맞은 종류로 나눈다', () => {
-    expect(TOOL_NAMES).toHaveLength(23)
+  it('실제 도구 24개 전부를 알맞은 종류로 나눈다', () => {
+    expect(TOOL_NAMES).toHaveLength(24)
     expect([...TOOL_NAMES].sort()).toEqual(Object.keys(EXPECTED_KIND).sort())
     for (const name of TOOL_NAMES) expect(activityKind(name), name).toBe(EXPECTED_KIND[name])
   })

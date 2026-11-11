@@ -250,7 +250,7 @@ export function CoverExportDialog({
               })}
             </div>
           ) : (
-            <p className="text-[12px] text-faint">타이포가 없어요.</p>
+            <p className="text-[12px] text-faint">타이포 없음</p>
           )}
 
           <div className="mt-4 rounded-lg bg-surface-2 px-3 py-2.5">

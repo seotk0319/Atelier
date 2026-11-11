@@ -142,9 +142,7 @@ export function CoverArchivePanel(): React.JSX.Element {
         {groups.length === 0 ? (
           <div className="mt-10 px-2 text-center">
             <p className="text-[12px] font-medium text-muted">
-              {archive.length
-                ? '이 종류는 아직 없어요'
-                : '표지에 넣은 그림과 타이포가 여기에 모여요'}
+              {archive.length ? '없음' : '표지에 넣은 그림과 타이포가 여기에 모여요'}
             </p>
             {!archive.length && (
               <p className="mt-1.5 text-[11px] leading-relaxed text-faint">

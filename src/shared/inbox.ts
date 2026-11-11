@@ -1,3 +1,5 @@
+import type { EditionRecord } from './work-freshness'
+
 export const INBOX_PLATFORMS = {
   eden: '에덴',
   babe: '베이비챗',
@@ -206,4 +208,6 @@ export interface InboxWorksResult {
   unanswered?: Record<string, number>
   /** 로그인이 풀렸거나 연결이 끊긴 플랫폼 */
   loginLost?: string[]
+  /** MCP 저장 도구가 남긴 작품별 마지막 저장 기록 (낡음 판정에 수집기 시각과 함께 쓴다) */
+  saved?: EditionRecord[]
 }

@@ -27,8 +27,8 @@ const TH =
 const TD = 'h-11 whitespace-nowrap border-b border-line p-0 text-center text-[13px]'
 
 /**
- * 작품 MCP 기록과 상태. 기록은 표의 "마지막 AI 작업"을 찾으려고 넉넉히(500개) 읽고,
- * 아래 「AI가 한 일」에는 최근 50개만 보인다. 본체가 기록을 못 주면 빈 목록.
+ * 작품 MCP 기록과 상태. 기록은 표의 「최근 작업」을 찾으려고 넉넉히(500개) 읽고,
+ * 아래 「작업 기록」에는 최근 50개만 보인다. 본체가 기록을 못 주면 빈 목록.
  */
 function useMcp(): { items: McpActivity[]; status: McpStatus | null; known: boolean } {
   const [items, setItems] = useState<McpActivity[]>([])
@@ -78,7 +78,7 @@ const ATH =
 const ATD =
   'whitespace-nowrap border-t border-line px-2 py-2 text-[13px] first:pl-4 last:pr-4 last:text-right'
 
-/** 작품 탭 아래: AI가 한 일 (작품 MCP 기록, 최근 50개) */
+/** 작품 탭 아래: 작업 기록 (작품 MCP 기록, 최근 50개) */
 function ActivitySection({
   items,
   status,
@@ -91,15 +91,15 @@ function ActivitySection({
   const recent = [...items].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 50)
   return (
     <section
-      aria-label="AI가 한 일"
+      aria-label="작업 기록"
       className="flex h-[220px] shrink-0 flex-col border-t border-line"
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-4">
-        <h3 className="text-[14px] font-semibold text-ink">AI가 한 일</h3>
+        <h3 className="text-[14px] font-semibold text-ink">작업 기록</h3>
         <span className="flex-1" />
         <span className="text-[12px] tabular-nums text-muted" title={status?.error ?? status?.url}>
           {!known || !status ? (
-            'MCP 상태 모름'
+            'MCP 모름'
           ) : status.running ? (
             <>
               <span className="font-semibold text-good">MCP 켜짐</span> · 포트 {status.port}
@@ -107,7 +107,7 @@ function ActivitySection({
           ) : (
             <>
               <span className="font-semibold text-muted">MCP 꺼짐</span>
-              {status.error && <span className="text-bad"> · 시작 못 함</span>}
+              {status.error && <span className="text-bad"> · 시작 실패</span>}
             </>
           )}
         </span>
@@ -115,7 +115,7 @@ function ActivitySection({
       {/* 아래 가운데 떠 있는 AI 비서·대기열 단추에 마지막 줄이 가리지 않게 아래를 띄운다 */}
       <div className="min-h-0 flex-1 overflow-auto pb-12">
         {recent.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-faint">아직 기록이 없어요</p>
+          <p className="px-4 py-6 text-center text-[13px] text-faint">기록 없음</p>
         ) : (
           <table className="w-full border-collapse">
             <thead>
@@ -123,7 +123,7 @@ function ActivitySection({
                 <th className={ATH}>시각</th>
                 <th className={ATH}>플랫폼</th>
                 <th className={ATH}>작품</th>
-                <th className={ATH}>한 일</th>
+                <th className={ATH}>내용</th>
                 <th className={ATH}>결과</th>
               </tr>
             </thead>
@@ -152,7 +152,7 @@ function ActivitySection({
                         실패
                       </span>
                     ) : a.verified === true ? (
-                      <span className="font-semibold text-good">저장 확인</span>
+                      <span className="font-semibold text-good">확인됨</span>
                     ) : (
                       <span className="text-faint">—</span>
                     )}
@@ -169,7 +169,7 @@ function ActivitySection({
 
 /**
  * 작품 탭: 행 = 내 작품, 열 = 플랫폼. 탭을 열면 저장된 목록만 읽고,
- * 플랫폼에 다시 묻는 것은 「새로 읽기」를 누를 때뿐이다.
+ * 플랫폼에 다시 묻는 것은 「새로고침」을 누를 때뿐이다.
  */
 export function WorksView(): React.JSX.Element {
   const [data, setData] = useState<InboxWorksResult | null>(null)
@@ -181,7 +181,7 @@ export function WorksView(): React.JSX.Element {
   const activity = mcp.items
   const active = useLayoutStore((s) => s.centerMode === 'works')
 
-  // 「새로 읽기」: 연결된 플랫폼에 다시 묻는다. 누를 때만 부른다.
+  // 「새로고침」: 연결된 플랫폼에 다시 묻는다. 누를 때만 부른다.
   const refresh = async (): Promise<void> => {
     setLoading(true)
     try {
@@ -211,8 +211,19 @@ export function WorksView(): React.JSX.Element {
         setNow(Date.now())
       }
     )
+    // MCP로 작품을 바꾸면 저장 기록(낡음 판정)이 바뀌므로 저장된 목록을 다시 읽는다
+    const off = window.nais.on('mcp:activityAdded', (a) => {
+      if (!a.ok || (a.kind !== 'save' && a.kind !== 'create' && a.kind !== 'delete')) return
+      window.nais.invoke('inbox:works', { cached: true }).then(
+        (result) => {
+          if (alive) setData(result)
+        },
+        () => undefined
+      )
+    })
     return () => {
       alive = false
+      off()
     }
   }, [active])
 
@@ -241,18 +252,18 @@ export function WorksView(): React.JSX.Element {
 
   const empty = !data
     ? failed
-      ? '작품 목록을 읽지 못했어요. 잠시 뒤 「새로 읽기」를 눌러 주세요.'
-      : '저장된 작품 목록을 읽고 있어요…'
+      ? '작품 목록을 읽지 못했어요. 잠시 뒤 「새로고침」을 눌러 주세요.'
+      : '읽는 중…'
     : !rows.length
       ? !data.supported.length
         ? '연결된 플랫폼이 없어요. 알림 탭 설정에서 플랫폼에 로그인하면 작품을 읽을 수 있어요.'
         : !data.fetchedAt
-          ? '아직 읽어 온 작품 목록이 없어요. 「새로 읽기」를 누르면 연결된 플랫폼에서 읽어 와요.'
-          : '찾은 작품이 없어요.'
+          ? '아직 읽어 온 작품 목록이 없어요. 「새로고침」을 누르면 연결된 플랫폼에서 읽어 와요.'
+          : '작품 없음'
       : !visible.length
         ? shownFilter === 'stale'
-          ? '낡은 작품이 없어요.'
-          : '모든 연결된 플랫폼에 올라가 있어요.'
+          ? '낡음 없음'
+          : '미등록 없음'
         : null
 
   return (
@@ -273,11 +284,11 @@ export function WorksView(): React.JSX.Element {
           </SegmentedItem>
           {freshness && (
             <SegmentedItem value="stale" className="px-3 text-[13px]">
-              낡은 것<SegmentedCount>{staleRows}</SegmentedCount>
+              낡음<SegmentedCount>{staleRows}</SegmentedCount>
             </SegmentedItem>
           )}
           <SegmentedItem value="missing" className="px-3 text-[13px]">
-            안 올린 곳 있음
+            미등록
             <SegmentedCount>{missingRows}</SegmentedCount>
           </SegmentedItem>
         </Segmented>
@@ -286,7 +297,7 @@ export function WorksView(): React.JSX.Element {
           className="text-[12px] tabular-nums text-faint"
           title={data?.fetchedAt ? workDateTime(data.fetchedAt) : undefined}
         >
-          {data?.fetchedAt ? '마지막으로 읽음 ' + agoText(data.fetchedAt, now) : '아직 안 읽음'}
+          {data?.fetchedAt ? agoText(data.fetchedAt, now) + ' 읽음' : '안 읽음'}
         </span>
         <Button
           onClick={() => void refresh()}
@@ -294,12 +305,12 @@ export function WorksView(): React.JSX.Element {
           title="연결된 플랫폼에서 내 작품 목록을 다시 읽어요"
         >
           <RefreshCw size={14} className={cn(loading && 'animate-spin')} />
-          {loading ? '읽는 중' : '새로 읽기'}
+          {loading ? '읽는 중' : '새로고침'}
         </Button>
       </div>
       {!!errors.length && (
         <p className="shrink-0 border-b border-line px-4 py-1.5 text-[12px] text-muted">
-          지난번에 못 읽은 곳:{' '}
+          읽기 실패:{' '}
           {errors.map(([p, message], i) => (
             <span key={p}>
               {i > 0 && ' · '}
@@ -332,7 +343,7 @@ export function WorksView(): React.JSX.Element {
                     ) : (
                       !supported.has(p) && (
                         <span className="mt-0.5 block text-[11px] leading-4 text-faint">
-                          연결 안 됨
+                          미연결
                         </span>
                       )
                     )}
@@ -342,7 +353,7 @@ export function WorksView(): React.JSX.Element {
                   댓글
                 </th>
                 <th className={cn(TH, 'min-w-[260px] pr-4 text-left')} scope="col">
-                  마지막 AI 작업
+                  최근 작업
                 </th>
               </tr>
             </thead>
@@ -422,11 +433,38 @@ export function WorksView(): React.JSX.Element {
         </div>
       )}
 
-      <p className="shrink-0 border-t border-line px-4 py-2 text-[12px] text-faint">
-        ✓ 올라가 있음 (누르면 사이트에서 열어요)
-        {freshness && ' · 낡음 = 에덴이 그 뒤에 바뀜'} · — 안 올림 (에덴 작품은 누르면 이식 문구
-        복사) · 로그인 풀림 = 다시 로그인해야 목록을 새로 읽어요 · 댓글 = 최근 30일 안에 온, 답글 안 단 댓글
-      </p>
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-[12px] text-faint"
+        aria-label="표 기호"
+      >
+        <span className="flex items-center gap-1.5" title="누르면 사이트에서 열어요">
+          <RegisteredDot /> 등록
+        </span>
+        <span className="flex items-center gap-1.5" title="에덴 작품은 누르면 이식 문구를 복사해요">
+          <UnregisteredMark /> 미등록
+        </span>
+        {freshness && (
+          <span className="flex items-center gap-1.5" title="에덴이 그 뒤에 바뀌었어요">
+            <span className="rounded-[3px] bg-warn-soft px-1.5 font-semibold leading-5 text-warn">
+              낡음
+            </span>
+            에덴 변경
+          </span>
+        )}
+        <span
+          className="flex items-center gap-1.5"
+          title="연결 안 된 플랫폼이라 등록 여부를 몰라요"
+        >
+          — 모름
+        </span>
+        <span className="flex items-center gap-1.5" title="다시 로그인해야 목록을 새로 읽어요">
+          <span className="rounded-[3px] bg-bad-soft px-1 font-semibold leading-4 text-bad">
+            로그인 풀림
+          </span>
+          재로그인
+        </span>
+        <span title="최근 30일 안에 온, 답글 안 단 댓글">댓글 = 미답글</span>
+      </div>
       <ActivitySection items={mcp.items} status={mcp.status} known={mcp.known} />
     </div>
   )
@@ -446,6 +484,9 @@ function Cell({
   const box = cn(base, FOCUS)
   if (cell.work) {
     const w = cell.work
+    const via = (src: WorkCell['source']): string =>
+      src === 'mcp' ? ' (MCP 저장)' : src === 'site' ? ' (사이트)' : ''
+    const edenCell = row.cells.find((c) => c.platform === ORIGIN)
     return (
       <a
         href={w.url}
@@ -454,45 +495,68 @@ function Cell({
         className={cn(box, 'hover:bg-surface-2')}
         title={
           cell.state === 'stale'
-            ? '에덴이 그 뒤에 바뀌었어요 · 에덴 수정 ' +
-              workDateTime(row.eden?.updatedAt ?? null) +
+            ? '낡음 · 에덴 변경 ' +
+              workDateTime(row.edenChangedAt) +
+              via(edenCell?.source ?? null) +
               ' / ' +
               name +
-              ' 수정 ' +
-              workDateTime(w.updatedAt ?? null)
-            : '올라가 있어요'
+              ' 변경 ' +
+              workDateTime(cell.changedAt) +
+              via(cell.source)
+            : '등록' +
+              (cell.changedAt ? ' · 변경 ' + workDateTime(cell.changedAt) + via(cell.source) : '')
         }
-        aria-label={row.title + ' · ' + name + '에서 열기'}
+        aria-label={row.title + ' · ' + name + ' 등록 · 사이트에서 열기'}
       >
         {cell.state === 'stale' ? (
           <span className="rounded-[3px] bg-warn-soft px-1.5 text-[12px] font-semibold leading-5 text-warn">
             낡음
           </span>
         ) : (
-          <span className="text-faint">✓</span>
+          <RegisteredDot />
         )}
       </a>
     )
   }
-  const reason =
-    cell.state === 'unknown'
-      ? name + '은(는) 연결되지 않아 있는지 확인할 수 없어요'
-      : name + '에 같은 제목 작품이 없어요'
+  if (cell.state === 'unknown')
+    return (
+      <span
+        className={cn(base, 'text-faint')}
+        title={name + ' 연결 안 됨 · 등록 여부 모름'}
+        aria-label={row.title + ' · ' + name + ' 모름'}
+      >
+        —
+      </span>
+    )
   if (row.eden && cell.platform !== ORIGIN)
     return (
       <button
         type="button"
         onClick={onCopy}
-        className={cn(box, 'text-faint hover:bg-surface-2')}
-        title={reason + ' · 누르면 이식 문구를 복사해요'}
-        aria-label={row.title + ' · ' + name + ' 안 올림 · 이식 문구 복사'}
+        className={cn(box, 'hover:bg-surface-2')}
+        title="미등록 · 누르면 이식 문구를 복사해요"
+        aria-label={row.title + ' · ' + name + ' 미등록 · 이식 문구 복사'}
       >
-        —
+        <UnregisteredMark />
       </button>
     )
   return (
-    <span className={cn(base, 'text-faint')} title={reason}>
-      —
+    <span className={base} title="미등록" aria-label={row.title + ' · ' + name + ' 미등록'}>
+      <UnregisteredMark />
+    </span>
+  )
+}
+
+/** 등록: 파란 점 (모양으로도 미등록 ✕와 구별된다) */
+function RegisteredDot(): React.JSX.Element {
+  return <span aria-hidden title="등록" className="inline-block size-2.5 rounded-full bg-mark" />
+}
+
+/** 미등록: 회색 ✕ */
+function UnregisteredMark(): React.JSX.Element {
+  return (
+    <span aria-hidden title="미등록" className="text-[13px] leading-none text-faint">
+      ✕
     </span>
   )
 }

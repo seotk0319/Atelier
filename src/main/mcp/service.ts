@@ -4,11 +4,13 @@ import { app } from 'electron'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getSetting } from '../db/settings'
-import { workAccount, workRead, workSend, workWrite } from '../notifications/service'
+import { getInboxWorks, workAccount, workRead, workSend, workWrite } from '../notifications/service'
 import { createWorkTools } from '../works/tools'
 import type { WorkReadInit, WorkRequest } from '../works/types'
 import type { McpActivity, McpStatus } from '../../shared/types'
+import type { EditionRecord } from '../../shared/work-freshness'
 import { createActivityLog, withActivity, type ActivityLog } from './activity'
+import { createEditionStore, type EditionStore } from './editions'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
 
 let running: ReturnType<typeof createMcpServer> | null = null
@@ -24,12 +26,32 @@ export function onMcpActivity(listener: (item: McpActivity) => void): void {
   activityListener = listener
 }
 
+let editions: EditionStore | null = null
+
+/** MCP 저장 도구가 성공할 때 남기는 작품별 마지막 저장 기록 */
+function editionStore(): EditionStore {
+  editions ??= createEditionStore({ file: join(app.getPath('userData'), 'mcp', 'editions.json') })
+  return editions
+}
+
 function activityLog(): ActivityLog {
   activity ??= createActivityLog({
     file: join(app.getPath('userData'), 'mcp', 'activity.jsonl'),
-    onAdd: (item) => activityListener?.(item)
+    onAdd: (item) => {
+      editionStore().apply(item)
+      activityListener?.(item)
+    }
   })
   return activity
+}
+
+/** 작품별 MCP 저장 기록 (작품 탭 낡음 판정·works_status). 못 읽으면 빈 목록 */
+export async function mcpEditions(): Promise<EditionRecord[]> {
+  try {
+    return await editionStore().list()
+  } catch {
+    return []
+  }
 }
 
 export function mcpStatus(): McpStatus {
@@ -96,6 +118,14 @@ export async function startMcp(): Promise<void> {
           async listFolder(path) {
             const entries = await readdir(path, { withFileTypes: true })
             return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+          },
+          // 저장된 목록만 읽는다 (cached: 오래됐어도 사이트에 묻지 않는다)
+          async worksStatus() {
+            const [works, saved] = await Promise.all([
+              getInboxWorks(false, true).catch(() => null),
+              mcpEditions()
+            ])
+            return { works, saved }
           },
           async snapshot(platform, name, raw) {
             const safe = name.replace(/[^A-Za-z0-9_.-]/g, '_')

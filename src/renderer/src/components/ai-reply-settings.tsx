@@ -207,7 +207,7 @@ function BacklogBlock({ connected }: { connected: boolean }): React.JSX.Element 
             </label>
           </div>
           {preview && shown.length === 0 ? (
-            <p className="text-[12px] text-muted">이 범위에는 답글 안 단 댓글이 없어요.</p>
+            <p className="text-[12px] text-muted">미답글 없음</p>
           ) : (
             <div className="grid grid-cols-3 gap-1.5">
               {shown.map((id) => {

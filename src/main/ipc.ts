@@ -201,7 +201,7 @@ import { basename, extname, join, resolve } from 'path'
 import sharp from 'sharp'
 import { verifyToken } from './nai/client'
 import { APP_TITLE, PROFILE } from './profile'
-import { mcpActivity, mcpStatus, onMcpActivity } from './mcp/service'
+import { mcpActivity, mcpEditions, mcpStatus, onMcpActivity } from './mcp/service'
 import type { GenerationQueue } from './queue/generation-queue'
 import {
   assignLibraryEntries,
@@ -231,7 +231,13 @@ export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcE
 export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQueue }): void {
   if (PROFILE === 1) {
     handle('inbox:query', (query) => getInbox(query || {}))
-    handle('inbox:works', (req) => getInboxWorks(!!req?.refresh, !!req?.cached))
+    handle('inbox:works', async (req) => {
+      const [works, saved] = await Promise.all([
+        getInboxWorks(!!req?.refresh, !!req?.cached),
+        mcpEditions()
+      ])
+      return { ...works, saved }
+    })
     handle('app:copyText', ({ text }) => {
       if (typeof text !== 'string' || !text || text.length > 50_000) return { ok: false }
       clipboard.writeText(text)

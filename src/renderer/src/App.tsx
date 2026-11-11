@@ -19,7 +19,7 @@ import { TagHelperDialog } from './components/tag-helper-dialog'
 import { PromptPanel } from './components/prompt-panel'
 import { SceneMode } from './components/scene-mode'
 import { SceneCuration } from './components/scene-curation'
-import { SummaryStrip } from './components/summary-strip'
+import { PresetDropdown } from './components/scene-mode'
 import { Titlebar } from './components/titlebar'
 import { SettingsDialog } from './components/token-dialog'
 import { TextPromptHost } from './components/text-prompt-host'
@@ -83,8 +83,6 @@ export default function App(): React.JSX.Element {
   // 표지 탭은 생성 패널만 막는다. 오른쪽 히스토리는 열어서 그림을 끌어다 쓴다
   const showLeft = leftOpen && !fullWidth && centerMode !== 'cover'
   const showRight = rightOpen && !fullWidth
-  // 요약 줄은 생성·씬·선별에서. 대기열은 가운데 아래 떠 있는 단추(queue-chip)로 어느 탭에서든 본다
-  const showStrip = centerMode === 'main' || centerMode === 'scene' || centerMode === 'curation'
   // 아직 패널 모양으로 바꾸지 않은 화면은 카드끼리 띄워 둔다
   const padded = centerMode === 'director' || centerMode === 'inbox'
   const [leftMounted, setLeftMounted] = useState(showLeft)
@@ -187,7 +185,6 @@ export default function App(): React.JSX.Element {
       {/* 패널끼리 1px 선(--line)으로 붙인다: 바탕을 선 색으로 두고 패널 사이를 1px 띄운다 */}
       <div className="flex h-screen flex-col gap-px bg-line">
         <Titlebar />
-        <SummaryStrip visible={showStrip} />
         <div className="flex min-h-0 flex-1 gap-px">
           {/* 폭은 한 번에 바뀌고(가운데 화면 배치 1회) 안쪽만 transform으로 미끄러져 들어온다 */}
           {leftMounted && (
@@ -262,11 +259,17 @@ export default function App(): React.JSX.Element {
 /** 선별 탭: 지금 씬 프리셋의 씬들을 차례로 보고 고른다 */
 function CurationView(): React.JSX.Element {
   const hasScenes = useScenesStore((s) => s.scenes.length > 0)
+  const presetsLoaded = useScenesStore((s) => s.presets.length > 0)
   const setCenterMode = useLayoutStore((s) => s.setCenterMode)
+  // 씬 탭을 아직 안 열었으면 프리셋·씬이 비어 있다
+  useEffect(() => {
+    if (!presetsLoaded) void useScenesStore.getState().loadPresets()
+  }, [presetsLoaded])
   if (!hasScenes)
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-surface text-[13px] text-faint">
-        이 프리셋에는 아직 씬이 없어요
+        <PresetDropdown />
+        <span>씬 없음</span>
         <button
           className="rounded-md px-2 py-1 text-[13px] font-semibold text-accent hover:bg-surface-2"
           onClick={() => setCenterMode('scene')}
