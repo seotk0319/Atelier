@@ -76,6 +76,13 @@ export function canReplyTo(item: InboxItem): boolean {
   })
 }
 
+/** 답글을 달 수 있는 댓글 중 아직 내 답글이 없는 것 (알림의 "답글 안 단 것만") */
+export function awaitingReply(item: InboxItem, replied: Record<string, InboxReplied>): boolean {
+  return (
+    (item.event === 'comment' || item.event === 'reply') && !replied[item.id] && canReplyTo(item)
+  )
+}
+
 export function queryInbox(
   view: InboxView,
   query: InboxQuery = {},
@@ -134,9 +141,6 @@ export function queryInbox(
     !query.event || (group ? group.includes(value) : query.event === value)
   // A platform the person turned off keeps its stored rows but leaves the inbox.
   const shown = (item: InboxItem): boolean => view.selection?.[item.platform] !== false
-  // 답글을 달 수 있는 댓글 중 아직 내 답글이 없는 것
-  const awaitingReply = (item: InboxItem): boolean =>
-    (item.event === 'comment' || item.event === 'reply') && !replied[item.id] && canReplyTo(item)
   const topicCounts = Object.fromEntries(INBOX_TOPIC_IDS.map((k) => [k, 0])) as Record<
     string,
     number
@@ -153,7 +157,7 @@ export function queryInbox(
       platformMatches &&
       eventMatches(item.event) &&
       (!query.unread || item.unread === true) &&
-      (!query.unreplied || awaitingReply(item)) &&
+      (!query.unreplied || awaitingReply(item, replied)) &&
       (!search ||
         [item.title, item.body, item.actor?.name, item.work?.title, item.work?.id].some((v) =>
           v?.toLocaleLowerCase().includes(search)

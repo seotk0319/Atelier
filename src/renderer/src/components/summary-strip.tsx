@@ -1,3 +1,4 @@
+import { Coins } from 'lucide-react'
 import { useEffect } from 'react'
 import { estimateAnlas } from '@shared/anlas'
 import type { V5UsageStatus } from '@shared/types'
@@ -33,7 +34,7 @@ function Cell({
   className?: string
 }): React.JSX.Element {
   return (
-    <span className="flex shrink-0 flex-col leading-tight" title={title}>
+    <span className="flex h-[60px] shrink-0 flex-col justify-center leading-tight" title={title}>
       <small className="text-[12px] text-faint">{label}</small>
       <b className={cn('text-[14px] font-semibold tabular-nums text-ink', className)}>{children}</b>
     </span>
@@ -109,23 +110,27 @@ export function SummaryStrip({ visible }: { visible: boolean }): React.JSX.Eleme
         !visible && 'hidden'
       )}
     >
-      <PresetDropdown triggerClassName="-ml-2 h-9 max-w-[360px] bg-transparent px-2 text-[15px] font-bold hover:bg-surface-2" />
-      {showRun && (
-        <Cell label="진행" className="text-good">
-          {run.done.toLocaleString()} / {run.total.toLocaleString()}장
-        </Cell>
-      )}
-      {eta && <Cell label="남은 시간">{eta.replace(/^약 /, '')}</Cell>}
-      {showRun && run.perMinute && (
-        <Cell label="속도">분당 {Math.round(run.perMinute).toLocaleString()}장</Cell>
-      )}
-      {showRun && run.failed > 0 && (
-        <Cell label="실패" className="text-bad">
-          {run.failed.toLocaleString()}장
-        </Cell>
-      )}
-      {presetsLoaded && <Cell label="씬">{sceneCount.toLocaleString()}개</Cell>}
-      <span className="min-w-4 flex-1" />
+      {/* 왼쪽 칸들은 자리가 모자라면 다음 줄로 넘어가 가려진다 (오른쪽 Anlas·V5는 늘 보인다) */}
+      <div className="flex h-[60px] min-w-0 flex-1 flex-wrap items-center gap-x-7 overflow-hidden">
+        <span className="flex h-[60px] min-w-0 shrink items-center">
+          <PresetDropdown triggerClassName="-ml-2 h-9 max-w-[360px] bg-transparent px-2 text-[15px] font-bold hover:bg-surface-2" />
+        </span>
+        {showRun && (
+          <Cell label="진행" className="text-good">
+            {run.done.toLocaleString()} / {run.total.toLocaleString()}장
+          </Cell>
+        )}
+        {eta && <Cell label="남은 시간">{eta.replace(/^약 /, '')}</Cell>}
+        {showRun && run.perMinute && (
+          <Cell label="속도">분당 {Math.round(run.perMinute).toLocaleString()}장</Cell>
+        )}
+        {showRun && run.failed > 0 && (
+          <Cell label="실패" className="text-bad">
+            {run.failed.toLocaleString()}장
+          </Cell>
+        )}
+        {presetsLoaded && <Cell label="씬">{sceneCount.toLocaleString()}개</Cell>}
+      </div>
       {anlasBalance !== null && (
         <Cell
           label="Anlas"
@@ -135,8 +140,15 @@ export function SummaryStrip({ visible }: { visible: boolean }): React.JSX.Eleme
               : 'Anlas 잔액 (생성할 때마다 갱신)'
           }
         >
-          {anlasBalance.toLocaleString()}
-          {anlasCost > 0 && <span className="ml-1.5 text-[12px] text-bad">-{anlasCost}</span>}
+          <span className="flex items-center gap-1.5">
+            <Coins size={13} className="text-[#c9a34f]" aria-hidden />
+            {anlasBalance.toLocaleString()}
+            {anlasCost > 0 && (
+              <span className="rounded-md bg-bad-soft px-1.5 text-[12px] font-semibold text-bad">
+                -{anlasCost}
+              </span>
+            )}
+          </span>
         </Cell>
       )}
       {v5Usage && (
@@ -145,12 +157,31 @@ export function SummaryStrip({ visible }: { visible: boolean }): React.JSX.Eleme
           title={v5Tooltip(v5Usage, request.model)}
           className={v5Usage.isNegative ? 'text-bad' : undefined}
         >
-          {v5Usage.isNegative ? '−' : ''}
-          {v5Usage.percent}%
-          <span className="ml-1.5 text-[12px] font-normal text-muted">
-            {v5Usage.isNegative
-              ? '제한됨'
-              : `약 ${estimateV5Images(v5Usage, request.model).toLocaleString()}장`}
+          <span className="flex items-center gap-1.5">
+            <span>
+              {v5Usage.isNegative ? '−' : ''}
+              {v5Usage.percent}%
+            </span>
+            <span
+              className="inline-block h-1 w-10 shrink-0 overflow-hidden bg-surface-3"
+              role="meter"
+              aria-label="V5 잔량"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={v5Usage.isNegative ? 0 : Math.min(100, v5Usage.percent)}
+            >
+              <i
+                className="block h-full bg-mark"
+                style={{
+                  width: `${v5Usage.isNegative ? 0 : Math.max(0, Math.min(100, v5Usage.percent))}%`
+                }}
+              />
+            </span>
+            <span className="text-[12px] font-normal text-muted">
+              {v5Usage.isNegative
+                ? '제한됨'
+                : `약 ${estimateV5Images(v5Usage, request.model).toLocaleString()}장`}
+            </span>
           </span>
         </Cell>
       )}

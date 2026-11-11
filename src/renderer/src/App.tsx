@@ -8,6 +8,7 @@ import { PreviewPane } from './components/preview-pane'
 import { DirectorMode } from './components/director-mode'
 import { LibraryView } from './components/library-view'
 import { InboxView } from './components/inbox-view'
+import { WorksView } from './components/works-view'
 import { GptView } from './components/gpt/gpt-view'
 import { CoverView } from './components/cover/cover-view'
 import { InpaintHost } from './components/inpaint-host'
@@ -19,7 +20,6 @@ import { PromptPanel } from './components/prompt-panel'
 import { SceneMode } from './components/scene-mode'
 import { SceneCuration } from './components/scene-curation'
 import { SummaryStrip } from './components/summary-strip'
-import { BottomDock } from './components/bottom-dock'
 import { Titlebar } from './components/titlebar'
 import { SettingsDialog } from './components/token-dialog'
 import { TextPromptHost } from './components/text-prompt-host'
@@ -57,6 +57,8 @@ export default function App(): React.JSX.Element {
         node:
           mode === 'inbox' ? (
             <InboxView />
+          ) : mode === 'works' ? (
+            <WorksView />
           ) : mode === 'gpt' ? (
             <GptView />
           ) : mode === 'cover' ? (
@@ -77,13 +79,12 @@ export default function App(): React.JSX.Element {
   )
   const [ready, setReady] = useState(false)
   // 좌우 패널: 한 번 만들면 지우지 않고 숨기기만 한다 (탭을 옮길 때마다 새로 만들던 비용 제거)
-  const fullWidth = centerMode === 'inbox' || centerMode === 'gpt'
+  const fullWidth = centerMode === 'inbox' || centerMode === 'gpt' || centerMode === 'works'
   // 표지 탭은 생성 패널만 막는다. 오른쪽 히스토리는 열어서 그림을 끌어다 쓴다
   const showLeft = leftOpen && !fullWidth && centerMode !== 'cover'
   const showRight = rightOpen && !fullWidth
-  // 요약 줄은 생성·씬·선별, 아래 칸(대기열 | AI가 한 일)은 생성·씬에서
+  // 요약 줄은 생성·씬·선별에서. 대기열은 가운데 아래 떠 있는 단추(queue-chip)로 어느 탭에서든 본다
   const showStrip = centerMode === 'main' || centerMode === 'scene' || centerMode === 'curation'
-  const showDock = centerMode === 'main' || centerMode === 'scene'
   // 아직 패널 모양으로 바꾸지 않은 화면은 카드끼리 띄워 둔다
   const padded = centerMode === 'director' || centerMode === 'inbox'
   const [leftMounted, setLeftMounted] = useState(showLeft)
@@ -97,9 +98,9 @@ export default function App(): React.JSX.Element {
     let cancelled = false
     let timer = 0
     const order: CenterMode[] = ['scene', 'director', 'library', 'gpt', 'cover']
-    // 알림 탭은 Custom 1에만 있다
+    // 작품·알림 탭은 Custom 1에만 있다
     void window.nais.invoke('app:profile', undefined).then(({ profile }) => {
-      if (profile === 1) order.push('inbox')
+      if (profile === 1) order.push('works', 'inbox')
     })
     const next = (i: number): void => {
       if (cancelled || i >= order.length) return
@@ -241,7 +242,6 @@ export default function App(): React.JSX.Element {
                 </div>
               )}
             </div>
-            <BottomDock visible={showDock} />
           </div>
         </div>
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

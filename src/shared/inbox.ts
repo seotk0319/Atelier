@@ -177,6 +177,11 @@ export interface InboxWork {
   at: string | null
   /** published = 플랫폼이 준 공개일, created = 공개일이 없어 등록일을 씀 */
   atKind: 'published' | 'created'
+  /**
+   * 플랫폼이 준 마지막 수정 시각. 목록 응답에 수정 시각이 없는 플랫폼(베이비챗·루나)과
+   * 이 필드가 생기기 전에 저장된 목록은 null/없음.
+   */
+  updatedAt?: string | null
   isPublic: boolean
   image: string | null
 }
@@ -197,4 +202,8 @@ export interface InboxWorksResult {
   errors: Record<string, string>
   /** 내 작품 목록을 읽을 수 있는 플랫폼 */
   supported: string[]
+  /** 묶음 key → 답글 안 단 댓글 수 (알림의 "답글 안 단 것만"과 같은 기준, 0은 빠짐) */
+  unanswered?: Record<string, number>
+  /** 로그인이 풀렸거나 연결이 끊긴 플랫폼 */
+  loginLost?: string[]
 }

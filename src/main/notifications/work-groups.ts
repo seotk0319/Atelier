@@ -69,3 +69,39 @@ export function groupWorks(
     })
     .sort((a, b) => latest(b.works).localeCompare(latest(a.works)))
 }
+
+/**
+ * 알림(댓글)을 작품 묶음에 붙여 묶음마다 센다. 플랫폼+작품 번호가 맞으면 그 묶음,
+ * 아니면 정리한 제목이 묶음 안 작품 제목과 같을 때만 붙인다. 못 붙인 알림은 세지 않는다.
+ */
+export function countByGroup(
+  groups: InboxWorkGroup[],
+  items: { platform: string; work?: { id: string | null; title: string | null } | null }[]
+): Record<string, number> {
+  const byId = new Map<string, string>()
+  const byTitle = new Map<string, string | null>()
+  const addTitle = (title: string, key: string): void => {
+    const t = normTitle(title)
+    if (!t) return
+    // 두 묶음이 같은 제목을 가지면 어느 쪽인지 모르니 붙이지 않는다
+    if (byTitle.has(t) && byTitle.get(t) !== key) byTitle.set(t, null)
+    else byTitle.set(t, key)
+  }
+  for (const g of groups) {
+    addTitle(g.title, g.key)
+    for (const w of g.works) {
+      byId.set(w.platform + ':' + w.id, g.key)
+      addTitle(w.title, g.key)
+    }
+  }
+  const out: Record<string, number> = {}
+  for (const item of items) {
+    const id = item.work?.id
+    const key =
+      (id ? byId.get(item.platform + ':' + id) : undefined) ??
+      byTitle.get(normTitle(item.work?.title)) ??
+      null
+    if (key) out[key] = (out[key] ?? 0) + 1
+  }
+  return out
+}

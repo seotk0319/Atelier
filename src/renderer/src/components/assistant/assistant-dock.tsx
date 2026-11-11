@@ -28,6 +28,7 @@ import {
 import { useLayoutStore } from '../../stores/layout-store'
 import { toast } from '../../stores/toast-store'
 import { Button } from '../ui/button'
+import { QueueChip } from '../queue-chip'
 
 type AiItem = Extract<AssistantItem, { kind: 'ai' }>
 
@@ -424,17 +425,29 @@ export function AssistantDock(): React.JSX.Element | null {
   }, [settingsOpen, loadStatus])
 
   if (!open) {
-    if (status && !status.showDock) return null
+    // 가운데 칸에 AI 비서 단추, 그 오른쪽 칸에 대기열 단추. 단추가 생기고 없어져도 서로 밀지 않는다
     return (
-      <button
-        onClick={() => setOpen(true)}
-        title="AI 비서 (Ctrl+K)"
-        className="absolute bottom-3 left-1/2 z-30 inline-flex h-9 -translate-x-1/2 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-muted shadow-sm transition-colors hover:text-ink"
-      >
-        <Sparkles size={14} className="text-accent" />
-        AI 비서
-        <span className="rounded border border-line px-1.5 text-[10.5px] text-faint">Ctrl K</span>
-      </button>
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 grid grid-cols-[1fr_auto_1fr] items-end gap-2 px-5">
+        <span />
+        {status && !status.showDock ? (
+          <span />
+        ) : (
+          <button
+            onClick={() => setOpen(true)}
+            title="AI 비서 (Ctrl+K)"
+            className="pointer-events-auto inline-flex h-9 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-muted shadow-sm transition-colors hover:text-ink"
+          >
+            <Sparkles size={14} className="text-accent" />
+            AI 비서
+            <span className="rounded border border-line px-1.5 text-[10.5px] text-faint">
+              Ctrl K
+            </span>
+          </button>
+        )}
+        <div className="flex min-w-0 justify-start">
+          <QueueChip />
+        </div>
+      </div>
     )
   }
 
@@ -442,6 +455,10 @@ export function AssistantDock(): React.JSX.Element | null {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-5">
       <div className="pointer-events-auto flex w-full max-w-[680px] flex-col">
+        {/* 비서 창이 열려 있으면 대기열 단추는 그 위 오른쪽에 */}
+        <div className="pointer-events-none mb-1.5 flex justify-end empty:hidden">
+          <QueueChip />
+        </div>
         {items.length > 0 && !minimized && (
           <div className="mx-2.5 flex max-h-[min(580px,calc(100vh-230px))] min-h-0 flex-col rounded-t-2xl border border-b-0 border-line bg-surface shadow-xl">
             <div className="flex items-center gap-2 border-b border-line py-2.5 pl-4 pr-2.5">

@@ -1,6 +1,10 @@
 // 플랫폼별 "내 작품" 목록. 로그인한 계정으로 읽기만 하고, 작품마다 최초 공개일과 링크를 꺼낸다.
 // 주소와 필드는 2026-10-23에 각 플랫폼 응답으로 확인했다.
 // 공개일 필드가 따로 있는 곳(에덴·엘린·젠잇·티팟)은 그 값을, 없는 곳은 등록일을 쓴다(atKind로 구분).
+// 수정 시각(updatedAt)은 이미 받는 응답에 들어 있는 값만 꺼낸다. 요청을 더 하지 않는다.
+// 필드 이름은 같은 주소를 읽는 작품 연결부(src/main/works)를 따랐다. 에덴은 다른 주소
+// (/api/creators/{id}/works)라 updated_at이 오는지 확인하지 못했다(없으면 null).
+// 베이비챗·루나는 목록에 수정 시각이 없다(루나 char_datetime은 이미 등록일로 쓴다).
 import type { InboxWork } from '../../../shared/inbox'
 
 export interface WorkReadInit {
@@ -77,7 +81,8 @@ function work(
   published: unknown,
   created: unknown,
   isPublic: boolean,
-  image: string | null
+  image: string | null,
+  updated: unknown = null
 ): InboxWork | null {
   const wid = str(typeof id === 'number' ? String(id) : id)
   const name = str(title)
@@ -90,6 +95,7 @@ function work(
     url,
     at: pub ?? isoDate(created),
     atKind: pub ? 'published' : 'created',
+    updatedAt: isoDate(updated),
     isPublic,
     image
   }
@@ -153,7 +159,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             d.status === 'published' ? d.publishedAt : null,
             d.createdAt,
             d.status === 'published' && d.isPrivate !== true,
-            'https://pb3.rplay.live/thumbnail/' + oid
+            'https://pb3.rplay.live/thumbnail/' + oid,
+            d.modified ?? d.updatedAt
           )
         })
       )
@@ -189,7 +196,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             w.first_published_at,
             w.created_at,
             w.visibility === 'public',
-            https(w.cover_image_url)
+            https(w.cover_image_url),
+            w.updated_at
           )
         )
       }
@@ -233,7 +241,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             w.publicAt,
             w.createdAt,
             w.visibility !== 'private',
-            https(w.imageUrl)
+            https(w.imageUrl),
+            w.updatedAt ?? w.updated_at
           )
         )
       }
@@ -255,7 +264,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
         null,
         w.createdAt,
         w.isPublic === true,
-        https(isObj(w.avatar) ? w.avatar.url : null)
+        https(isObj(w.avatar) ? w.avatar.url : null),
+        w.updatedAt
       )
     })
   },
@@ -283,7 +293,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             null,
             w.createdAt,
             w.visibility === 'public' && w.status !== 'deleted',
-            https(img.w600) || https(img.origin)
+            https(img.w600) || https(img.origin),
+            w.updatedAt
           )
         )
       }
@@ -321,7 +332,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             w.published_at,
             w.created_at,
             !!w.published_at,
-            https(w.profile_image_url)
+            https(w.profile_image_url),
+            w.updated_at
           )
         )
       }
@@ -391,7 +403,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             w.publishedAt,
             w.draftSavedAt,
             !!str(w.publishedAt) && w.publishStatus === 1,
-            https(w.thumbnail)
+            https(w.thumbnail),
+            w.draftSavedAt
           )
         )
       }
@@ -431,7 +444,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
         // 주소가 //로 시작할 수 있다 (NP_CDN_DOMAIN_IMG "//images.novelpia.com")
         video(w.avatar_url)
           ? https(w.poster_url, CHATPLE_SITE)
-          : https(w.avatar_url, CHATPLE_SITE) || https(w.poster_url, CHATPLE_SITE)
+          : https(w.avatar_url, CHATPLE_SITE) || https(w.poster_url, CHATPLE_SITE),
+        w.upd_dt
       )
     })
   },
@@ -510,7 +524,8 @@ export const MY_WORK_LISTS: Record<string, Lister> = {
             v('time_published', 'timestampValue'),
             v('time_created', 'timestampValue'),
             true,
-            https(v('image', 'stringValue'))
+            https(v('image', 'stringValue')),
+            v('time_updated', 'timestampValue')
           )
         )
       }

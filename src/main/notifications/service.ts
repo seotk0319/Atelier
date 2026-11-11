@@ -1,9 +1,9 @@
 import { app, shell } from 'electron'
 import { join } from 'node:path'
 import { createStore, type InboxStore } from './core/store.mjs'
-import { displayText, queryInbox, sourceUrl } from './query'
+import { awaitingReply, displayText, queryInbox, sourceUrl } from './query'
 import { createDirectCollector } from './direct/collector'
-import { groupWorks } from './work-groups'
+import { countByGroup, groupWorks } from './work-groups'
 import { isDirectPlatform } from './direct/platforms'
 import type {
   InboxConnectResult,
@@ -107,11 +107,14 @@ async function refreshWorks(): Promise<void> {
 
 // 제목 묶기는 work-groups.ts (테스트 가능하게 분리)
 
-export async function getInboxWorks(refresh = false): Promise<InboxWorksResult> {
+const LOGIN_STATES = ['login', 'auth_required', 'unauthorized']
+
+export async function getInboxWorks(refresh = false, cached = false): Promise<InboxWorksResult> {
   await startInbox().catch(() => undefined)
   const cache = await loadWorks()
   const age = cache.fetchedAt ? Date.now() - Date.parse(cache.fetchedAt) : Infinity
-  if (direct && (refresh || age > WORKS_TTL)) {
+  // cached: 작품 탭을 열 때. 오래됐어도 사이트에 묻지 않는다 (새로 읽기는 누를 때만)
+  if (direct && (refresh || (!cached && age > WORKS_TTL))) {
     worksRun ??= refreshWorks().finally(() => {
       worksRun = null
     })
@@ -120,11 +123,53 @@ export async function getInboxWorks(refresh = false): Promise<InboxWorksResult> 
   const current = worksCache ?? cache
   const supported = direct ? await direct.myWorkPlatforms().catch(() => []) : []
   const byName = (await workCatalog().catch(() => emptyCatalog())).byName
+  const groups = groupWorks(current.works, byName)
+  // 댓글 수와 로그인 상태는 저장된 알림·연결 정보로만 센다 (사이트에 묻지 않는다)
+  let unanswered: Record<string, number> = {}
+  const loginLost = new Set<string>()
+  for (const [p, message] of Object.entries(current.errors))
+    if (message === worksError(new Error('LOGIN_REQUIRED'))) loginLost.add(p)
+  if (direct) {
+    const connected = new Set(supported)
+    for (const w of current.works) if (!connected.has(w.platform)) loginLost.add(w.platform)
+  }
+  if (store) {
+    try {
+      const view = await store.view()
+      await loadReplied()
+      const status = direct ? await direct.status().catch(() => null) : null
+      for (const [p, state] of Object.entries(view.platforms ?? {}))
+        if (
+          LOGIN_STATES.includes(state?.status ?? '') &&
+          (!status || status.platforms[p as keyof typeof status.platforms]?.connected)
+        )
+          loginLost.add(p)
+      unanswered = countByGroup(
+        groups,
+        view.items
+          .filter((item) => view.selection?.[item.platform] !== false)
+          .filter((item) => awaitingReply(item, replied.items))
+          .map((item) => ({
+            platform: item.platform,
+            work: item.work
+              ? {
+                  id: item.work.id,
+                  title: item.work.title ? displayText(item.work.title) : null
+                }
+              : null
+          }))
+      )
+    } catch {
+      // 알림 저장소를 못 읽으면 댓글 수 없이 돌려준다
+    }
+  }
   return {
     fetchedAt: current.fetchedAt,
-    groups: groupWorks(current.works, byName),
+    groups,
     errors: current.errors,
-    supported
+    supported,
+    unanswered,
+    loginLost: [...loginLost]
   }
 }
 /** 작품 본문 읽기 통로 (src/main/works). 허용 주소 검사와 로그인 연장은 collector가 한다. */

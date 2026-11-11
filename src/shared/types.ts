@@ -433,8 +433,11 @@ export interface SceneImage {
 /** IPC invoke 채널 계약: 채널명 → (요청, 응답) */
 export interface IpcInvokeMap {
   'inbox:query': { req: InboxQuery; res: InboxResult }
-  /** 플랫폼별 내 작품 (제목으로 묶음). refresh면 사이트에서 새로 읽는다 */
-  'inbox:works': { req: { refresh?: boolean }; res: InboxWorksResult }
+  /**
+   * 플랫폼별 내 작품 (제목으로 묶음). refresh면 사이트에서 새로 읽는다.
+   * cached면 저장된 목록만 돌려준다 (오래됐어도 사이트에 묻지 않는다).
+   */
+  'inbox:works': { req: { refresh?: boolean; cached?: boolean }; res: InboxWorksResult }
   /** 글자를 클립보드에 넣는다 (창이 앞에 없어도 된다) */
   'app:copyText': { req: { text: string }; res: { ok: boolean } }
   'inbox:control': { req: { enabled: boolean }; res: { enabled: boolean } }

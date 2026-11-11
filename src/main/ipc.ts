@@ -231,7 +231,7 @@ export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcE
 export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQueue }): void {
   if (PROFILE === 1) {
     handle('inbox:query', (query) => getInbox(query || {}))
-    handle('inbox:works', (req) => getInboxWorks(!!req?.refresh))
+    handle('inbox:works', (req) => getInboxWorks(!!req?.refresh, !!req?.cached))
     handle('app:copyText', ({ text }) => {
       if (typeof text !== 'string' || !text || text.length > 50_000) return { ok: false }
       clipboard.writeText(text)

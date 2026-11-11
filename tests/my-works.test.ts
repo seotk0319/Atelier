@@ -235,3 +235,39 @@ describe('복사 문구', () => {
     expect(workDate('2026-10-16T15:30:00Z')).toBe('10/17')
   })
 })
+
+describe('내 작품 수정 시각', () => {
+  it('이미 받는 응답의 수정 시각만 꺼내고, 없으면 null', async () => {
+    const { read } = fake([
+      [
+        /stories\/me/,
+        () => ({
+          data: {
+            stories: [
+              {
+                _id: 'a1',
+                name: '수정된 작품',
+                visibility: 'public',
+                createdAt: '2026-10-01T00:00:00.000Z',
+                updatedAt: '2026-11-02T03:04:05.000Z'
+              },
+              { _id: 'a2', name: '시각 없음', visibility: 'public', createdAt: '2026-10-01' }
+            ],
+            nextCursor: null
+          }
+        })
+      ]
+    ])
+    const works = await readMyWorks('crack', read)
+    expect(works.find((w) => w.id === 'a1')!.updatedAt).toBe('2026-11-02T03:04:05.000Z')
+    expect(works.find((w) => w.id === 'a2')!.updatedAt).toBeNull()
+  })
+
+  it('베이비챗은 목록에 수정 시각이 없어 null', async () => {
+    const { read } = fake([
+      [/characters\/my/, () => [{ id: 'b1', name: '작품', createdAt: '2026-10-01T00:00:00Z' }]]
+    ])
+    const [work] = await readMyWorks('babe', read)
+    expect(work.updatedAt).toBeNull()
+  })
+})

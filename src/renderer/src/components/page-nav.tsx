@@ -16,6 +16,7 @@ const PAGES: { id: Page; label: string }[] = [
   { id: 'library', label: '라이브러리' },
   { id: 'gpt', label: 'GPT 이미지' },
   { id: 'cover', label: '표지' },
+  { id: 'works', label: '작품' },
   { id: 'inbox', label: '알림' }
 ]
 
@@ -32,7 +33,10 @@ export function PageNav(): React.JSX.Element {
     void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
   }, [])
   const visible = PAGES.filter(
-    (p) => (p.id !== 'inbox' || profile === 1) && (p.id === 'main' || !hiddenPages.includes(p.id))
+    (p) =>
+      // 작품·알림 탭은 Custom 1에만 있다
+      ((p.id !== 'inbox' && p.id !== 'works') || profile === 1) &&
+      (p.id === 'main' || !hiddenPages.includes(p.id))
   )
   const activePage: Page = centerMode
   // 이미지를 끌고 탭 위에 잠깐 머물면 그 탭이 열린다 (라이브러리 → 표지·GPT 로 끌어 넣기)

@@ -273,15 +273,22 @@ const TOGGLABLE_PAGES: { id: CenterMode; label: string }[] = [
   { id: 'director', label: '디렉터' },
   { id: 'library', label: '라이브러리' },
   { id: 'gpt', label: 'GPT 이미지' },
-  { id: 'cover', label: '표지' }
+  { id: 'cover', label: '표지' },
+  { id: 'works', label: '작품' }
 ]
 
 function PageToggles(): React.JSX.Element {
   const hiddenPages = useLayoutStore((s) => s.hiddenPages)
   const setPageHidden = useLayoutStore((s) => s.setPageHidden)
+  // 작품 탭은 Custom 1에만 있다
+  const [profile, setProfile] = useState<number | null>(null)
+  useEffect(() => {
+    void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
+  }, [])
+  const pages = TOGGLABLE_PAGES.filter((p) => p.id !== 'works' || profile === 1)
   return (
     <div className="mt-2 divide-y divide-line rounded-lg bg-paper px-3">
-      {TOGGLABLE_PAGES.map((p) => {
+      {pages.map((p) => {
         const on = !hiddenPages.includes(p.id)
         return (
           <label
