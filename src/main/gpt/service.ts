@@ -236,7 +236,9 @@ export function listImages(limit: number, offset: number): { items: HistoryItem[
   const db = getDb()
   const rows = db
     .prepare(
-      "SELECT id, file_path, thumbnail, kind, seed, created_at, library_folder_id FROM images WHERE kind = 'gpt' ORDER BY id DESC LIMIT ? OFFSET ?"
+      `SELECT i.id, i.file_path, b.thumbnail, i.kind, i.seed, i.created_at, i.library_folder_id
+       FROM images i LEFT JOIN image_blobs b ON b.image_id = i.id
+       WHERE i.kind = 'gpt' ORDER BY i.id DESC LIMIT ? OFFSET ?`
     )
     .all(limit, offset) as {
     id: number

@@ -22,6 +22,7 @@ import type {
 } from '@shared/types'
 import { imageUrl } from '../lib/constants'
 import { cn } from '../lib/utils'
+import { olderWindow, recentWindowStart } from '../lib/library-window'
 import {
   LIBRARY_ENTRY_MIME,
   LIBRARY_FOLDER_MIME,
@@ -74,6 +75,11 @@ export function LibraryView(): React.JSX.Element {
   const loadingRef = useRef(false)
   const requestSeq = useRef(0)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const [since, setSince] = useState(() => recentWindowStart(new Date()))
+  const sinceRef = useRef(since)
+  const [hasMore, setHasMore] = useState(false)
+  const hasMoreRef = useRef(false)
+  const windowFilter = useRef<unknown>(null)
 
   useEffect(() => {
     itemsRef.current = items
@@ -89,6 +95,18 @@ export function LibraryView(): React.JSX.Element {
     return filter
   }, [mode, selectedDate, selectedFolder])
 
+  // 날짜도 폴더도 고르지 않은 큰 목록은 최근 1주만 먼저 읽고, 그 전은 1주씩 넓힌다.
+  // 날짜 하나나 가상 폴더 하나를 고른 목록은 이미 좁아서 창을 두지 않는다.
+  const windowed = !selectedDate && !(mode === 'folders' && typeof selectedFolder === 'number')
+  const applySince = useCallback((value: string): void => {
+    sinceRef.current = value
+    setSince(value)
+  }, [])
+  const applyHasMore = useCallback((value: boolean): void => {
+    hasMoreRef.current = value
+    setHasMore(value)
+  }, [])
+
   const loadNavigation = useCallback(async (): Promise<void> => {
     const [dateRes, folderRes] = await Promise.all([
       window.nais.invoke('library:dates', undefined),
@@ -101,37 +119,64 @@ export function LibraryView(): React.JSX.Element {
 
   const reload = useCallback(async (): Promise<void> => {
     const seq = ++requestSeq.current
+    // 보는 목록이 바뀌면 창을 최근 1주로 되돌린다. 같은 목록을 다시 읽을 땐 넓힌 창을 유지한다
+    if (windowFilter.current !== requestFilter) {
+      windowFilter.current = requestFilter
+      applySince(recentWindowStart(new Date()))
+    }
     loadingRef.current = true
     setLoading(true)
     try {
-      const res = await window.nais.invoke('images:list', {
-        limit: PAGE,
-        offset: 0,
-        ...requestFilter
-      })
+      const fetchFirst = (): Promise<{ items: HistoryItem[]; total: number }> =>
+        window.nais.invoke('images:list', {
+          limit: PAGE,
+          offset: 0,
+          ...requestFilter,
+          ...(windowed ? { since: sinceRef.current } : {})
+        })
+      let res = await fetchFirst()
       if (seq !== requestSeq.current) return
+      if (windowed && res.items.length === 0 && res.total > 0) {
+        // 최근 1주에 그림이 없으면 그림이 있는 가장 가까운 주부터 보여 준다
+        const { items: dateItems } = await window.nais.invoke('library:dates', undefined)
+        if (seq !== requestSeq.current) return
+        const older = olderWindow(dateItems, sinceRef.current)
+        if (older) {
+          applySince(older.since)
+          res = await fetchFirst()
+          if (seq !== requestSeq.current) return
+        }
+      }
       itemsRef.current = res.items
       setItems(res.items)
       setTotal(res.total)
+      applyHasMore(res.items.length === PAGE)
     } finally {
       if (seq === requestSeq.current) {
         loadingRef.current = false
         setLoading(false)
       }
     }
-  }, [requestFilter])
+  }, [applyHasMore, applySince, requestFilter, windowed])
 
   const loadMore = useCallback(async (): Promise<void> => {
-    if (loadingRef.current || itemsRef.current.length >= total) return
+    const last = itemsRef.current[itemsRef.current.length - 1]
+    if (loadingRef.current || !hasMoreRef.current || !last) return
+    const seq = requestSeq.current
     loadingRef.current = true
     setLoading(true)
     try {
+      // 건너뛰기(offset) 대신 마지막 번호부터 이어 읽는다 — 뒤쪽 장도 첫 장만큼 빠르다
       const res = await window.nais.invoke('images:list', {
         limit: PAGE,
-        offset: itemsRef.current.length,
-        ...requestFilter
+        offset: 0,
+        beforeId: last.id,
+        ...requestFilter,
+        ...(windowed ? { since: sinceRef.current } : {})
       })
+      if (seq !== requestSeq.current) return
       setTotal(res.total)
+      applyHasMore(res.items.length === PAGE)
       setItems((previous) => {
         const seen = new Set(previous.map((item) => item.id))
         const next = [...previous, ...res.items.filter((item) => !seen.has(item.id))]
@@ -139,10 +184,24 @@ export function LibraryView(): React.JSX.Element {
         return next
       })
     } finally {
-      loadingRef.current = false
-      setLoading(false)
+      if (seq === requestSeq.current) {
+        loadingRef.current = false
+        setLoading(false)
+      }
     }
-  }, [requestFilter, total])
+  }, [applyHasMore, requestFilter, windowed])
+
+  const older = windowed && !hasMore && !loading ? olderWindow(dates, since) : null
+  const showOlder = (): void => {
+    if (!older) return
+    applySince(older.since)
+    if (itemsRef.current.length === 0) {
+      void reload()
+      return
+    }
+    applyHasMore(true)
+    void loadMore()
+  }
 
   useEffect(() => {
     queueMicrotask(() => void loadStorageSettings())
@@ -184,7 +243,8 @@ export function LibraryView(): React.JSX.Element {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [loadMore])
+    // 한 장을 읽고도 끝이 화면 안에 남아 있으면 다시 지켜봐야 다음 장을 읽는다
+  }, [loadMore, items.length, hasMore])
 
   const setColsPersist = (value: number): void => {
     setCols(value)
@@ -364,6 +424,18 @@ export function LibraryView(): React.JSX.Element {
             </div>
           )}
           <div ref={sentinelRef} className="h-4" />
+          {older && (
+            <button
+              className="mx-auto mb-14 mt-2 flex h-9 items-center gap-2 rounded-lg border border-line px-4 text-[13px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={showOlder}
+            >
+              이전 1주 더 보기
+              <span className="text-[12px] tabular-nums text-faint">
+                {older.since} ~ {older.to}
+                {!requestFilter.unfiledOnly && ` · ${older.count.toLocaleString()}장`}
+              </span>
+            </button>
+          )}
           {loading && (
             <div className="flex items-center justify-center py-4 text-faint">
               <Loader2 size={18} className="animate-spin" />

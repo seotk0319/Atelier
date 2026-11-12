@@ -138,7 +138,9 @@ app.whenReady().then(() => {
       const filePath = decodeURIComponent(url.searchParams.get('path') ?? '')
       if (filePath && url.searchParams.get('thumbnail') === '1') {
         const row = getDb()
-          .prepare('SELECT thumbnail FROM images WHERE file_path = ?')
+          .prepare(
+            'SELECT b.thumbnail FROM images i JOIN image_blobs b ON b.image_id = i.id WHERE i.file_path = ?'
+          )
           .get(filePath) as { thumbnail: Buffer | null } | undefined
         if (row?.thumbnail?.length) {
           return new Response(new Uint8Array(row.thumbnail), {

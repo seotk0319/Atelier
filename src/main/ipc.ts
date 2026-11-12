@@ -213,13 +213,24 @@ import {
   moveLibraryFolder,
   renameLibraryFolder
 } from './library/repo'
+import { createSlowLog, watchStalls, type SlowLog } from './perf/slow-log'
 
 /** IpcInvokeMap 계약을 강제하는 handle 등록 헬퍼 */
 function handle<C extends keyof IpcInvokeMap>(
   channel: C,
   handler: (req: IpcInvokeMap[C]['req']) => Promise<IpcInvokeMap[C]['res']> | IpcInvokeMap[C]['res']
 ): void {
-  ipcMain.handle(channel, (_event, req) => handler(req))
+  ipcMain.handle(channel, (_event, req) => slowLog().wrap(channel, () => handler(req)))
+}
+
+/** 본체를 50ms 넘게 붙잡은 요청과 멈춤을 <userData>/perf/slow.jsonl에 남긴다 (이름과 시간만) */
+let slowLogInstance: SlowLog | null = null
+function slowLog(): SlowLog {
+  if (!slowLogInstance) {
+    slowLogInstance = createSlowLog({ file: join(app.getPath('userData'), 'perf', 'slow.jsonl') })
+    watchStalls(slowLogInstance)
+  }
+  return slowLogInstance
 }
 
 export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcEventMap[C]): void {
@@ -465,8 +476,8 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     }
   })
 
-  handle('images:list', ({ limit, offset, date, virtualFolderId, unfiledOnly }) =>
-    listImages(limit, offset, { date, virtualFolderId, unfiledOnly })
+  handle('images:list', ({ limit, offset, date, virtualFolderId, unfiledOnly, beforeId, since }) =>
+    listImages(limit, offset, { date, virtualFolderId, unfiledOnly, beforeId, since })
   )
   handle('images:payload', ({ id }) => ({ payloadJson: getImagePayload(id) }))
   handle('library:dates', () => ({ items: listLibraryDates() }))
@@ -869,7 +880,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
       }
       if (filePath) {
         const row = getDb()
-          .prepare('SELECT payload_json FROM images WHERE file_path = ?')
+          .prepare(
+            'SELECT b.payload_json FROM images i JOIN image_blobs b ON b.image_id = i.id WHERE i.file_path = ?'
+          )
           .get(filePath) as { payload_json: string } | undefined
         const fromDb = row?.payload_json ? metadataFromPayloadJson(row.payload_json) : null
         // 1) PNG tEXt 우선. 단, 예전 저장본/포맷 변환본처럼 nais3-params 청크가 빠진 경우

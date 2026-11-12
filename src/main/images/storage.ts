@@ -150,26 +150,32 @@ export async function saveGeneratedImage(input: {
       .webp({ quality: 82 })
       .toBuffer()
 
-    const insert = getDb().prepare(
-      'INSERT INTO images (file_path, thumbnail, kind, seed, payload_json, scene_id) VALUES (?, ?, ?, ?, ?, ?)'
+    // 가벼운 값은 images에, 썸네일과 요청 본문은 image_blobs에 (v23). 둘은 한 트랜잭션으로 넣는다
+    const db = getDb()
+    const insertImage = db.prepare(
+      'INSERT INTO images (file_path, kind, seed, scene_id) VALUES (?, ?, ?, ?)'
     )
-    const values = [
-      filePath,
-      thumbnail,
-      input.kind,
-      input.seed,
-      payloadWithLocalMetadata(input.sentPayload, input.localMetadata)
-    ] as const
-    let result
+    const insertBlob = db.prepare(
+      'INSERT INTO image_blobs (image_id, thumbnail, payload_json) VALUES (?, ?, ?)'
+    )
+    const payloadJson = payloadWithLocalMetadata(input.sentPayload, input.localMetadata)
+    const save = db.transaction((sceneId: number | null): number => {
+      const id = Number(
+        insertImage.run(filePath, input.kind, input.seed, sceneId).lastInsertRowid
+      )
+      insertBlob.run(id, thumbnail, payloadJson)
+      return id
+    })
+    let id: number
     try {
-      result = insert.run(...values, input.sceneId ?? null)
+      id = save(input.sceneId ?? null)
     } catch (error) {
       // 생성 완료 직전에 씬이 삭제된 경우 이미지는 일반 히스토리로 보존한다.
       if (!input.sceneId || !isForeignKeyError(error)) throw error
-      result = insert.run(...values, null)
+      id = save(null)
     }
     return {
-      id: Number(result.lastInsertRowid),
+      id,
       filePath,
       thumbnail: thumbnail.toString('base64'),
       kind: input.kind,
@@ -256,13 +262,24 @@ function injectNais3Params(png: Buffer, meta: Pick<ImageMetadata, 'promptParts'>
 export function listImages(
   limit: number,
   offset: number,
-  filter?: { date?: string; virtualFolderId?: number; unfiledOnly?: boolean }
+  filter?: {
+    date?: string
+    virtualFolderId?: number
+    unfiledOnly?: boolean
+    /** 이 번호보다 오래된 것만 (이어 읽기). 주면 offset은 쓰지 않는다 */
+    beforeId?: number
+    /** 이 로컬 날짜(YYYY-MM-DD)부터의 것만. total에는 반영하지 않는다 */
+    since?: string
+  }
 ): { items: HistoryItem[]; total: number } {
   const db = getDb()
   const where: string[] = []
   const values: (string | number)[] = []
-  // 그림체 월드컵 이미지는 월드컵 탭에서만 본다 (히스토리·라이브러리에 수백 장이 섞이지 않게)
-  where.push("kind NOT IN ('arena', 'manga')")
+  // 그림체 월드컵 이미지는 월드컵 탭에서만 본다 (히스토리·라이브러리에 수백 장이 섞이지 않게).
+  // images 한 줄은 썸네일·요청 본문 때문에 평균 100KB가 넘어, 줄에서 kind를 읽으면 줄마다 넘침 페이지를
+  // 따라가야 한다 (3만 장 뒤쪽을 OFFSET으로 읽는 데 7초). 그래서 kind 인덱스로 뺄 번호만 모으고,
+  // 번호를 인덱스만으로 고른 뒤, 고른 60줄만 본문을 읽는다.
+  where.push("id NOT IN (SELECT id FROM images WHERE kind IN ('arena', 'manga'))")
   if (filter?.date) {
     // 줄마다 시간대 변환하던 date(…,'localtime') 대신 범위 조건 (idx_images_created 사용)
     const range = localDateRange(filter.date)
@@ -283,12 +300,37 @@ export function listImages(
       c: number
     }
   ).c
+  // 창(since)과 이어 읽기(beforeId)는 번호 범위로만 건다 — 번호 순서가 만든 순서다
+  if (filter?.since) {
+    const range = localDateRange(filter.since)
+    if (range) {
+      // MIN(id)로 쓰면 번호 순으로 줄을 읽으며 created_at을 확인해 한 번에 4초가 걸린다.
+      // +id로 그 지름길을 막아 created_at 인덱스만 읽게 한다
+      const first = db
+        .prepare('SELECT MIN(+id) AS m FROM images WHERE created_at >= ?')
+        .get(range[0]) as { m: number | null }
+      if (first.m == null) return { total, items: [] }
+      where.push('id >= ?')
+      values.push(first.m)
+    }
+  }
+  const cursor = filter?.beforeId != null && Number.isInteger(filter.beforeId)
+  if (cursor) {
+    where.push('id < ?')
+    values.push(filter!.beforeId!)
+  }
+  const ids = db
+    .prepare(`SELECT id FROM images WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .pluck()
+    .all(...values, limit, cursor ? 0 : offset) as number[]
+  if (ids.length === 0) return { total, items: [] }
   const rows = db
     .prepare(
-      `SELECT id, file_path, thumbnail, kind, seed, created_at, library_folder_id
-       FROM images${clause} ORDER BY id DESC LIMIT ? OFFSET ?`
+      `SELECT i.id, i.file_path, b.thumbnail, i.kind, i.seed, i.created_at, i.library_folder_id
+       FROM images i LEFT JOIN image_blobs b ON b.image_id = i.id
+       WHERE i.id IN (${ids.join(',')}) ORDER BY i.id DESC`
     )
-    .all(...values, limit, offset) as {
+    .all() as {
     id: number
     file_path: string
     thumbnail: Buffer | null
@@ -313,7 +355,9 @@ export function listImages(
 }
 
 export function getImagePayload(id: number): string | null {
-  const row = getDb().prepare('SELECT payload_json FROM images WHERE id = ?').get(id) as
+  const row = getDb()
+    .prepare('SELECT payload_json FROM image_blobs WHERE image_id = ?')
+    .get(id) as
     { payload_json: string } | undefined
   return row?.payload_json ?? null
 }
@@ -380,7 +424,9 @@ async function writeCensoredFile(filePath: string, output: Buffer): Promise<Buff
   writeFileSync(filePath, output)
   const db = getDb()
   const update = db.transaction(() => {
-    db.prepare('UPDATE images SET thumbnail = ? WHERE file_path = ?').run(thumbnail, filePath)
+    db.prepare(
+      'UPDATE image_blobs SET thumbnail = ? WHERE image_id = (SELECT id FROM images WHERE file_path = ?)'
+    ).run(thumbnail, filePath)
     db.prepare('UPDATE library_images SET thumbnail = ? WHERE file_path = ?').run(
       thumbnail,
       filePath

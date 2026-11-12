@@ -561,8 +561,10 @@ export function sceneImages(
   ).c
   const rows = db
     .prepare(
-      `SELECT id, file_path, thumbnail, seed, favorite FROM images
-       WHERE scene_id = ?${fav} ORDER BY id DESC LIMIT ? OFFSET ?`
+      `SELECT i.id, i.file_path, b.thumbnail, i.seed, i.favorite
+       FROM images i LEFT JOIN image_blobs b ON b.image_id = i.id
+       WHERE i.scene_id = ?${favoritesOnly ? ' AND i.favorite = 1' : ''}
+       ORDER BY i.id DESC LIMIT ? OFFSET ?`
     )
     .all(sceneId, limit, offset) as {
     id: number

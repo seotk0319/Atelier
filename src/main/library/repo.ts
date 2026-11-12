@@ -15,21 +15,15 @@ interface FolderRow {
 
 export function listLibraryDates(): LibraryDateGroup[] {
   // images 한 줄엔 썸네일 BLOB이 들어 있어 표를 훑으면 3만 장에 3~5초 본체가 멈췄다.
-  // created_at 인덱스만 읽어(covering) UTC 10분 단위로 묶고, 월드컵 이미지는 kind 인덱스로 따로 빼며,
-  // 로컬 날짜 변환은 여기서 한다 (시간대가 :30·:45인 곳도 맞게).
-  const db = getDb()
-  const all = db
+  // created_at 인덱스만 읽어(covering) UTC 10분 단위로 묶고, 월드컵 이미지는 kind 인덱스로 번호만 모아 빼며
+  // (줄에서 created_at을 읽으면 월드컵 2천 장에 50~150ms가 더 든다), 로컬 날짜 변환은 여기서 한다
+  // (시간대가 :30·:45인 곳도 맞게).
+  const rows = getDb()
     .prepare(
-      'SELECT substr(created_at, 1, 15) AS bucket, COUNT(*) AS count FROM images GROUP BY bucket'
+      `SELECT substr(created_at, 1, 15) AS bucket, COUNT(*) AS count FROM images
+       WHERE id NOT IN (SELECT id FROM images WHERE kind IN ('arena', 'manga')) GROUP BY bucket`
     )
     .all() as { bucket: string; count: number }[]
-  const arena = db
-    .prepare(
-      "SELECT substr(created_at, 1, 15) AS bucket, COUNT(*) AS count FROM images WHERE kind IN ('arena', 'manga') GROUP BY bucket"
-    )
-    .all() as { bucket: string; count: number }[]
-  const minus = new Map(arena.map((r) => [r.bucket, r.count]))
-  const rows = all.map((r) => ({ bucket: r.bucket, count: r.count - (minus.get(r.bucket) ?? 0) }))
   const byDate = new Map<string, number>()
   for (const r of rows) {
     if (r.count <= 0) continue

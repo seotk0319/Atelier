@@ -17,12 +17,18 @@ vi.mock('../src/main/db', () => ({
       all: () => (sql.includes('LIKE') ? rows : []),
       get: () => undefined,
       run: (filePath: string) => {
+        // 무거운 칸(image_blobs) 넣기는 이름 검사와 무관하다
+        if (!sql.includes('INTO images')) return { lastInsertRowid: 0 }
         if (rows.some((r) => r.file_path.toLowerCase() === filePath.toLowerCase()))
           throw new Error('UNIQUE constraint failed: images.file_path')
         rows.push({ file_path: filePath })
         return { lastInsertRowid: rows.length }
       }
-    })
+    }),
+    transaction:
+      <A extends unknown[], T>(fn: (...args: A) => T) =>
+      (...args: A): T =>
+        fn(...args)
   })
 }))
 

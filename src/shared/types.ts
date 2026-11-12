@@ -573,6 +573,10 @@ export interface IpcInvokeMap {
       date?: string
       virtualFolderId?: number
       unfiledOnly?: boolean
+      /** 이 번호보다 오래된 것만 (이어 읽기). 주면 offset은 쓰지 않는다 */
+      beforeId?: number
+      /** 이 로컬 날짜(YYYY-MM-DD)부터의 것만. total에는 반영하지 않는다 */
+      since?: string
     }
     res: { items: HistoryItem[]; total: number }
   }

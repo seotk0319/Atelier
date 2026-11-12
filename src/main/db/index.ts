@@ -38,7 +38,11 @@ export function initDb(): { version: number; path: string } {
   db.pragma('temp_store = MEMORY')
   db.pragma('cache_size = -65536')
 
-  const { version } = migrateDatabase(db, migrations, { backupDir: join(dir, 'backups') })
+  const { version, backupPath } = migrateDatabase(db, migrations, {
+    backupDir: join(dir, 'backups')
+  })
+  // 큰 표를 옮긴 마이그레이션(v23) 뒤에는 WAL 파일이 DB만큼 커져 남는다 — 비워서 줄인다
+  if (backupPath) db.pragma('wal_checkpoint(TRUNCATE)')
 
   db.exec(
     'CREATE INDEX IF NOT EXISTS idx_images_scene_favorite ON images(scene_id, favorite DESC, id DESC)'

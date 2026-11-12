@@ -508,6 +508,26 @@ export const migrations: ((db: Database.Database) => void)[] = [
   (db) => {
     if (!hasColumn(db, 'scene_preset_folders', 'parent_id'))
       db.exec('ALTER TABLE scene_preset_folders ADD COLUMN parent_id INTEGER;')
+  },
+
+  // v23: 그림 기록의 무거운 칸(썸네일, 요청 본문)을 image_blobs로 뗀다.
+  // images 한 줄이 평균 100KB를 넘어, 줄에서 kind·created_at 같은 가벼운 값을 읽는 질의도 줄마다
+  // 넘침 페이지를 따라가야 했다 (4만 6천 장에서 목록 뒤쪽 읽기 7초). 떼고 나면 images는 줄당 200바이트쯤이다.
+  // 그림을 지우면 image_blobs 줄도 같이 지워진다 (foreign_keys = ON).
+  // 4만 6천 장(6.7GB)에서 수 분 걸리고, 끝난 뒤 DB 파일에 빈 페이지가 그만큼 남는다 (새 그림이 채워 쓴다).
+  (db) => {
+    if (!hasColumn(db, 'images', 'payload_json')) return
+    db.exec(`
+      CREATE TABLE image_blobs (
+        image_id INTEGER PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
+        thumbnail BLOB,
+        payload_json TEXT NOT NULL
+      );
+      INSERT INTO image_blobs (image_id, thumbnail, payload_json)
+        SELECT id, thumbnail, payload_json FROM images;
+      ALTER TABLE images DROP COLUMN payload_json;
+      ALTER TABLE images DROP COLUMN thumbnail;
+    `)
   }
 ]
 

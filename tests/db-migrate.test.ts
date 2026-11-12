@@ -172,6 +172,43 @@ describe('migrateDatabase', () => {
     expect(readdirSync(backupDir)).toEqual(['pre-migration-v19.db'])
   })
 
+  it('v23은 썸네일과 요청 본문을 image_blobs로 옮기고 images에서 뺀다', () => {
+    const path = join(dir, 'nais3.db')
+    const backupDir = join(dir, 'backups')
+    migrateDatabase(connect(path), migrations.slice(0, 22), { backupDir })
+    const raw = new DatabaseSync(path)
+    opened.push(raw)
+    const insert = raw.prepare(
+      'INSERT INTO images (file_path, thumbnail, kind, seed, payload_json, favorite) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    insert.run('a.png', Buffer.from([1, 2, 3]), 't2i', 11, '{"a":1}', 1)
+    insert.run('b.png', null, 'scene', 22, '{"b":2}', 0)
+    const before = raw.prepare('SELECT id, file_path, kind, seed, created_at, favorite FROM images ORDER BY id').all()
+
+    migrateDatabase(connect(path), migrations, { backupDir })
+
+    const columns = (raw.prepare('PRAGMA table_info(images)').all() as { name: string }[]).map((c) => c.name)
+    expect(columns).not.toContain('thumbnail')
+    expect(columns).not.toContain('payload_json')
+    expect(raw.prepare('SELECT id, file_path, kind, seed, created_at, favorite FROM images ORDER BY id').all()).toEqual(before)
+    const blobs = raw.prepare('SELECT image_id, thumbnail, payload_json FROM image_blobs ORDER BY image_id').all() as {
+      image_id: number
+      thumbnail: Uint8Array | null
+      payload_json: string
+    }[]
+    expect(blobs.map((b) => [b.image_id, b.thumbnail ? [...b.thumbnail] : null, b.payload_json])).toEqual([
+      [1, [1, 2, 3], '{"a":1}'],
+      [2, null, '{"b":2}']
+    ])
+    // 색인은 그대로 남는다
+    const indexes = (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'images'").all() as { name: string }[]).map((r) => r.name)
+    expect(indexes).toEqual(expect.arrayContaining(['idx_images_created', 'idx_images_kind', 'idx_images_scene', 'idx_images_file_path', 'idx_images_library_folder']))
+    // 그림을 지우면 무거운 칸도 같이 지워진다
+    raw.exec('PRAGMA foreign_keys = ON')
+    raw.prepare('DELETE FROM images WHERE id = 1').run()
+    expect(raw.prepare('SELECT image_id FROM image_blobs').all()).toEqual([{ image_id: 2 }])
+  })
+
   it('지원하는 것보다 새 버전 DB는 열지 않는다', () => {
     const path = join(dir, 'nais3.db')
     const raw = new DatabaseSync(path)
