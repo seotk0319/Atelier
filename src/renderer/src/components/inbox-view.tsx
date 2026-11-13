@@ -844,7 +844,9 @@ export function InboxView(): React.JSX.Element {
                 </SegmentedItem>
               </Segmented>
               {source === 'macmini' && (
-                <span className="text-muted">로그인·연결 끊기는 맥미니의 아틀리에에서 해요.</span>
+                <span className="text-muted">
+                  로그인·연결 끊기는 맥미니의 아틀리에에서 해요. 다시 켜면 이 PC의 수집이 멈춰요.
+                </span>
               )}
             </div>
             <p className="leading-relaxed text-muted">

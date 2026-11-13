@@ -400,7 +400,9 @@ app.whenReady().then(() => {
     (jobs) => broadcast('gpt:changed', { jobs }),
     (item) => broadcast('images:added', item)
   )
-  if (PROFILE === 1) {
+  // 맥미니에서 받는 중이면 이 PC는 알림 수집·사이트 로그인 연장·AI 답글·작품 MCP를 시작하지 않는다
+  // (전부 맥미니의 아틀리에MCP가 한다). 설정을 바꾼 뒤 다시 켜야 적용된다.
+  if (PROFILE === 1 && platformSource() !== 'macmini') {
     void startInbox()
     startAiReplies()
     void startMcp()
