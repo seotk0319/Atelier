@@ -285,24 +285,12 @@ export function InboxView(): React.JSX.Element {
   }
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [settings, setSettings] = useState(false)
-  // 플랫폼 내용을 이 PC가 직접 모을지, 맥미니에서 받을지 (설정 platform_source)
-  const [source, setSource] = useState<'direct' | 'macmini'>('direct')
-  useEffect(() => {
-    void window.nais
-      .invoke('settings:get', { key: 'platform_source' })
-      .then(({ value }) => setSource(value === 'macmini' ? 'macmini' : 'direct'))
-  }, [])
-  const chooseSource = (next: 'direct' | 'macmini'): void => {
-    setSource(next)
-    void window.nais.invoke('settings:set', { key: 'platform_source', value: next })
-  }
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const pendingRef = useRef(false)
   const [busy, setBusy] = useState(false)
   // Sign-in checks this window started; the service also reports its own.
-  const [linking, setLinking] = useState<Set<string>>(new Set())
   // Relative times are measured against the moment the data was fetched, which also
   // keeps render pure; the list refetches every 10 seconds anyway.
   const [now, setNow] = useState(0)
@@ -408,33 +396,6 @@ export function InboxView(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
-  }
-  // Sign-in can take the person minutes in the browser; each platform tracks its own check.
-  async function link(id: string, label: string): Promise<void> {
-    setLinking((previous) => new Set(previous).add(id))
-    setMessage(label + ' 로그인 상태를 확인하고 있어요. 크롬 창이 잠깐 열릴 수 있어요.')
-    try {
-      const result = await window.nais.invoke('inbox:connect', { platform: id })
-      setMessage(label + ': ' + result.message)
-    } catch {
-      setMessage(label + ' 연결을 확인하지 못했어요.')
-    } finally {
-      setLinking((previous) => {
-        const next = new Set(previous)
-        next.delete(id)
-        return next
-      })
-      setRevision((v) => v + 1)
-    }
-  }
-  async function unlink(id: string, label: string): Promise<void> {
-    try {
-      await window.nais.invoke('inbox:disconnect', { platform: id })
-      setMessage(label + ' 로그인 정보를 NAIS3에서 지웠어요. 이미 모은 알림은 그대로예요.')
-    } catch {
-      setMessage(label + ' 연결을 해제하지 못했어요.')
-    }
-    setRevision((v) => v + 1)
   }
   async function select(id: string, selected: boolean): Promise<void> {
     try {
@@ -830,46 +791,24 @@ export function InboxView(): React.JSX.Element {
                 <X size={15} />
               </button>
             </div>
-            <div className="mb-3 flex items-center gap-3">
-              <span className="text-muted">가져오는 곳</span>
-              <Segmented
-                value={source}
-                onValueChange={(v) => chooseSource(v === 'macmini' ? 'macmini' : 'direct')}
-              >
-                <SegmentedItem value="direct" className="px-3 text-[12px]">
-                  직접 수집
-                </SegmentedItem>
-                <SegmentedItem value="macmini" className="px-3 text-[12px]">
-                  맥미니에서 받기
-                </SegmentedItem>
-              </Segmented>
-              {source === 'macmini' && (
-                <span className="text-muted">
-                  로그인·연결 끊기는 맥미니의 아틀리에에서 해요. 다시 켜면 이 PC의 수집이 멈춰요.
-                </span>
-              )}
-            </div>
             <p className="leading-relaxed text-muted">
-              플랫폼마다 한 번 로그인하면 NAIS3가 직접 알림을 모아요. 로그인 창은 크롬(없으면
-              엣지)으로 열리고, NAIS3 전용 프로필이라 평소 쓰는 크롬과 섞이지 않아요. 로그인한 뒤 그
-              창을 닫으면 NAIS3가 연결을 마쳐요. 체크를 끈 플랫폼은 모으지도, 목록에 보여주지도
+              알림은 맥미니의 아틀리에가 모으고, 이 PC는 받아서 보여 줘요. 플랫폼 로그인과 연결
+              해제는 맥미니의 아틀리에에서 해요. 체크를 끈 플랫폼은 모으지도, 목록에 보여주지도
               않아요.
             </p>
             {data?.directError && <p className="mt-2 text-danger">{data.directError}</p>}
             <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
               {(data?.platforms || []).map((p) => {
-                const checking = linking.has(p.id) || p.connecting
+                const checking = p.connecting
                 const relogin = p.appConnected && p.status === 'login'
                 const state = checking
                   ? '로그인 상태를 확인하고 있어요…'
                   : p.awaitingLogin
-                    ? p.loginWindowOpen
-                      ? '로그인한 뒤 창을 닫으면 알아서 연결돼요'
-                      : '로그인 창이 닫혔어요. 로그인했다면 ‘로그인 완료’를 눌러주세요'
+                    ? '맥미니에서 로그인하는 중이에요'
                     : relogin
-                      ? '다시 로그인이 필요해요'
+                      ? '맥미니에서 다시 로그인이 필요해요'
                       : p.appConnected
-                        ? 'NAIS3로 연결됨' +
+                        ? '연결됨' +
                           (p.lastAttempt ? ` · ${ago(p.lastAttempt, now)} 확인` : '') +
                           (p.lastAttempt
                             ? p.lastNewAt
@@ -902,27 +841,6 @@ export function InboxView(): React.JSX.Element {
                     >
                       {failed ? state + ' · 수집 오류: ' + String(p.detail).slice(0, 80) : state}
                     </span>
-                    {p.appConnected && !checking && !p.awaitingLogin && (
-                      <button
-                        className="shrink-0 text-faint hover:text-ink"
-                        onClick={() => void unlink(p.id, p.label)}
-                      >
-                        해제
-                      </button>
-                    )}
-                    <button
-                      className={button}
-                      disabled={checking || !data?.available}
-                      onClick={() => void link(p.id, p.label)}
-                    >
-                      {p.awaitingLogin
-                        ? '로그인 완료'
-                        : relogin
-                          ? '다시 로그인'
-                          : p.appConnected
-                            ? '다시 연결'
-                            : '로그인'}
-                    </button>
                   </li>
                 )
               })}

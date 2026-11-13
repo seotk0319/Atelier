@@ -18,7 +18,7 @@ import {
 import { getDb } from '../db'
 import { getClaudeKey, getSetting, setClaudeKey, setSetting } from '../db/settings'
 import { listPresetFolders, listPresets, listScenes } from '../scenes/repo'
-import { ClaudeError, claudeMessage, claudeVerify, type ClaudeResponse } from '../ai-reply/claude'
+import { ClaudeError, claudeMessage, claudeVerify, type ClaudeResponse } from '../llm/claude'
 
 const MODEL_KEY = 'assistant_model'
 const GUIDE_KEY = 'assistant_guide'

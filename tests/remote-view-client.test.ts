@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createMcpServer } from '../src/main/mcp/server'
+import { createServer, type Server } from 'node:http'
 import { createViewClient, RemoteError, type ViewClient } from '../src/main/remote/view-client'
 
 const PORT = 39411
@@ -10,36 +10,51 @@ const TOKEN = 'a'.repeat(43)
 
 describe('맥미니에서 받아 오기 (view-client)', () => {
   let dir = ''
-  let server: ReturnType<typeof createMcpServer> | null = null
+  let server: Server | null = null
   let client: ViewClient
   let clock = Date.parse('2026-11-13T06:00:00.000Z')
   let calls: { channel: string; req: unknown }[] = []
   let thumbs = 0
 
-  const open = async (): Promise<void> => {
-    server = createMcpServer({
-      port: PORT,
-      token: TOKEN,
-      info: { name: 'test', version: '0' },
-      tools: [],
-      view: async (channel, req) => {
-        calls.push({ channel, req })
-        if (channel === 'inbox:reply') throw new Error('LOGIN_REQUIRED')
-        return { channel, n: calls.length }
-      },
-      thumb: async (url) => {
-        thumbs += 1
-        return url === 'https://img.example/a.png'
-          ? { type: 'image/png', bytes: new Uint8Array([1, 2, 3]) }
-          : null
-      }
+  // 맥미니의 /view 창구를 흉내 낸 작은 서버 (같은 주소·비밀값 규칙)
+  const open = (): Promise<void> =>
+    new Promise((resolve) => {
+      server = createServer((req, res) => {
+        const url = new URL(req.url || '', 'http://127.0.0.1')
+        const json = (status: number, body?: unknown): void => {
+          res.writeHead(status, { 'content-type': 'application/json' })
+          res.end(body === undefined ? '' : JSON.stringify(body))
+        }
+        if (req.headers.authorization !== 'Bearer ' + TOKEN) return json(401)
+        if (url.pathname === '/view/thumb') {
+          thumbs += 1
+          if (url.searchParams.get('u') !== 'https://img.example/a.png') return json(404)
+          res.writeHead(200, { 'content-type': 'image/png' })
+          return res.end(Buffer.from([1, 2, 3]))
+        }
+        if (url.pathname !== '/view') return json(404)
+        if (req.method !== 'POST') return json(405)
+        let raw = ''
+        req.on('data', (chunk) => (raw += chunk))
+        req.on('end', () => {
+          const { channel, req: body } = JSON.parse(raw) as { channel: string; req: unknown }
+          calls.push({ channel, req: body })
+          const at = new Date().toISOString()
+          if (channel === 'inbox:reply')
+            return json(200, { ok: false, at, error: 'LOGIN_REQUIRED' })
+          json(200, { ok: true, at, res: { channel, n: calls.length } })
+        })
+      })
+      server.listen(PORT, '127.0.0.1', () => resolve())
     })
-    await server.start()
-  }
-  const close = async (): Promise<void> => {
-    await server?.stop()
-    server = null
-  }
+  const close = (): Promise<void> =>
+    new Promise((resolve) => {
+      if (!server) return resolve()
+      const s = server
+      server = null
+      s.close(() => resolve())
+      s.closeAllConnections()
+    })
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'atelier-view-'))

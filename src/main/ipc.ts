@@ -11,18 +11,6 @@ import {
 import type { IpcEventMap, IpcInvokeMap } from '../shared/types'
 import type { ReturnedReservation } from './queue/generation-queue'
 import {
-  getInbox,
-  getInboxWorks,
-  controlInbox,
-  openInboxSource,
-  setInboxInterval,
-  connectInboxPlatform,
-  disconnectInboxPlatform,
-  replyInbox,
-  previewReply,
-  selectInboxPlatform
-} from './notifications/service'
-import {
   removeTranslateKey,
   saveTranslateKey,
   setTranslateEngine,
@@ -32,19 +20,6 @@ import {
 } from './translate/service'
 import { openRouterStatus, removeOpenRouterKey, saveOpenRouterKey } from './llm/service'
 import { tagFromImage, tagFromText } from './tag-helper/service'
-import {
-  aiEntry,
-  aiLog,
-  aiStatus,
-  draftReply,
-  previewBacklog,
-  removeAiKey,
-  saveAiKey,
-  setAiConfig,
-  setAiEngine,
-  startBacklog,
-  stopBacklog
-} from './ai-reply/service'
 import {
   askAssistant,
   assistantStatus,
@@ -201,8 +176,7 @@ import { basename, extname, join, resolve } from 'path'
 import sharp from 'sharp'
 import { verifyToken } from './nai/client'
 import { APP_TITLE, PROFILE } from './profile'
-import { mcpActivity, mcpEditions, mcpStatus, onMcpActivity } from './mcp/service'
-import { platformSource, remotePort, viewClient } from './remote/source'
+import { remotePort, viewClient } from './remote/source'
 import { REMOTE_DOWN } from './remote/view-client'
 import type { RemoteStamp } from '../shared/remote-view'
 import type {
@@ -252,7 +226,7 @@ export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcE
 
 export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQueue }): void {
   if (PROFILE === 1) {
-    const remote = (): boolean => platformSource() === 'macmini'
+    // 알림·작품·AI 답글 화면은 맥미니(아틀리에MCP)에서 받아 보여 준다. 이 PC는 캐챗 사이트에 닿지 않는다.
     const view = viewClient()
     /** 맥미니에서 받은 답에 받은 시각을 붙인다 */
     const stamped = async <T extends object>(
@@ -263,125 +237,77 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
       const { res, stamp } = await view.read<T>(channel, req, options)
       return { ...res, remote: stamp }
     }
-    handle('inbox:query', (query) =>
-      remote() ? stamped<InboxResult>('inbox:query', query || {}) : getInbox(query || {})
-    )
-    handle('inbox:works', async (req) => {
-      // 받은 것은 요청 모양과 상관없이 한 자리에 둔다 (끊겼을 때 작품 탭·알림 탭이 같은 것을 본다)
-      if (remote())
-        return stamped<InboxWorksResult>('inbox:works', req || {}, { cacheAs: { cached: true } })
-      const [works, saved] = await Promise.all([
-        getInboxWorks(!!req?.refresh, !!req?.cached),
-        mcpEditions()
-      ])
-      return { ...works, saved }
+    const failed = (error: unknown): { ok: false; message: string } => ({
+      ok: false,
+      message: error instanceof Error ? error.message : REMOTE_DOWN
     })
+    handle('inbox:query', (query) => stamped<InboxResult>('inbox:query', query || {}))
+    // 받은 것은 요청 모양과 상관없이 한 자리에 둔다 (끊겼을 때 작품 탭·알림 탭이 같은 것을 본다)
+    handle('inbox:works', (req) =>
+      stamped<InboxWorksResult>('inbox:works', req || {}, { cacheAs: { cached: true } })
+    )
     handle('app:copyText', ({ text }) => {
       if (typeof text !== 'string' || !text || text.length > 50_000) return { ok: false }
       clipboard.writeText(text)
       return { ok: true }
     })
-    handle('inbox:control', (req) =>
-      remote() ? view.act('inbox:control', req) : controlInbox(req.enabled)
-    )
-    handle('inbox:setInterval', (req) =>
-      remote() ? view.act('inbox:setInterval', req) : setInboxInterval(req.minutes)
-    )
+    handle('inbox:control', (req) => view.act('inbox:control', req))
+    handle('inbox:setInterval', (req) => view.act('inbox:setInterval', req))
     handle('inbox:openSource', async ({ id }) => {
-      if (!remote()) return openInboxSource(id)
       const { url } = await view.act<{ url: string }>('inbox:sourceUrl', { id })
       if (!url.startsWith('https://')) throw new Error('원문 주소를 열 수 없어요.')
       await shell.openExternal(url)
     })
-    handle('inbox:connect', ({ platform }) =>
-      remote()
-        ? { state: 'error' as const, message: '로그인은 맥미니의 아틀리에에서 해요.' }
-        : connectInboxPlatform(platform)
+    handle('inbox:connect', () => ({
+      state: 'error' as const,
+      message: '로그인은 맥미니의 아틀리에에서 해요.'
+    }))
+    handle('inbox:reply', (req) => view.act<InboxReplyResult>('inbox:reply', req).catch(failed))
+    handle('inbox:replyTarget', (req) =>
+      view.act<InboxReplyTarget>('inbox:replyTarget', req).catch(failed)
     )
-    handle('inbox:reply', async (req) => {
-      if (!remote()) return replyInbox(String(req.id || ''), String(req.content || ''))
-      try {
-        return await view.act<InboxReplyResult>('inbox:reply', req)
-      } catch (error) {
-        return { ok: false, message: error instanceof Error ? error.message : REMOTE_DOWN }
-      }
+    handle('inbox:disconnect', () => {
+      throw new Error('연결 끊기는 맥미니의 아틀리에에서 해요.')
     })
-    handle('inbox:replyTarget', async (req) => {
-      if (!remote()) return previewReply(String(req.id || ''))
-      try {
-        return await view.act<InboxReplyTarget>('inbox:replyTarget', req)
-      } catch (error) {
-        return { ok: false, message: error instanceof Error ? error.message : REMOTE_DOWN }
-      }
-    })
-    handle('inbox:disconnect', ({ platform }) => {
-      if (remote()) throw new Error('연결 끊기는 맥미니의 아틀리에에서 해요.')
-      return disconnectInboxPlatform(platform)
-    })
-    handle('inbox:select', (req) =>
-      remote() ? view.act('inbox:select', req) : selectInboxPlatform(req.platform, req.selected)
-    )
+    handle('inbox:select', (req) => view.act('inbox:select', req))
     handle('translate:status', () => translateStatus())
     handle('translate:setEngine', ({ engine }) => setTranslateEngine(engine))
     handle('translate:usage', () => translateUsage())
     handle('translate:setKey', ({ key }) => saveTranslateKey(String(key || '')))
     handle('translate:deleteKey', () => removeTranslateKey())
     handle('translate:run', ({ text, target }) => translateText(String(text || ''), target))
-    handle('aiReply:status', async () =>
-      remote() ? (await view.read<AiReplyStatus>('aiReply:status')).res : aiStatus()
-    )
-    handle('aiReply:setKey', ({ key }) =>
-      remote()
-        ? { ok: false, message: 'AI 답글 키는 맥미니의 아틀리에에서 넣어요.' }
-        : saveAiKey(String(key || ''))
-    )
+    handle('aiReply:status', async () => (await view.read<AiReplyStatus>('aiReply:status')).res)
+    handle('aiReply:setKey', () => ({
+      ok: false,
+      message: 'AI 답글 키는 맥미니의 아틀리에에서 넣어요.'
+    }))
     handle('aiReply:deleteKey', () => {
-      if (remote()) throw new Error('AI 답글 키는 맥미니의 아틀리에에서 지워요.')
-      return removeAiKey()
+      throw new Error('AI 답글 키는 맥미니의 아틀리에에서 지워요.')
     })
-    handle('aiReply:setConfig', (patch) =>
-      remote() ? view.act('aiReply:setConfig', patch || {}) : setAiConfig(patch || {})
+    handle('aiReply:setConfig', (patch) => view.act('aiReply:setConfig', patch || {}))
+    handle('aiReply:setEngine', (req) => view.act('aiReply:setEngine', req))
+    handle('aiReply:draft', (req) => view.act('aiReply:draft', req))
+    handle(
+      'aiReply:entry',
+      async (req) => (await view.read<AiLogEntry | null>('aiReply:entry', req)).res
     )
-    handle('aiReply:setEngine', (req) =>
-      remote() ? view.act('aiReply:setEngine', req) : setAiEngine(req.engine)
+    handle(
+      'aiReply:log',
+      async (req) => (await view.read<AiLogEntry[]>('aiReply:log', req || {})).res
     )
-    handle('aiReply:draft', async (req) => {
-      if (remote()) return view.act('aiReply:draft', req)
-      const result = await draftReply(String(req.id || ''))
-      delete result.code
-      return result
-    })
-    handle('aiReply:entry', async (req) =>
-      remote()
-        ? (await view.read<AiLogEntry | null>('aiReply:entry', req)).res
-        : aiEntry(String(req.id || ''))
-    )
-    handle('aiReply:log', async (req) =>
-      remote()
-        ? (await view.read<AiLogEntry[]>('aiReply:log', req || {})).res
-        : aiLog(Number(req?.limit) || 30)
-    )
-    handle('aiReply:backlogPreview', (req) =>
-      remote() ? view.act('aiReply:backlogPreview', req) : previewBacklog(Number(req.days) || 0)
-    )
-    handle('aiReply:backlogStart', (request) =>
-      remote() ? view.act('aiReply:backlogStart', request) : startBacklog(request)
-    )
-    handle('aiReply:backlogStop', () =>
-      remote() ? view.act('aiReply:backlogStop') : stopBacklog()
-    )
-    onMcpActivity((item) => broadcast('mcp:activityAdded', item))
+    handle('aiReply:backlogPreview', (req) => view.act('aiReply:backlogPreview', req))
+    handle('aiReply:backlogStart', (request) => view.act('aiReply:backlogStart', request))
+    handle('aiReply:backlogStop', () => view.act('aiReply:backlogStop'))
   }
-  // 작품 MCP는 Custom 1에서만 열리지만, 화면이 "No handler"를 받지 않게 처리기는 늘 둔다
+  // 작품 MCP는 맥미니에서 돈다. 여기서는 통로 너머가 답하는지와 맥미니의 작업 기록만 보여 준다.
+  // (본 프로필이 아니어도 화면이 "No handler"를 받지 않게 처리기는 늘 둔다)
   handle('mcp:status', async () => {
     if (PROFILE !== 1) return { running: false, port: 0, url: '', error: null }
-    if (platformSource() !== 'macmini') return mcpStatus()
     const up = await viewClient().reachable()
     return { running: false, port: remotePort(), url: '', error: null, remote: up ? 'up' : 'down' }
   })
   handle('mcp:activity', async (req) => {
     if (PROFILE !== 1) return { items: [] }
-    if (platformSource() !== 'macmini') return mcpActivity(Number(req?.limit) || undefined)
     try {
       const { res, stamp } = await viewClient().read<{ items: McpActivity[] }>(
         'mcp:activity',

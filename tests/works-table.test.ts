@@ -10,8 +10,6 @@ import {
   latestActivity,
   WORK_PLATFORMS
 } from '../src/renderer/src/lib/works-table'
-import { countByGroup } from '../src/main/notifications/work-groups'
-import { worksStatusResult } from '../src/main/works/status-tool'
 import type { EditionRecord } from '../src/shared/work-freshness'
 
 function w(platform: string, id: string, title: string, extra: Partial<InboxWork> = {}): InboxWork {
@@ -241,59 +239,6 @@ describe('낡음: 수집기 시각과 MCP 저장 기록', () => {
   })
 })
 
-describe('works_status 결과', () => {
-  it('플랫폼별 등록·낡음·시각·출처를 저장된 자료만으로 만든다', () => {
-    const out = worksStatusResult({
-      works: data([
-        {
-          key: 'a',
-          title: 'A',
-          thumbnail: null,
-          works: [
-            w('eden', 'e', 'A', { updatedAt: '2026-11-05T00:00:00.000Z' }),
-            w('crack', 'c', 'A')
-          ]
-        }
-      ]),
-      saved: [
-        {
-          site: 'crack',
-          workId: 'c',
-          title: 'A',
-          lastSavedAt: '2026-11-01T00:00:00.000Z',
-          lastTool: 'work_save'
-        }
-      ]
-    }) as { count: number; groups: Record<string, unknown>[]; note: string }
-    expect(out.count).toBe(1)
-    expect(out.groups[0]).toEqual({
-      title: 'A',
-      eden_changed_at: '2026-11-05T00:00:00.000Z',
-      platforms: {
-        eden: {
-          registered: true,
-          work_id: 'e',
-          stale: null,
-          synced_at: '2026-11-05T00:00:00.000Z',
-          source: 'site'
-        },
-        babe: { registered: false, work_id: null, stale: null, synced_at: null, source: null },
-        crack: {
-          registered: true,
-          work_id: 'c',
-          stale: true,
-          synced_at: '2026-11-01T00:00:00.000Z',
-          source: 'mcp'
-        }
-      }
-    })
-    expect(out.note).toContain('플랫폼에 묻지 않아요')
-  })
-  it('자료가 없으면 빈 목록', () => {
-    expect(worksStatusResult({ works: null, saved: [] })).toMatchObject({ count: 0, groups: [] })
-  })
-})
-
 describe('최근 작업', () => {
   const works = [w('eden', 'e1', '비 오는 날'), w('crack', 'c1', '비 오는 날')]
   it('작품 번호(같은 플랫폼) 또는 제목이 맞는 것 중 가장 최근', () => {
@@ -318,35 +263,5 @@ describe('상대 시각', () => {
     expect(agoText('2026-11-10T09:00:00Z', now)).toBe('3시간 전')
     expect(agoText('2026-11-08T12:00:00Z', now)).toBe('2일 전')
     expect(agoText(null, now)).toBe('')
-  })
-})
-
-describe('묶음별 댓글 세기', () => {
-  const groups = [
-    {
-      key: 'a',
-      title: '비 오는 날',
-      thumbnail: null,
-      works: [w('eden', 'e1', '비 오는 날'), w('babe', 'b1', '비 오는 날.')]
-    },
-    { key: 'b', title: '생활비', thumbnail: null, works: [w('babe', 'b2', '생활비')] }
-  ]
-  it('플랫폼+작품 번호, 아니면 정리한 제목으로 붙이고 못 붙인 것은 버린다', () => {
-    expect(
-      countByGroup(groups, [
-        { platform: 'babe', work: { id: 'b1', title: null } },
-        { platform: 'eden', work: { id: 'zz', title: '비 오는  날' } },
-        { platform: 'babe', work: { id: 'b2', title: '엉뚱한 제목' } },
-        { platform: 'crack', work: { id: 'q', title: '모르는 작품' } },
-        { platform: 'crack', work: null }
-      ])
-    ).toEqual({ a: 2, b: 1 })
-  })
-  it('같은 제목이 두 묶음에 있으면 제목으로는 붙이지 않는다', () => {
-    const dup = [
-      { key: 'a', title: '같은', thumbnail: null, works: [w('eden', 'e1', '같은')] },
-      { key: 'b', title: '같은', thumbnail: null, works: [w('crack', 'c1', '같은')] }
-    ]
-    expect(countByGroup(dup, [{ platform: 'babe', work: { id: 'x', title: '같은' } }])).toEqual({})
   })
 })

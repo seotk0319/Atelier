@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, dialog, net, protocol } from 'electron'
+import { app, shell, BrowserWindow, dialog, protocol } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import sharp from 'sharp'
@@ -13,7 +13,6 @@ import { maxCharactersForModel, supportsReferences } from '../shared/nai-models'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
-import { sniffImage, thumbAllowed } from './notifications/work-images'
 import { serveImageFile } from './images/serve'
 import { createPreviewGate } from './nai/preview-gate'
 import { broadcast, registerIpcHandlers } from './ipc'
@@ -34,10 +33,7 @@ import {
 } from './profile'
 import { GenerationQueue } from './queue/generation-queue'
 import { getPresetName, getScene } from './scenes/repo'
-import { startInbox, closeInbox } from './notifications/service'
-import { startMcp, stopMcp } from './mcp/service'
-import { platformSource, viewClient } from './remote/source'
-import { startAiReplies, stopAiReplies } from './ai-reply/service'
+import { viewClient } from './remote/source'
 import { initGpt } from './gpt/service'
 
 // Custom 프로필이면 userData를 먼저 분리 (단일 인스턴스 잠금·DB보다 앞서야 함)
@@ -115,25 +111,14 @@ app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
 
+  // 작품 썸네일은 맥미니가 대신 받아 준다 (이 PC는 플랫폼 이미지 서버에 닿지 않는다)
   protocol.handle('nais-thumb', async (request) => {
     try {
       const image = new URL(request.url).searchParams.get('u') ?? ''
-      if (platformSource() === 'macmini') {
-        const got = /^https:\/\//.test(image) ? await viewClient().thumb(image) : null
-        if (!got) return new Response(null, { status: 404 })
-        return new Response(Buffer.from(got.bytes), {
-          headers: { 'Content-Type': got.type, 'Cache-Control': 'private, max-age=86400' }
-        })
-      }
-      if (!thumbAllowed(image)) return new Response(null, { status: 404 })
-      const response = await net.fetch(image, { redirect: 'error' })
-      if (!response.ok) return new Response(null, { status: 404 })
-      // 크랙처럼 이미지를 binary/octet-stream으로 보내는 서버가 있어 머리 바이트로 형식을 판단한다.
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      const type = sniffImage(bytes)
-      if (!type || bytes.length > 12 * 1024 * 1024) return new Response(null, { status: 404 })
-      return new Response(bytes, {
-        headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=86400' }
+      const got = image.startsWith('https://') ? await viewClient().thumb(image) : null
+      if (!got) return new Response(null, { status: 404 })
+      return new Response(Buffer.from(got.bytes), {
+        headers: { 'Content-Type': got.type, 'Cache-Control': 'private, max-age=86400' }
       })
     } catch {
       return new Response(null, { status: 404 })
@@ -400,14 +385,6 @@ app.whenReady().then(() => {
     (jobs) => broadcast('gpt:changed', { jobs }),
     (item) => broadcast('images:added', item)
   )
-  // 맥미니에서 받는 중이면 이 PC는 알림 수집·사이트 로그인 연장·AI 답글·작품 MCP를 시작하지 않는다
-  // (전부 맥미니의 아틀리에MCP가 한다). 설정을 바꾼 뒤 다시 켜야 적용된다.
-  if (PROFILE === 1 && platformSource() !== 'macmini') {
-    void startInbox()
-    startAiReplies()
-    void startMcp()
-  }
-
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -415,9 +392,7 @@ app.whenReady().then(() => {
   // mac dock 아이콘 (dev 미리보기용 — 패키징 앱은 icns 사용)
   if (process.platform === 'darwin' && app.dock) app.dock.setIcon(appIcon)
 
-  // 서비스 모드(--service): 창 없이 떠서 알림 수집·로그인 연장·작품 MCP만 돈다(맥미니의 아틀리에MCP).
-  // 로그인할 때처럼 화면이 필요하면 Dock 아이콘을 누르면 창이 열린다(activate).
-  if (!process.argv.includes('--service')) createWindow()
+  createWindow()
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -427,20 +402,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
-})
-
-let inboxClosed = false
-app.on('before-quit', (event) => {
-  // 두 번째 실행은 아무것도 시작하지 않았다 — 정리할 것도 없다
-  if (!hasSingleInstanceLock || PROFILE !== 1 || inboxClosed) return
-  event.preventDefault()
-  stopAiReplies()
-  void stopMcp()
-  // Let authenticated ingestion finish its atomic write before exiting.
-  void closeInbox().finally(() => {
-    inboxClosed = true
-    app.quit()
-  })
 })
 
 app.on('quit', () => {
