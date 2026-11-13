@@ -19,12 +19,14 @@ import {
   crackCreateBody,
   crackData,
   crackError,
+  crackExtras,
   crackForm,
   crackJson,
   crackPatchBody,
   crackPlain,
   crackRaw,
   crackReadRaw,
+  crackShapeCheck,
   crackWorkId,
   fromCommon,
   hasSituationImages,
@@ -50,6 +52,7 @@ import {
   crackUploadCover,
   crackUploadImage
 } from './crack-media'
+import { matchOld } from './match-old'
 import type {
   LoreEntry,
   StartScenarioDraft,
@@ -139,7 +142,11 @@ function noteFrom(
     : { id: nanoid(), name: '', prompt: '', keywords: [], startingSetId: sets }
   if (entry.title !== undefined) out.name = entry.title
   if (entry.content !== undefined) out.prompt = entry.content
-  if (entry.keys !== undefined) out.keywords = keyList(entry.keys)
+  // 읽을 때 `, `로 이은 글을 그대로 돌려주면 원래 키워드를 그대로 둔다 (쉼표가 든 키워드가 쪼개지지 않게)
+  // 전체 교체에서 호출한 쪽이 키워드를 적지 않았으면(given에 keys 없음) 짝지은 옛 노트의 키워드를 그대로 둔다
+  const keysGiven = entry.given === undefined || entry.given.includes('keys')
+  if (keysGiven && entry.keys !== undefined && !(base && entry.keys === base.keywords.join(', ')))
+    out.keywords = keyList(entry.keys)
   return out
 }
 type StartExtras = { subPrompt?: string; dialogue?: string }
@@ -149,54 +156,89 @@ function noStartExtras(s: StartExtras): void {
     if (s[key] !== undefined && s[key] !== '') throw new Error('BAD_CHANGES')
 }
 
-function checkForm(form: CrackForm): void {
+/**
+ * 입력 규칙 검사. old(손대기 전 모습)를 주면 바뀌었거나 새로 더한 칸만 본다:
+ * 사이트가 받아 주던 옛 값(한도가 지금과 달랐던 글, 빈 칸 등)은 그대로 보내므로 막지 않는다.
+ */
+function checkForm(form: CrackForm, old?: CrackForm): void {
   const v2 = form.situationImageVersion === 'v2'
-  const field = (name: string, value: string, max: number, required: boolean): void => {
+  const field = (
+    name: string,
+    value: string,
+    max: number,
+    required: boolean,
+    before?: string
+  ): void => {
+    if (before !== undefined && value === before) return
     if ((required && !value.trim()) || value.length > max)
       throw new Error('BAD_FIELD ' + name + (required ? ' 1~' : ' ~') + max + '자')
   }
-  field('title', form.name, LIMITS.name, true)
-  field('subtitle', form.simpleDescription, LIMITS.simpleDescription, true)
-  field('description', form.detailDescription, LIMITS.detailDescription, false)
+  field('title', form.name, LIMITS.name, true, old?.name)
+  field('subtitle', form.simpleDescription, LIMITS.simpleDescription, true, old?.simpleDescription)
+  field('description', form.detailDescription, LIMITS.detailDescription, false, old?.detailDescription)
   const key = mainKey(form)
   const main = key === 'customPrompt' ? text(form.customPrompt) : form.storyDetails
-  field('main', main, LIMITS[key][v2 ? 'v2' : 'v1'], true)
+  field(
+    'main',
+    main,
+    LIMITS[key][v2 ? 'v2' : 'v1'],
+    true,
+    old && (key === 'customPrompt' ? text(old.customPrompt) : old.storyDetails)
+  )
 
-  if (!form.startingSets.length) throw new Error('START_LIMIT')
+  // 옛 작품에 시작 설정이 하나도 없었으면 그대로 둔다 (지우기로는 0개가 되지 않는다: 0번 삭제 막힘)
+  if (!form.startingSets.length && (!old || old.startingSets.length))
+    throw new Error('BAD_START start_scenarios 1개 이상')
   form.startingSets.forEach((s, i) => {
     const where = 'start_scenarios[' + i + ']'
-    if (!s.name.trim() || s.name.length > LIMITS.setName)
-      throw new Error('BAD_START ' + where + '.title 1~' + LIMITS.setName + '자')
+    const was = old?.startingSets.find((x) => x.id === s.id)
+    if (!was || s.name !== was.name)
+      if (!s.name.trim() || s.name.length > LIMITS.setName)
+        throw new Error('BAD_START ' + where + '.title 1~' + LIMITS.setName + '자')
     const first = s.initialMessages[0] ?? ''
-    if (!first.trim() || first.length > LIMITS.initialMessage)
-      throw new Error('BAD_START ' + where + '.content 1~' + LIMITS.initialMessage + '자')
-    if (s.situationPrompt.length > LIMITS.situationPrompt)
-      throw new Error('BAD_START ' + where + '.situation ~' + LIMITS.situationPrompt + '자')
-    if (s.playGuide.length > LIMITS.playGuide)
-      throw new Error('BAD_START ' + where + '.description ~' + LIMITS.playGuide + '자')
+    if (!was || first !== (was.initialMessages[0] ?? ''))
+      if (!first.trim() || first.length > LIMITS.initialMessage)
+        throw new Error('BAD_START ' + where + '.content 1~' + LIMITS.initialMessage + '자')
+    if (!was || s.situationPrompt !== was.situationPrompt)
+      if (s.situationPrompt.length > LIMITS.situationPrompt)
+        throw new Error('BAD_START ' + where + '.situation ~' + LIMITS.situationPrompt + '자')
+    if (!was || s.playGuide !== was.playGuide)
+      if (s.playGuide.length > LIMITS.playGuide)
+        throw new Error('BAD_START ' + where + '.description ~' + LIMITS.playGuide + '자')
   })
 
-  if (form._keywordBook.length > LIMITS.keywordBooks) throw new Error('LOREBOOK_LIMIT')
+  // 개수는 옛 작품보다 늘어난 때만 막는다
+  if (
+    form._keywordBook.length > LIMITS.keywordBooks &&
+    form._keywordBook.length > (old?._keywordBook.length ?? 0)
+  )
+    throw new Error('LOREBOOK_LIMIT')
   form._keywordBook.forEach((k, i) => {
     const where = 'lorebook[' + i + ']'
-    if (!k.name.trim() || k.name.length > LIMITS.keywordName)
-      throw new Error('BAD_LOREBOOK ' + where + '.title 1~' + LIMITS.keywordName + '자')
-    if (!k.prompt.trim() || k.prompt.length > LIMITS.keywordPrompt)
-      throw new Error('BAD_LOREBOOK ' + where + '.content 1~' + LIMITS.keywordPrompt + '자')
-    if (
-      !k.keywords.length ||
-      k.keywords.length > LIMITS.keywords ||
-      k.keywords.some((w) => w.length > LIMITS.keyword)
-    )
-      throw new Error('BAD_LOREBOOK ' + where + '.keys 1~5개, 각 10자')
-    if (!k.startingSetId.length) throw new Error('BAD_LOREBOOK ' + where + ' 적용할 시작 설정 없음')
+    const was = old?._keywordBook.find((x) => x.id === k.id)
+    if (!was || k.name !== was.name)
+      if (!k.name.trim() || k.name.length > LIMITS.keywordName)
+        throw new Error('BAD_LOREBOOK ' + where + '.title 1~' + LIMITS.keywordName + '자')
+    if (!was || k.prompt !== was.prompt)
+      if (!k.prompt.trim() || k.prompt.length > LIMITS.keywordPrompt)
+        throw new Error('BAD_LOREBOOK ' + where + '.content 1~' + LIMITS.keywordPrompt + '자')
+    if (!was || JSON.stringify(k.keywords) !== JSON.stringify(was.keywords))
+      if (
+        !k.keywords.length ||
+        k.keywords.length > LIMITS.keywords ||
+        k.keywords.some((w) => w.length > LIMITS.keyword)
+      )
+        throw new Error('BAD_LOREBOOK ' + where + '.keys 1~5개, 각 10자')
+    if (!was || JSON.stringify(k.startingSetId) !== JSON.stringify(was.startingSetId))
+      if (!k.startingSetId.length)
+        throw new Error('BAD_LOREBOOK ' + where + ' 적용할 시작 설정 없음')
   })
-  for (const s of form.startingSets)
-    if (
-      form._keywordBook.filter((k) => k.startingSetId.includes(s.id)).length >
-      LIMITS.keywordBooksPerSet
-    )
+  for (const s of form.startingSets) {
+    const count = form._keywordBook.filter((k) => k.startingSetId.includes(s.id)).length
+    const before = old?._keywordBook.filter((k) => k.startingSetId.includes(s.id)).length ?? 0
+    if (count > LIMITS.keywordBooksPerSet && count > before)
       throw new Error('LOREBOOK_LIMIT 시작 설정마다 20개')
+  }
 }
 
 /** 편집기 「키워드 노트 추가」: 노트가 20개 찬 시작 설정을 뺀 모든 시작 설정에 적용한다 */
@@ -217,7 +259,159 @@ interface CrackNext extends CrackRaw {
 
 export const crackWorks: WorkAdapter = {
   id: 'crack',
+  // 서버가 저장마다 시작 설정을 새 번호로 다시 만든다 (2026-11-13 실제 저장에서 확인)
+  rawIgnore: [/^story\.startingSets\[_id=[^\]]*\]/, /^visibilityOnly$/, /^story\.storyDetails$/],
   label: '크랙',
+  features: {
+    title: { site: 'yes', read: 'yes', write: 'yes', verified: 'yes', note: '이름 1~30자' },
+    description: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '상세 설명 1000자'
+    },
+    main_prompt: {
+      site: 'yes',
+      read: 'yes',
+      write: 'partial',
+      verified: 'yes',
+      note: '커스텀7000·스토리5000(상황 이미지 있으면 5000·3000)'
+    },
+    first_message: {
+      site: 'yes',
+      read: 'partial',
+      write: 'yes',
+      verified: 'yes',
+      note: '프롤로그 1000자, 첫 메시지만 읽음'
+    },
+    start_scenarios: {
+      site: 'yes',
+      read: 'partial',
+      write: 'partial',
+      verified: 'partial',
+      note: '스탯·엔딩·추천 답변은 개수만, 0번 삭제 불가'
+    },
+    lorebook: {
+      site: 'yes',
+      read: 'partial',
+      write: 'partial',
+      verified: 'yes',
+      note: '노트 20자·본문 400자·키 5개, 적용 범위 안 보임'
+    },
+    characters: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'yes',
+      note: '캐릭터 개념 없음'
+    },
+    example_dialogue: {
+      site: 'unknown',
+      read: 'partial',
+      write: 'no',
+      verified: 'no',
+      note: '개수만 보이고 저장 때 되돌려 보냄'
+    },
+    user_persona: {
+      site: 'unknown',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '제작 화면에서 칸을 못 찾음'
+    },
+    output_rules: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '전용 칸 없음, 메인에 포함'
+    },
+    situation_images: {
+      site: 'yes',
+      read: 'yes',
+      write: 'blocked',
+      verified: 'partial',
+      note: '올리기·지우기는 사이트에서 직접'
+    },
+    cover: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '2:3 비율만, 5MB'
+    },
+    tags: {
+      site: 'yes',
+      read: 'yes',
+      write: 'partial',
+      verified: 'partial',
+      note: '읽기는 extras, 쓰기는 새 작품 때만(10개)'
+    },
+    visibility: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'partial',
+      note: 'public 전환은 확인 못 함'
+    },
+    create_work: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '비공개로만 생성, 대표 이미지 필수'
+    },
+    delete_work: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '콘텐츠 번호로 삭제'
+    },
+    versioning_review: {
+      site: 'yes',
+      read: 'partial',
+      write: 'no',
+      verified: 'partial',
+      note: '저장마다 버전+1, 공개작은 검수'
+    },
+    language_editions: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'yes',
+      note: '언어 판본 없음'
+    },
+    bgm_voice: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '편집 탭에 없음'
+    },
+    jsx_html: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '편집 탭에 없음'
+    },
+    model_settings: {
+      site: 'yes',
+      read: 'yes',
+      write: 'partial',
+      verified: 'partial',
+      note: '읽기는 extras, 쓰기는 새 작품 options만'
+    },
+    comments_stats: {
+      site: 'yes',
+      read: 'partial',
+      write: 'no',
+      verified: 'partial',
+      note: '댓글 닫기 여부만 extras, 통계는 안 줌'
+    }
+  },
   guide: {
     save: '저장은 편집기의 「수정 → 등록」과 같아서 저장할 때마다 게시본 버전이 오른다(되돌릴 수 없다). 공개 작품은 검수를 거친다.',
     manual: ['상황 이미지 올리기·지우기·순서', '2차 창작 템플릿의 메인'],
@@ -302,6 +496,7 @@ export const crackWorks: WorkAdapter = {
     const key = mainKey(form)
     const version = isObj(story.updateInfo) ? story.updateInfo.version : null
     const updated = strOrNull(story.updatedAt)
+    const { extras, unsupported } = crackExtras(story, form)
     return {
       id,
       title: form.name,
@@ -334,7 +529,9 @@ export const crackWorks: WorkAdapter = {
         situation: s.situationPrompt,
         description: s.playGuide
       })),
-      characters: []
+      characters: [],
+      extras,
+      unsupported
     }
   },
 
@@ -343,6 +540,8 @@ export const crackWorks: WorkAdapter = {
     const next = structuredClone(base) as CrackNext
     const story = next.story
     const form = crackForm(story)
+    // 손대기 전 모습 (저장 때 바뀌었거나 새로 더한 항목만 검사하려고 같은 번호로 복사해 둔다)
+    const original = structuredClone(form)
     const empty = (v: unknown): boolean =>
       v === undefined || (Array.isArray(v) && !v.length) || (isObj(v) && !Object.keys(v).length)
     const onlyVisibility =
@@ -387,7 +586,26 @@ export const crackWorks: WorkAdapter = {
     if (changes.lorebook) {
       const old = notes
       const all = form.startingSets.map((s) => s.id)
-      notes = changes.lorebook.map((e, i) => noteFrom(e, old[i], all))
+      // 제목(과 본문)으로 짝지어 옛 노트의 번호·적용 시작 설정을 물려준다 (짝이 없으면 새 노트: 모든 시작 설정에 적용)
+      // 이름만 바꾼 노트는 새 제목이 옛 노트 어디에도 없고 본문이 같은 옛 노트로 짝짓는다 (엉뚱한 자리의 적용 범위를 물려받지 않게)
+      const oldNames = new Set(old.map((k) => k.name))
+      const newTitles = new Set(changes.lorebook.map((e) => e.title ?? ''))
+      const claimed = new Set<number>()
+      const titles = changes.lorebook.map((e) => {
+        const title = e.title ?? ''
+        if (oldNames.has(title) || !e.content) return title
+        const j = old.findIndex(
+          (k, n) => !claimed.has(n) && !newTitles.has(k.name) && k.prompt === e.content
+        )
+        if (j < 0) return title
+        claimed.add(j)
+        return old[j].name
+      })
+      const paired = matchOld(titles, old, (k) => k.name, {
+        contents: changes.lorebook.map((e) => e.content),
+        contentOf: (k) => k.prompt
+      })
+      notes = changes.lorebook.map((e, i) => noteFrom(e, paired[i], all))
     }
     for (const patch of changes.lorebookPatch ?? []) {
       const i = at(patch.index, notes.length)
@@ -414,8 +632,9 @@ export const crackWorks: WorkAdapter = {
       noStartExtras(patch)
       const s = { ...sets[i] }
       if (patch.title !== undefined) s.name = patch.title
-      // 편집기 프롤로그 칸: 고치면 첫 메시지 하나로 바뀐다
-      if (patch.content !== undefined) s.initialMessages = [patch.content]
+      // 첫 메시지만 바꾸고 두 번째 이후 프롤로그는 원본 그대로 둔다 (읽기에 안 보이는 값이 저장으로 지워지지 않게)
+      if (patch.content !== undefined && patch.content !== (s.initialMessages[0] ?? ''))
+        s.initialMessages = [patch.content, ...s.initialMessages.slice(1)]
       if (patch.situation !== undefined) s.situationPrompt = patch.situation
       if (patch.description !== undefined) s.playGuide = patch.description
       sets[i] = s
@@ -439,7 +658,9 @@ export const crackWorks: WorkAdapter = {
     if (JSON.stringify(sets) !== setsBefore) touched = true
 
     if (touched) {
-      checkForm(form)
+      // 저장 본문(crackPatchBody)을 지을 수 없는 원본이면 계획 단계에서 멈춘다 (계획이 소비된 뒤에 걸리지 않게)
+      crackShapeCheck(story)
+      checkForm(form, original)
       story.startingSets = setsFromForm(story, form)
     }
     if (changes.visibility !== undefined && onlyVisibility) next.visibilityOnly = true

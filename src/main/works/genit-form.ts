@@ -52,6 +52,12 @@ export function basePrompt(value: unknown): { base: string; byModel: boolean } {
   return { base: t, byModel: false }
 }
 
+/** 원본에 있는 글 값 그대로. 비어 있으면 기본값을 지어내지 않고 멈춘다 */
+const present = (v: unknown, what: string): string => {
+  if (typeof v !== 'string' || !v.trim()) throw new Error('WORK_SHAPE ' + what)
+  return v
+}
+
 const truthy = (v: unknown): boolean | undefined => {
   if (typeof v === 'boolean') return v
   if (typeof v === 'number') return v === 1 ? true : v === 0 ? false : undefined
@@ -82,6 +88,28 @@ export function tierPrompts(
     const { prompt, active } = prompts.get(k)!
     return active || prompt.trim() ? [{ tier_key: k, is_active: active, prompt }] : []
   })
+}
+
+/**
+ * 이미 저장 모양([{tier_key, is_active, prompt}])인 목록은 줄바꿈·순서·빈 항목을 손대지 않고 그대로 쓴다.
+ * 다른 모양(옛 형식)이거나 목록이 아니면 null → tierPrompts가 저장 모양으로 바꾼다.
+ */
+function savedTierPrompts(
+  v: unknown
+): { tier_key: string; is_active: boolean; prompt: string }[] | null {
+  if (!Array.isArray(v)) return null
+  const rows: { tier_key: string; is_active: boolean; prompt: string }[] = []
+  for (const e of v) {
+    if (
+      !isObj(e) ||
+      typeof e.tier_key !== 'string' ||
+      typeof e.is_active !== 'boolean' ||
+      typeof e.prompt !== 'string'
+    )
+      return null
+    rows.push({ tier_key: e.tier_key, is_active: e.is_active, prompt: e.prompt })
+  }
+  return rows
 }
 
 /** 편집기의 iC: 배열·JSON 글·한 값 → 글 배열 */
@@ -190,14 +218,14 @@ export function genitProfiles(c: Obj): { id: string | null; url: string; fileNam
 
 function greetingsJson(c: Obj): string {
   return JSON.stringify(
+    // 편집기는 제목·본문이 빈 시작 상황을 빼고 보내지만, 손대지 않은 옛 항목을 몰래 지우지 않도록 여기서는 거르지 않는다.
+    // 바꾸는 칸이나 더하는 항목이 비었는지는 applyChanges가 막는다(안 바꾼 칸은 검사하지 않는다).
     list(version(c).greetings)
-      // 편집기는 제목과 본문이 모두 있는 시작 상황만 보낸다
-      .filter((g) => text(g.title).trim() && lf(g.content).trim())
       .map((g, i) => {
         const title = text(g.title)
-        const content = lf(g.content)
-        const background = lf(g.background)
-        const volatility = lf(g.volatility_background)
+        const content = text(g.content)
+        const background = text(g.background)
+        const volatility = text(g.volatility_background)
         const questions = strings(g.sample_questions)
         const description = text(g.description)
         // updateCharacter의 시작 상황 모양 (언어별 칸은 편집기와 같게 같은 글로 채운다)
@@ -228,9 +256,14 @@ function greetingsJson(c: Obj): string {
   )
 }
 
-/** 로어북 저장 모양. 비면 null (편집기는 빈 로어북을 보내지 않는다) */
+/**
+ * 로어북 저장 모양. 비면 null (편집기는 빈 로어북을 보내지 않는다).
+ * (2026-11-13) 원본에 칸이 없는 옛 항목은 지금까지 실제 저장에 쓰인 기본값으로 채운다: 칸을 빼고 보내는 것은 확인된 적이 없다.
+ * 원본에 있는 칸은 값 그대로 보내고(고정 true·'미설정' 같은 기본값으로 바꾸지 않는다), 없는 칸은 싣지 않는다.
+ * 새 항목은 loreFresh가 칸을 모두 채워 둔다.
+ */
 function lorebooksJson(c: Obj): string | null {
-  const rows = list(c.lorebooks).filter((l) => text(l.title).trim() || text(l.description).trim())
+  const rows = list(c.lorebooks)
   if (!rows.length) return null
   return JSON.stringify(
     rows.map((l) => ({
@@ -238,9 +271,9 @@ function lorebooksJson(c: Obj): string | null {
       description: l.description,
       display_description: l.display_description ?? '',
       keywords: Array.isArray(l.keywords) ? l.keywords : [],
-      is_active: l.is_active !== false,
+      is_active: l.is_active,
       is_hidden: l.is_hidden ?? true,
-      is_pinned: true,
+      is_pinned: l.is_pinned ?? true,
       category: l.category ?? LORE_UNSET,
       recall_cue: l.recall_cue ?? '',
       status: l.status ?? ''
@@ -248,34 +281,31 @@ function lorebooksJson(c: Obj): string | null {
   )
 }
 
-const short = (v: unknown): string => text(v).trim().slice(0, 500)
+// 글 칸은 원본 그대로 보낸다(앞뒤 공백 정리·500자 자르기·이름 빈 캐릭터 빼기를 하지 않는다).
+// 이름을 바꾸거나 캐릭터를 더할 때 이름이 비었는지는 applyChanges가 막는다(이름이 빈 옛 캐릭터는 이름을 안 바꾸는 한 그대로 간다).
 function castJson(c: Obj): string {
   return JSON.stringify(
-    list(version(c).cast_members).flatMap((m, i) => {
-      const name = text(m.name).trim()
-      if (!name) return []
+    list(version(c).cast_members).map((m, i) => {
       const url = text(m.profile_url).trim()
       const file = text(m.profile_filename).trim()
       const draft = text(m.draft_asset_id).trim()
-      return [
-        {
-          id: m.id,
-          name,
-          codename: text(m.codename).trim(),
-          history: (text(m.history) || text(m.description)).trim(),
-          introduction: text(m.introduction).trim(),
-          initial_journal: short(m.initial_journal),
-          background: short(m.background),
-          aliases: Array.isArray(m.aliases) ? m.aliases : [],
-          keywords: Array.isArray(m.keywords) ? m.keywords : [],
-          // 편집기: 초안 에셋 > 주소 > 파일 이름 순으로 하나만 남긴다
-          profile_filename: draft || url ? undefined : file || undefined,
-          profile_url: draft ? undefined : url || undefined,
-          draft_asset_id: draft || undefined,
-          is_active: m.is_active !== false,
-          display_order: i
-        }
-      ]
+      return {
+        id: m.id,
+        name: text(m.name),
+        codename: text(m.codename),
+        history: text(m.history) || text(m.description),
+        introduction: text(m.introduction),
+        initial_journal: text(m.initial_journal),
+        background: text(m.background),
+        aliases: Array.isArray(m.aliases) ? m.aliases : [],
+        keywords: Array.isArray(m.keywords) ? m.keywords : [],
+        // 편집기: 초안 에셋 > 주소 > 파일 이름 순으로 하나만 남긴다
+        profile_filename: draft || url ? undefined : file || undefined,
+        profile_url: draft ? undefined : url || undefined,
+        draft_asset_id: draft || undefined,
+        is_active: m.is_active,
+        display_order: i
+      }
     })
   )
 }
@@ -382,41 +412,55 @@ export function genitForm(raw: unknown, parts: GenitFormParts): FormField[] {
     out.push({ name, value })
   }
   const name = text(c.name)
-  const description = lf(c.description)
+  // 손대지 않은 글의 줄바꿈(CRLF)을 바꾸지 않는다. 읽을 때만 LF로 본다(basePrompt)
+  const description = text(c.description)
   add('name', name)
   add('name_ko', name)
   add('description', description)
   add('description_ko', description)
   add('short_intro', text(c.short_intro))
+  // 원본 값 그대로 (모르면 false). 켜 둔 작품이 다른 저장에 딸려 꺼지지 않게 한다
+  const submodel = String(truthy(v.use_submodel) ?? false)
 
   if (parts.content) {
     const prompt = basePrompt(c.character_prompt)
     // 모델별 JSON 프롬프트는 편집기가 저장 때 모양을 바꾸는 옛 형식이라 건드리지 않는다
     if (prompt.byModel) throw new Error('PROMPT_SHAPE')
-    const tiers = tierPrompts(v.tier_prompts)
+    // 시작 상황·캐릭터 목록을 원본에서 못 읽었으면(칸이 없음) 빈 목록을 보내 지우지 않고 멈춘다. null은 "없음"으로 읽는다
+    for (const key of ['greetings', 'cast_members'])
+      if (!(Array.isArray(v[key]) || v[key] === null)) throw new Error('WORK_SHAPE ' + key)
+    const tiers = savedTierPrompts(v.tier_prompts) ?? tierPrompts(v.tier_prompts)
     const useTiers = truthy(v.use_tier_prompts) ?? tiers.length > 0
-    add('character_prompt', prompt.base)
+    // 평범한 글이면 원본 그대로 (basePrompt는 읽기용으로 줄바꿈을 LF로 바꾼다)
+    add('character_prompt', text(c.character_prompt))
     add('tier_prompts', JSON.stringify(tiers))
     add('use_tier_prompts', String(useTiers))
-    add('use_submodel', 'false')
-    add('usage_guide', lf(v.usage_guide))
+    add('use_submodel', submodel)
+    add('usage_guide', text(v.usage_guide))
     add('html_templates', JSON.stringify(Array.isArray(v.html_templates) ? v.html_templates : []))
     add('template_values', templateValuesJson(v))
-  } else add('use_submodel', 'false')
+  } else add('use_submodel', submodel)
 
-  add('type', text(c.type) || 'character')
-  add('prompt_type', text(c.prompt_type) || 'custom')
+  // 원본에 없는 값을 기본값으로 지어 보내지 않는다 (유형·성별·성인 여부·공개 범위가 몰래 바뀐다)
+  add('type', present(c.type, 'type'))
+  add('prompt_type', present(c.prompt_type, 'prompt_type'))
   const tiersDefault = stringList(c.default_model_tiers ?? v.default_model_tiers)
     .map((t) => t.trim())
     .filter(Boolean)
   if (tiersDefault.length) for (const t of tiersDefault) add('default_model_tiers', t)
   else add('default_model_tiers', '[]')
-  add('gender', text(c.gender) || 'male')
+  add('gender', present(c.gender, 'gender'))
   const publish = Number(c.publish_type)
+  // 공개 범위를 모르면 공개(1)로 보내지 않고 멈춘다
+  if (!(publish in PUBLISH_TYPES) && publish !== 4) throw new Error('WORK_SHAPE publish_type')
   // 4(작업 사본)는 편집기도 보내지 않는다
-  if (publish !== 4) add('publish_type', String([2, 3, 4].includes(publish) ? publish : 1))
-  add('is_adult', String(c.is_adult === true))
-  add('is_active', String(c.is_active !== false))
+  if (publish !== 4) add('publish_type', String(publish))
+  const adult = truthy(c.is_adult)
+  const active = truthy(c.is_active)
+  if (adult === undefined) throw new Error('WORK_SHAPE is_adult')
+  if (active === undefined) throw new Error('WORK_SHAPE is_active')
+  add('is_adult', String(adult))
+  add('is_active', String(active))
 
   if (parts.content) add('greetings', greetingsJson(c))
   for (const file of parts.profiles?.add ?? []) out.push({ name: 'profile_image_files', file })

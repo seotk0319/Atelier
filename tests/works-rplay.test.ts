@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rplayApplyChanges, rplayWorks } from '../src/main/works/rplay'
-import type { WorkFetch, WorkIo, WorkWrite } from '../src/main/works/types'
+import type { LoreEntry, WorkFetch, WorkIo, WorkWrite } from '../src/main/works/types'
 
 // 가짜 응답 모양은 2026-11-10 rplay.live 편집기 스크립트에서 읽은 필드를 따른다
 // (chat-content의 canvasOid·status·isPrivate, localization 응답 {storyChat:{localization:{revision, sourceLanguage}}},
@@ -600,7 +600,7 @@ describe('알플레이 고치기', () => {
     const draft = structuredClone(raw) as { content: Obj }
     draft.content.status = 'wip'
     expect(() => rplayApplyChanges(draft, { visibility: 'public' })).toThrow('NOT_PUBLISHED')
-    // 전체 교체: 같은 노드 이름이면 앞에서부터 고친다
+    // 전체 교체: 제목이 같은 옛 항목과 짝지어 고친다. 안 준 값(null)은 옛 값 그대로 (예전에는 keyword·1턴으로 되돌렸다)
     const whole = rplayWorks.normalize(
       change({
         lorebook: [
@@ -623,7 +623,7 @@ describe('알플레이 고치기', () => {
         content: 'A',
         mode: 'keyword',
         offKeys: [],
-        turnRange: 1,
+        turnRange: 3,
         offTurnRange: null
       }
     ])
@@ -711,5 +711,667 @@ describe('알플레이 새 작품', () => {
     expect(() =>
       rplayWorks.checkDraft!({ ...draft, startScenarios: [{ content: 'x', dialogue: 'y' }] })
     ).toThrow('BAD_CHANGES')
+  })
+})
+
+// 바꾸려던 칸만 바뀌고 나머지는 원본 그대로 가는지 (모든 값은 지어낸 것)
+type Raw = {
+  content: Obj
+  localization: Obj
+  canvas: { nodes: Obj[]; connections: Obj[] }
+  metadataSet: Record<string, Obj>
+}
+const metaOf = (raw: unknown, oid: string): Obj => (raw as Raw).metadataSet[oid]
+
+describe('알플레이 기능 표·숨은 설정·못 읽는 칸', () => {
+  const KEYS = [
+    'title',
+    'description',
+    'main_prompt',
+    'first_message',
+    'start_scenarios',
+    'lorebook',
+    'characters',
+    'example_dialogue',
+    'user_persona',
+    'output_rules',
+    'situation_images',
+    'cover',
+    'tags',
+    'visibility',
+    'create_work',
+    'delete_work',
+    'versioning_review',
+    'language_editions',
+    'bgm_voice',
+    'jsx_html',
+    'model_settings',
+    'comments_stats'
+  ]
+  const U1 = hx(331)
+  const readRaw = async (): Promise<Raw> => {
+    const s = site()
+    return (await rplayWorks.readRaw(s.read, W)) as unknown as Raw
+  }
+
+  it('기능 표는 22개 열쇠를 다 갖고 note는 40자 이내다', () => {
+    const features = rplayWorks.features!
+    expect(Object.keys(features).sort()).toEqual([...KEYS].sort())
+    for (const f of Object.values(features)) expect((f.note ?? '').length).toBeLessThanOrEqual(40)
+    expect(features.tags).toMatchObject({ read: 'yes', write: 'partial' })
+    expect(features.cover).toMatchObject({ read: 'partial', write: 'blocked' })
+    expect(features.versioning_review).toMatchObject({ read: 'no', write: 'blocked' })
+    // extras가 개수·글자 수를 읽는 칸은 "no"가 아니다
+    expect(features.user_persona.read).toBe('partial')
+    expect(features.example_dialogue.read).toBe('partial')
+    expect(features.language_editions).toMatchObject({ read: 'partial', write: 'no' })
+    expect(features.output_rules.site).toBe('no')
+  })
+
+  it('원본에 없는 칸은 싣지 않는다', async () => {
+    const body = rplayWorks.normalize(await readRaw())
+    expect(body.extras).toEqual({
+      localization_enabled: false,
+      source_language: 'ko',
+      later_story_creator_notice_count: 0,
+      user_node_count: 0,
+      user_text_length: 0,
+      image_node_count: 0
+    })
+  })
+
+  it('짧은 값은 그대로, 긴 글은 글자 수, 목록은 개수로 싣고 본문·통계는 싣지 않는다', async () => {
+    const raw = await readRaw()
+    Object.assign(raw.content, {
+      hashtags: ['태그가', '태그나'],
+      generatedHashtags: [],
+      isAdultContent: true,
+      advancedSettings: { liteMode: false, promptInputExpansionSteps: 6, memo: '문자열은 뺀다' },
+      promptInputExpansionSteps: 6,
+      thumbnailAsset: { s3Key: 'thumbnail/x.webp', name: '표지 파일' },
+      introVideo: null,
+      isCanvasPublic: false,
+      price: 0,
+      onlyForSubscribers: false,
+      isOriginalStory: false,
+      originalStoryLockedUntil: null,
+      collaborators: { a: {} },
+      blocked: { isBlocked: false, reason: '' },
+      achievements: [{}, {}],
+      needsCompilation: true,
+      compiled: { version: 2, error: false },
+      publishedAt: '2026-01-02T00:00:00.000Z',
+      multiLangCanvases: { ko: CANVAS, en: hx(299) },
+      mainCanvasLanguage: 'ko',
+      // 통계: 읽을 때마다 달라져 계획이 낡은 것으로 보이게 하므로 싣지 않는다
+      likes: 12,
+      chatCount: 99,
+      numComments: 3
+    })
+    Object.assign(raw.canvas, {
+      compilerVersion: 3,
+      imageTaggingMethod: 2,
+      useKRJPGuidelines: true,
+      embeddingModel: 'test/embed-model',
+      compiledDate: '2026-01-01T00:00:00.000Z',
+      characterSpeechStyles: { a: 1, b: 2 }
+    })
+    ;(raw.canvas.nodes as Obj[]).push({ uid: 'u-user', type: 'user', metadataOid: U1 })
+    raw.metadataSet[U1] = { _id: U1, type: 'user', text: '가나다라마' }
+    Object.assign(metaOf(raw, S1), {
+      plotSummary: '줄거리 글',
+      presetNoteNodes: [],
+      statusViewNodes: [{}, {}],
+      achievementNodes: [{}]
+    })
+    metaOf(raw, S2).creatorNotice = '둘째 공지'
+    Object.assign(metaOf(raw, C1), {
+      simplifiedIntro: '짧은 소개 글',
+      startingDialogue: '',
+      hoverDescription: '호버 글',
+      hiddenInPreview: true
+    })
+    ;(raw.localization.localization as Obj).entries = { ko: {}, en: {} }
+    const body = rplayWorks.normalize(raw)
+    expect(body.extras).toEqual({
+      hashtag_count: 2,
+      hashtags: ['태그가', '태그나'],
+      is_adult_content: true,
+      advanced_settings: { liteMode: false, promptInputExpansionSteps: 6 },
+      prompt_input_expansion_steps: 6,
+      canvas_compiler_version: 3,
+      image_tagging_method: 2,
+      use_kr_jp_guidelines: true,
+      embedding_model: 'test/embed-model',
+      has_thumbnail: true,
+      has_intro_video: false,
+      is_canvas_public: false,
+      only_for_subscribers: false,
+      price: 0,
+      is_original_story: false,
+      collaborator_count: 1,
+      is_blocked: false,
+      achievement_count: 2,
+      published_at: '2026-01-02T00:00:00.000Z',
+      localization_enabled: false,
+      source_language: 'ko',
+      localization_languages: ['ko', 'en'],
+      canvas_languages: ['ko', 'en'],
+      main_canvas_language: 'ko',
+      story_preset_note_count: 0,
+      story_status_view_count: 2,
+      story_achievement_node_count: 1,
+      story_plot_summary_count: 1,
+      later_story_creator_notice_count: 1,
+      character_simplified_intro_count: 1,
+      character_hover_description_count: 1,
+      character_starting_dialogue_count: 0,
+      character_hidden_in_preview_count: 1,
+      user_node_count: 1,
+      user_text_length: 5,
+      image_node_count: 0,
+      character_speech_style_count: 2
+    })
+    // 본문·계정 번호·표지 파일 이름·통계는 어디에도 없다
+    const dump = JSON.stringify(body.extras)
+    for (const leaked of ['메인 프롬프트', '상세 설명', '가나다라마', '둘째 공지', '표지 파일', ME, 'thumbnail/x'])
+      expect(dump).not.toContain(leaked)
+    for (const k of ['likes', 'chat_count', 'num_comments']) expect(body.extras).not.toHaveProperty(k)
+    // 컴파일 상태·시각과 사이트가 만든 해시태그 수는 사이트가 계획과 저장 사이에 바꾸므로 싣지 않는다
+    for (const k of [
+      'needs_compilation',
+      'compiled_version',
+      'compile_error',
+      'compiled_at',
+      'generated_hashtag_count'
+    ])
+      expect(body.extras).not.toHaveProperty(k)
+  })
+
+  it('긴 목록·긴 글은 개수만 싣고 못 읽는 칸을 안내한다', async () => {
+    const raw = await readRaw()
+    raw.content.hashtags = Array.from({ length: 25 }, (_, i) => '태그' + i)
+    raw.content.originalStoryLockedUntil = '가'.repeat(81)
+    ;(raw.canvas as Obj).embeddingModel = '나'.repeat(81)
+    const body = rplayWorks.normalize(raw)
+    expect(body.extras).toMatchObject({ hashtag_count: 25 })
+    for (const k of ['hashtags', 'original_story_locked_until', 'embedding_model'])
+      expect(body.extras).not.toHaveProperty(k)
+    expect(body.unsupported).toEqual(expect.arrayContaining(['댓글', '통계(좋아요·대화 수)', '수정 시각']))
+    // 읽게 된 칸은 못 읽는 칸에 없다
+    for (const readable of ['태그', '해시태그', '성인 표시', '고급 설정', '작품 고급 설정'])
+      expect(body.unsupported).not.toContain(readable)
+  })
+
+  it('extras·unsupported를 더해도 계획이 보는 칸과 바뀐 뒤 값은 달라지지 않는다', async () => {
+    const raw = await readRaw()
+    const before = rplayWorks.normalize(raw)
+    const next = rplayApplyChanges(raw, { fields: { title: '새 제목' } })
+    const after = rplayWorks.normalize(next)
+    expect(after.extras).toEqual(before.extras)
+    expect(after.unsupported).toEqual(before.unsupported)
+    expect(after.fields.title).toBe('새 제목')
+    expect(after.lorebook).toEqual(before.lorebook)
+  })
+
+  it('사이트가 읽는 사이에 바꾸는 값(컴파일 상태·시각·통계·생성 태그)이 달라도 계획이 보는 본문은 같다', async () => {
+    const raw = await readRaw()
+    Object.assign(raw.content, {
+      likes: 1,
+      chatCount: 1,
+      numComments: 1,
+      needsCompilation: false,
+      compiled: { version: 1, error: false },
+      generatedHashtags: []
+    })
+    Object.assign(raw.canvas, { compiledDate: '2026-01-01T00:00:00.000Z' })
+    const first = JSON.stringify({ ...rplayWorks.normalize(raw), updatedAt: null })
+    Object.assign(raw.content, {
+      likes: 2,
+      chatCount: 50,
+      numComments: 9,
+      needsCompilation: true,
+      compiled: { version: 2, error: true },
+      generatedHashtags: ['생성 태그']
+    })
+    Object.assign(raw.canvas, { compiledDate: '2026-01-01T00:02:00.000Z' })
+    // work_plan의 frozen()이 이 글을 견준다
+    expect(JSON.stringify({ ...rplayWorks.normalize(raw), updatedAt: null })).toBe(first)
+  })
+})
+
+describe('알플레이 저장은 바꾼 칸만 건드린다', () => {
+  const read = async (): Promise<{ raw: Raw; s: ReturnType<typeof site> }> => {
+    const s = site()
+    return { raw: (await rplayWorks.readRaw(s.read, W)) as unknown as Raw, s }
+  }
+  const whole = (body: ReturnType<typeof rplayWorks.normalize>): Parameters<typeof rplayApplyChanges>[1] => ({
+    lorebook: body.lorebook
+  })
+
+  it('전체 교체: 앞에 새 항목을 끼워도 옛 항목의 숨은 값이 엉뚱한 항목에 붙지 않는다', async () => {
+    const { raw } = await read()
+    const old = structuredClone(metaOf(raw, L1).entries)
+    const body = rplayWorks.normalize(raw)
+    const next = rplayApplyChanges(raw, {
+      lorebook: [
+        {
+          title: '사건',
+          keys: '비',
+          content: '비 오는 날',
+          mode: null,
+          offKeys: [],
+          turnRange: null,
+          offTurnRange: null
+        },
+        ...body.lorebook.map((e) => ({ ...e, mode: null, turnRange: null }))
+      ]
+    })
+    // 짝 있는 옛 항목: 우선순위·토큰 수·발동 방식·유지 턴이 그대로
+    expect(metaOf(next, L1).entries).toEqual(old)
+    // 짝 없는 새 항목: 옛 항목을 물려받지 않고 새 노드의 새 항목
+    const made = (next.canvas.nodes as Obj[]).filter((n) => n.type === 'lorebook' && n.uid !== 'u-l1')
+    expect(made).toHaveLength(1)
+    expect(metaOf(next, String(made[0].metadataOid))).toMatchObject({
+      title: '사건',
+      entries: [
+        {
+          key: '비',
+          patterns: ['비'],
+          text: '비 오는 날',
+          priority: 1,
+          durationTurns: 1,
+          activationMode: 'keyword'
+        }
+      ]
+    })
+    expect(metaOf(next, String(made[0].metadataOid)).entries).not.toContainEqual(
+      expect.objectContaining({ tokenCount: 5 })
+    )
+  })
+
+  it('전체 교체: 안 준 발동 방식·유지 턴·발동 단어는 옛 값 그대로', async () => {
+    const { raw } = await read()
+    const next = rplayApplyChanges(raw, {
+      lorebook: [
+        {
+          title: '장소',
+          keys: '',
+          content: '학교 설명 고침',
+          mode: null,
+          offKeys: [],
+          turnRange: null,
+          offTurnRange: null
+        },
+        {
+          title: '장소',
+          keys: '',
+          content: '늘 켜짐',
+          mode: null,
+          offKeys: [],
+          turnRange: null,
+          offTurnRange: null
+        }
+      ]
+    })
+    const [a, b] = metaOf(next, L1).entries as Obj[]
+    expect(a).toMatchObject({
+      patterns: ['학교', '교실'],
+      key: '학교|교실',
+      text: '학교 설명 고침',
+      durationTurns: 3,
+      priority: 2,
+      tokenCount: 5
+    })
+    expect(b).toMatchObject({ activationMode: 'always', text: '늘 켜짐', durationTurns: 1 })
+  })
+
+  it('전체 교체: 제목만 고친 자리는 옛 항목의 숨은 값을 이어 새 이름 노드로 옮긴다', async () => {
+    const { raw } = await read()
+    const body = rplayWorks.normalize(raw)
+    const next = rplayApplyChanges(raw, {
+      lorebook: [{ ...body.lorebook[0], title: '교정', mode: null, turnRange: null }]
+    })
+    const made = (next.canvas.nodes as Obj[]).find((n) => n.type === 'lorebook' && n.uid !== 'u-l1')!
+    const m = metaOf(next, String(made.metadataOid))
+    expect(m.title).toBe('교정')
+    expect(m.entries).toMatchObject([{ priority: 2, tokenCount: 5, durationTurns: 3 }])
+    // 옛 노드에는 항목이 남지 않는다
+    expect(metaOf(next, L1).entries).toEqual([])
+    // 새 노드는 옛 노드가 이어져 있던 곳(첫 스토리)에만 이어진다. 모든 스토리에 잇지 않는다
+    const links = (next.canvas.connections as Obj[]).filter((c) => c.sourceNodeId === made.uid)
+    expect(links.map((c) => [c.targetNodeId, c.connectionType, c.targetInputIndex])).toEqual([
+      ['u-s1', 'lorebook', 3]
+    ])
+  })
+
+  it('전체 교체: 지우고 새로 넣은 항목은 같은 자리 옛 항목의 값을 물려받지 않는다', async () => {
+    const { raw } = await read()
+    const body = rplayWorks.normalize(raw)
+    // 둘째 옛 항목(늘 켜짐, always)을 지우고 같은 자리에 다른 제목의 새 항목을 넣는다 (mode·turn_range 안 적음)
+    const next = rplayApplyChanges(raw, {
+      lorebook: [
+        { ...body.lorebook[0], mode: null, turnRange: null },
+        {
+          title: '인물',
+          keys: '비',
+          content: '전혀 다른 글',
+          mode: null,
+          offKeys: [],
+          turnRange: null,
+          offTurnRange: null,
+          given: ['title', 'keys', 'content']
+        }
+      ]
+    })
+    const made = (next.canvas.nodes as Obj[]).find((n) => n.type === 'lorebook' && n.uid !== 'u-l1')!
+    expect(metaOf(next, String(made.metadataOid))).toMatchObject({
+      title: '인물',
+      entries: [
+        {
+          key: '비',
+          patterns: ['비'],
+          text: '전혀 다른 글',
+          tokenCount: 0,
+          priority: 1,
+          durationTurns: 1,
+          activationMode: 'keyword'
+        }
+      ]
+    })
+    expect(metaOf(next, L1).entries).toHaveLength(1)
+  })
+
+  /** 실제 원본처럼: 한 노드(같은 제목)에 항목 다섯 개, key는 항목 이름, 발동 단어는 따로, 우선순위 55~51 */
+  const sameTitle = (raw: Raw): Obj[] => {
+    const entries = [1, 2, 3, 4, 5].map((n) => ({
+      key: '항목 이름 ' + n,
+      patterns: ['p' + n],
+      text: '글 ' + n,
+      tokenCount: n * 10,
+      priority: 56 - n,
+      durationTurns: n,
+      activationMode: n % 2 ? 'keyword' : 'always'
+    }))
+    metaOf(raw, L1).entries = entries
+    return structuredClone(entries)
+  }
+  const entry = (n: number, over: Partial<LoreEntry> = {}): LoreEntry => ({
+    title: '장소',
+    keys: 'p' + n,
+    content: '글 ' + n,
+    mode: null,
+    offKeys: [],
+    turnRange: null,
+    offTurnRange: null,
+    ...over
+  })
+
+  it('전체 교체: 같은 노드 안에서 항목을 끼우거나 빼거나 순서를 바꿔도 숨은 값이 따라간다', async () => {
+    const { raw } = await read()
+    const old = sameTitle(raw)
+    const get = (next: Raw): Obj[] => metaOf(next, L1).entries as Obj[]
+    // 끼우기
+    const inserted = rplayApplyChanges(raw, {
+      lorebook: [entry(1), entry(9, { keys: 'p9', content: '새 글' }), entry(2), entry(3), entry(4), entry(5)]
+    }) as unknown as Raw
+    expect(get(inserted).map((e) => [e.text, e.priority])).toEqual([
+      ['글 1', 55],
+      ['새 글', 1],
+      ['글 2', 54],
+      ['글 3', 53],
+      ['글 4', 52],
+      ['글 5', 51]
+    ])
+    // 빼기
+    const removed = rplayApplyChanges(raw, {
+      lorebook: [entry(1), entry(2), entry(4), entry(5)]
+    }) as unknown as Raw
+    expect(get(removed)).toEqual([old[0], old[1], old[3], old[4]])
+    // 순서 바꾸기
+    const swapped = rplayApplyChanges(raw, {
+      lorebook: [entry(5), entry(4), entry(3), entry(2), entry(1)]
+    }) as unknown as Raw
+    expect(get(swapped)).toEqual([old[4], old[3], old[2], old[1], old[0]])
+    // 내용을 고치면서 끼워도: 고친 항목은 발동 단어가 같은 옛 항목의 값을 잇고, 새 항목은 옛 항목을 가로채지 않는다
+    const both = rplayApplyChanges(raw, {
+      lorebook: [
+        entry(1),
+        entry(9, { keys: 'p9', content: '새 글' }),
+        entry(2, { content: '글 2 고침' }),
+        entry(3),
+        entry(4),
+        entry(5)
+      ]
+    }) as unknown as Raw
+    expect(get(both).map((e) => [e.text, e.priority, e.key])).toEqual([
+      ['글 1', 55, '항목 이름 1'],
+      ['새 글', 1, 'p9'],
+      ['글 2 고침', 54, '항목 이름 2'],
+      ['글 3', 53, '항목 이름 3'],
+      ['글 4', 52, '항목 이름 4'],
+      ['글 5', 51, '항목 이름 5']
+    ])
+  })
+
+  it('전체 교체: 발동 단어는 쪼갠 목록으로 견주고, 바뀌어도 항목 이름(key)은 덮지 않는다', async () => {
+    const { raw } = await read()
+    const old = sameTitle(raw)
+    metaOf(raw, L1).entries = [{ ...old[0], patterns: ['a', 'b'] }]
+    const first = (next: unknown): Obj => (metaOf(next, L1).entries as Obj[])[0]
+    // 쉼표 뒤 공백만 다르면 아무것도 안 바뀐다
+    const same = rplayApplyChanges(raw, { lorebook: [entry(1, { keys: 'a,b' })] })
+    expect(first(same)).toEqual({ ...old[0], patterns: ['a', 'b'] })
+    // 발동 단어를 정말 바꿔도 이름은 그대로
+    const changed = rplayApplyChanges(raw, { lorebook: [entry(1, { keys: 'a, b, c' })] })
+    expect(first(changed)).toEqual({ ...old[0], patterns: ['a', 'b', 'c'] })
+    // 같은 값이면 5개 넘는 옛 값도 막지 않는다
+    metaOf(raw, L1).entries = [{ ...old[0], patterns: ['a', 'b', 'c', 'd', 'e', 'f'] }]
+    const six = rplayApplyChanges(raw, { lorebook: [entry(1, { keys: 'a,b,c,d,e,f' })] })
+    expect(first(six).patterns).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
+    // key가 옛 발동 단어를 이은 값이면(파생값) 따라 바뀐다
+    const plain = (await read()).raw
+    const derived = rplayApplyChanges(plain, { lorebookPatch: [{ index: 0, keys: '학교, 강당' }] })
+    expect(first(derived)).toMatchObject({ patterns: ['학교', '강당'], key: '학교|강당' })
+  })
+
+  it('전체 교체: given에 keys가 있으면 빈 값은 발동 단어를 비운다 (없으면 옛 값 그대로)', async () => {
+    const { raw } = await read()
+    const first = (next: unknown): Obj => (metaOf(next, L1).entries as Obj[])[0]
+    const row = { title: '장소', content: '학교 설명', offKeys: [], offTurnRange: null, mode: null, turnRange: null }
+    const cleared = rplayApplyChanges(raw, {
+      lorebook: [{ ...row, keys: '', given: ['title', 'keys', 'content'] }]
+    })
+    expect(first(cleared)).toMatchObject({ patterns: [], key: '' })
+    const kept = rplayApplyChanges(raw, {
+      lorebook: [{ ...row, keys: '', given: ['title', 'content'] }]
+    })
+    expect(first(kept)).toMatchObject({ patterns: ['학교', '교실'], key: '학교|교실' })
+  })
+
+  it('옛 값이 편집기 규칙 밖이어도 손대지 않은 칸은 막지 않고 그대로 둔다', async () => {
+    const { raw } = await read()
+    const lore = metaOf(raw, L1).entries as Obj[]
+    lore[0].patterns = ['a', 'b', 'c', 'd', 'e', 'f']
+    lore[0].key = 'a|b|c|d|e|f'
+    lore[0].durationTurns = 9
+    metaOf(raw, S1).useTokenBlock = false
+    metaOf(raw, S1).prologue = '가'.repeat(1200)
+    metaOf(raw, S1).creatorNotice = '나'.repeat(600)
+    raw.localization.simpleIntro = '다'.repeat(60)
+    const body = rplayWorks.normalize(raw)
+    const before = structuredClone(raw.metadataSet)
+    // 읽은 값을 그대로 돌려줘도 막히지 않고, 아무 칸도 바뀌지 않는다
+    const same = rplayApplyChanges(raw, {
+      ...whole(body),
+      fields: { subtitle: body.fields.subtitle, creator_comment: body.fields.creator_comment },
+      startScenarios: [{ index: 0, content: body.startScenarios[0].content }]
+    })
+    expect(same.metadataSet).toEqual(before)
+    // 다른 칸만 고치면 그 칸만 바뀐다 (옛 prologue·공지가 길어도 막히지 않는다)
+    const edited = rplayApplyChanges(raw, {
+      startScenarios: [{ index: 0, situation: '새 이어쓰기' }],
+      lorebookPatch: [{ index: 0, content: '본문만 고침' }]
+    })
+    expect(metaOf(edited, S1)).toEqual({ ...before[S1], prologueGuide: '새 이어쓰기' })
+    expect((metaOf(edited, L1).entries as Obj[])[0]).toEqual({
+      ...(before[L1].entries as Obj[])[0],
+      text: '본문만 고침'
+    })
+    // 바꾼 칸은 여전히 검사한다
+    expect(() =>
+      rplayApplyChanges(raw, { startScenarios: [{ index: 0, content: '라'.repeat(1201) }] })
+    ).toThrow('BAD_START')
+    expect(() => rplayApplyChanges(raw, { fields: { creator_comment: '마'.repeat(601) } })).toThrow(
+      'BAD_FIELD'
+    )
+    expect(() => rplayApplyChanges(raw, { fields: { subtitle: '바'.repeat(61) } })).toThrow(
+      'BAD_FIELD'
+    )
+    expect(() =>
+      rplayApplyChanges(raw, { lorebookPatch: [{ index: 0, keys: 'a, b, c, d, e, f, g' }] })
+    ).toThrow('BAD_LOREBOOK')
+    expect(() => rplayApplyChanges(raw, { lorebookPatch: [{ index: 0, turnRange: 6 }] })).toThrow(
+      'BAD_LOREBOOK'
+    )
+  })
+
+  it('읽은 값을 그대로 돌려주면 없던 칸에 빈 글이 채워지지 않고 요청도 나가지 않는다', async () => {
+    const { raw, s } = await read()
+    const before = structuredClone(raw)
+    const body = rplayWorks.normalize(raw)
+    const next = rplayApplyChanges(raw, {
+      visibility: body.visibility ?? undefined,
+      fields: body.fields,
+      startScenarios: body.startScenarios.map((x, index) => ({
+        index,
+        title: x.title,
+        content: x.content,
+        subPrompt: x.subPrompt,
+        dialogue: x.dialogue,
+        situation: x.situation,
+        description: x.description
+      })),
+      characters: body.characters.map((c, index) => ({
+        index,
+        name: c.name,
+        details: c.details,
+        info: c.info
+      })),
+      ...whole(body)
+    }) as unknown as Raw
+    expect(next.metadataSet).toEqual(before.metadataSet)
+    expect(next.canvas).toEqual(before.canvas)
+    s.calls.length = 0
+    await rplayWorks.save!(s.write, W, next, s.io)
+    expect(s.calls.filter((c) => c.startsWith('POST'))).toEqual([])
+  })
+
+  it('작업 중 작품에 읽은 공개 여부(private)를 돌려줘도 isPrivate를 바꾸지 않는다', async () => {
+    const { raw } = await read()
+    raw.content.status = 'wip'
+    raw.content.isPrivate = false
+    expect(rplayWorks.normalize(raw).visibility).toBe('private')
+    const next = rplayApplyChanges(raw, { visibility: 'private' }) as unknown as Raw
+    expect(next.content.isPrivate).toBe(false)
+    expect(() => rplayApplyChanges(raw, { visibility: 'public' })).toThrow('NOT_PUBLISHED')
+  })
+
+  it('바꾼 글 칸만 노드에 쓴다: 둘째 스토리의 없던 칸에 빈 글을 채우지 않는다', async () => {
+    const { raw } = await read()
+    const next = rplayApplyChanges(raw, {
+      startScenarios: [{ index: 1, content: '둘째 새 시작', situation: '', description: '' }]
+    })
+    expect(metaOf(next, S2)).not.toHaveProperty('prologueGuide')
+    expect(metaOf(next, S2)).not.toHaveProperty('text')
+    expect(metaOf(next, S2).prologue).toBe('둘째 새 시작')
+  })
+
+  it('전체 교체: given에 없는 칸은 옛 값 그대로, 있는 칸은 받은 값으로 바꾼다', async () => {
+    const { raw } = await read()
+    const base = {
+      title: '장소',
+      keys: '',
+      offKeys: [],
+      offTurnRange: null
+    }
+    // 제목·본문만 적은 호출: 발동 방식(always)·유지 턴(3)은 안 건드린다. 값이 뭐든 given에 없으면 무시
+    const kept = rplayApplyChanges(raw, {
+      lorebook: [
+        { ...base, content: '학교 설명', mode: 'always', turnRange: 5, given: ['title', 'content'] },
+        { ...base, content: '늘 켜짐', mode: 'keyword', turnRange: 4, given: ['title', 'content'] }
+      ]
+    })
+    const [a, b] = metaOf(kept, L1).entries as Obj[]
+    expect(a).toMatchObject({ activationMode: 'keyword', durationTurns: 3 })
+    expect(b).toMatchObject({ activationMode: 'always', durationTurns: 1 })
+    // 적어 준 칸은 받은 값으로: mode·turnRange를 적으면 바뀐다
+    const set = rplayApplyChanges(raw, {
+      lorebook: [
+        {
+          ...base,
+          content: '학교 설명',
+          mode: 'always',
+          turnRange: 5,
+          given: ['title', 'content', 'mode', 'turnRange']
+        },
+        {
+          ...base,
+          content: '늘 켜짐',
+          mode: 'keyword',
+          turnRange: 2,
+          given: ['title', 'content', 'mode', 'turnRange']
+        }
+      ]
+    })
+    const [c, d] = metaOf(set, L1).entries as Obj[]
+    expect(c).toMatchObject({ activationMode: 'always', durationTurns: 5, priority: 2, tokenCount: 5 })
+    expect(d).toMatchObject({ activationMode: 'keyword', durationTurns: 2 })
+    // 빈 값(null)으로 적었으면 알플레이 기본값(keyword·1턴)으로 돌린다
+    const reset = rplayApplyChanges(raw, {
+      lorebook: [
+        { ...base, content: '학교 설명', mode: null, turnRange: null, given: ['title', 'content', 'mode', 'turnRange'] },
+        { ...base, content: '늘 켜짐', mode: null, turnRange: null, given: ['title', 'content', 'mode', 'turnRange'] }
+      ]
+    })
+    const [e, f] = metaOf(reset, L1).entries as Obj[]
+    expect(e).toMatchObject({ activationMode: 'keyword', durationTurns: 1 })
+    expect(f).toMatchObject({ activationMode: 'keyword', durationTurns: 1 })
+    // given 없는 옛 호출: null은 "안 줌"이라 옛 값 그대로, 값이 있으면 그 값
+    const legacy = rplayApplyChanges(raw, {
+      lorebook: [
+        { ...base, content: '학교 설명', mode: null, turnRange: 4 },
+        { ...base, content: '늘 켜짐', mode: null, turnRange: null }
+      ]
+    })
+    const [g, h] = metaOf(legacy, L1).entries as Obj[]
+    expect(g).toMatchObject({ activationMode: 'keyword', durationTurns: 4 })
+    expect(h).toMatchObject({ activationMode: 'always', durationTurns: 1 })
+    // 새 항목(짝 없음)은 given과 상관없이 기본값에서 시작한다
+    const added = rplayApplyChanges(raw, {
+      lorebookAdd: [{ ...base, title: '새 장소', content: '새 글', mode: null, turnRange: null, given: ['title', 'content'] }]
+    })
+    const made = (added.canvas.nodes as Obj[]).find((n) => n.type === 'lorebook' && n.uid !== 'u-l1')!
+    expect(metaOf(added, String(made.metadataOid)).entries).toMatchObject([
+      { activationMode: 'keyword', durationTurns: 1, priority: 1 }
+    ])
+  })
+
+  it('원본 없이 저장하면 성공으로 돌려주지 않는다', async () => {
+    const { raw, s } = await read()
+    s.calls.length = 0
+    await expect(rplayWorks.save!(s.write, W, raw, s.io)).rejects.toThrow('NO_BASE')
+    expect(s.calls).toEqual([])
+  })
+
+  it('언어 상태의 revision을 모르면 0으로 짐작하지 않고 멈춘다', async () => {
+    const { raw, s } = await read()
+    delete (raw.localization.localization as Obj).revision
+    // 제목과 노드 내용을 함께 바꿔도 노드 내용이 먼저 나간 채 멈추지 않는다 (아무것도 쓰지 않는다)
+    const next = rplayApplyChanges(raw, { fields: { title: '새 제목', main: '새 메인' } })
+    s.calls.length = 0
+    await expect(rplayWorks.save!(s.write, W, next, s.io)).rejects.toThrow('LOCALIZATION_MISSING')
+    expect(s.calls.filter((c) => c.startsWith('POST'))).toEqual([])
+    expect(((s.s[W] as Obj).meta as Record<string, Obj>)[S1].coreContext).toBe('메인 프롬프트')
   })
 })

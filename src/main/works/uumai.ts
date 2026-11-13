@@ -45,7 +45,15 @@ import {
   uumaiUploadCover
 } from './uumai-media'
 import { compileUumaiJsx, JSX_MAX_FILES } from './uumai-jsx'
-import type { LoreEntry, WorkAdapter, WorkBody, WorkDraft, WorkListItem } from './types'
+import { matchOld } from './match-old'
+import type {
+  LoreEntry,
+  WorkAdapter,
+  WorkBody,
+  WorkDraft,
+  WorkFeature,
+  WorkListItem
+} from './types'
 
 const READ_PATHS = [
   /^\/v1\/creator\/work$/,
@@ -95,8 +103,11 @@ const FIELDS: Record<string, string> = {
   play_guide: 'playGuide'
 }
 
-function checkFields(w: Obj): void {
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+/** before를 주면 그 원본과 값이 달라진 칸만 검사한다 (손대지 않은 옛 값은 사이트가 받아 주던 그대로 보낸다) */
+function checkFields(w: Obj, before?: Obj): void {
   for (const [name, key] of Object.entries(FIELDS)) {
+    if (before && same(before[key], w[key])) continue
     const max = LIMITS[key as keyof typeof LIMITS]
     if (text(w[key]).length > max) throw new Error('BAD_FIELD ' + name + ' ~' + max + '자')
   }
@@ -133,13 +144,27 @@ function loreFrom(entry: Partial<LoreEntry>, base: Obj | undefined): Obj {
         priority: 0,
         effect: null,
         bgmAudioId: null,
-        bgmStop: false,
+        // bgmStop은 새 항목에 넣지 않는다 (편집기는 거짓이면 칸을 보내지 않는다)
         folderId: null
       }
   if (entry.title !== undefined) out.name = entry.title
   if (entry.content !== undefined) out.content = entry.content
-  if (entry.keys !== undefined) out.keywords = keyList(entry.keys)
-  if (entry.offKeys !== undefined)
+  // 전체 교체에서 호출한 쪽이 키워드를 적지 않았으면(given에 keys 없음) 옛 항목의 값을 그대로 둔다
+  const keysGiven = entry.given === undefined || entry.given.includes('keys')
+  // 읽을 때 키워드를 ', '로 이어 붙이므로 쉼표가 든 키워드는 되읽으면 쪼개진다. 읽은 그대로면 원본 값을 둔다
+  if (
+    entry.keys !== undefined &&
+    keysGiven &&
+    !(base && entry.keys === strings(base.keywords).join(', '))
+  )
+    out.keywords = keyList(entry.keys)
+  // 전체 교체에서 호출한 쪽이 제외 키워드를 적지 않았으면(given에 offKeys 없음) 옛 항목의 값을 그대로 둔다
+  const offKeysGiven = entry.given === undefined || entry.given.includes('offKeys')
+  if (
+    entry.offKeys !== undefined &&
+    offKeysGiven &&
+    !(base && same(entry.offKeys, strings(base.notKeywords)))
+  )
     out.notKeywords = entry.offKeys.map((k) => k.trim()).filter(Boolean)
   if (entry.mode !== undefined && entry.mode !== null) {
     if (entry.mode !== 'keyword' && entry.mode !== 'always') throw new Error('BAD_LOREBOOK mode')
@@ -148,20 +173,37 @@ function loreFrom(entry: Partial<LoreEntry>, base: Obj | undefined): Obj {
   if (entry.turnRange !== undefined && entry.turnRange !== null) out.scanTurns = entry.turnRange
   return out
 }
-function checkLorebook(lores: Obj[]): void {
-  if (lores.length > LIMITS.lorebooks) throw new Error('LOREBOOK_LIMIT')
+/**
+ * before(고치기 전 로어북)를 주면 새로 생겼거나 값이 달라진 칸만 검사한다. 개수는 늘어났을 때만 본다.
+ * 같은 항목은 번호(id)로 짝짓는다.
+ */
+function checkLorebook(lores: Obj[], before: Obj[] = []): void {
+  if (lores.length > LIMITS.lorebooks && lores.length > before.length)
+    throw new Error('LOREBOOK_LIMIT')
+  const prevs = new Map(before.filter((e) => text(e.id)).map((e) => [text(e.id), e]))
   for (const [i, e] of lores.entries()) {
+    const prev = prevs.get(text(e.id))
+    const changed = (...keys: string[]): boolean => !prev || keys.some((k) => !same(prev[k], e[k]))
     const where = 'BAD_LOREBOOK lorebook[' + i + ']'
-    if (text(e.name).length > LIMITS.loreName) throw new Error(where + '.title ~30자')
-    if (text(e.content).length > LIMITS.loreContent) throw new Error(where + '.content ~10000자')
+    if (changed('name') && text(e.name).length > LIMITS.loreName)
+      throw new Error(where + '.title ~30자')
+    if (changed('content') && text(e.content).length > LIMITS.loreContent)
+      throw new Error(where + '.content ~10000자')
     const keys = strings(e.keywords)
-    if (keys.length > LIMITS.loreKeywords || keys.some((k) => k.length > LIMITS.loreKeyword))
+    if (
+      changed('keywords') &&
+      (keys.length > LIMITS.loreKeywords || keys.some((k) => k.length > LIMITS.loreKeyword))
+    )
       throw new Error(where + '.keys 50개 이하, 각 20자 이하')
     const not = strings(e.notKeywords)
-    if (not.length > LIMITS.loreNot || not.some((k) => k.length > LIMITS.loreKeyword))
+    if (
+      changed('notKeywords') &&
+      (not.length > LIMITS.loreNot || not.some((k) => k.length > LIMITS.loreKeyword))
+    )
       throw new Error(where + '.off_keys 5개 이하, 각 20자 이하')
     const scan = e.scanTurns
     if (
+      changed('scanTurns') &&
       scan !== null &&
       scan !== undefined &&
       (typeof scan !== 'number' || !Number.isInteger(scan) || scan < -1 || scan > 5)
@@ -175,13 +217,23 @@ function noStartExtras(s: StartExtras): void {
   for (const key of ['dialogue', 'situation', 'description'] as const)
     if (s[key] !== undefined && s[key] !== '') throw new Error('BAD_CHANGES')
 }
-function checkIntros(intros: Obj[]): void {
-  if (intros.length < 1 || intros.length > LIMITS.intros) throw new Error('START_LIMIT')
+/**
+ * prevs[i]는 intros[i]의 고치기 전 모습(새 인트로는 undefined). 주면 새로 생겼거나 값이 달라진 칸만 검사한다.
+ * 개수 상한은 고치기 전보다 늘어났을 때만 본다.
+ */
+function checkIntros(intros: Obj[], prevs: (Obj | undefined)[] = [], beforeCount = 0): void {
+  if (intros.length < 1 || (intros.length > LIMITS.intros && intros.length > beforeCount))
+    throw new Error('START_LIMIT')
   for (const [i, s] of intros.entries()) {
+    const prev = prevs[i]
+    const changed = (key: string): boolean => !prev || !same(prev[key], s[key])
     const where = 'BAD_START start_scenarios[' + i + ']'
-    if (text(s.name).length > LIMITS.introName) throw new Error(where + '.title ~50자')
-    if (text(s.content).length > LIMITS.introContent) throw new Error(where + '.content ~5000자')
-    if (text(s.prompt).length > LIMITS.introPrompt) throw new Error(where + '.sub_prompt ~5000자')
+    if (changed('name') && text(s.name).length > LIMITS.introName)
+      throw new Error(where + '.title ~50자')
+    if (changed('content') && text(s.content).length > LIMITS.introContent)
+      throw new Error(where + '.content ~5000자')
+    if (changed('prompt') && text(s.prompt).length > LIMITS.introPrompt)
+      throw new Error(where + '.sub_prompt ~5000자')
   }
 }
 /** 인트로를 지우면 로어북의 적용 인트로 번호를 맞춘다 (지운 인트로만 빠지고 뒤 번호는 당겨진다) */
@@ -210,11 +262,139 @@ function checkPublishable(w: Obj): void {
   if (missing.length) throw new Error('PUBLISH_REQUIREMENTS ' + missing.join(','))
 }
 
+const feature = (
+  site: WorkFeature['site'],
+  read: WorkFeature['read'],
+  write: WorkFeature['write'],
+  verified: WorkFeature['verified'],
+  note?: string
+): WorkFeature => ({ site, read, write, verified, ...(note ? { note } : {}) })
+const NONE = (note: string): WorkFeature => feature('no', 'no', 'no', 'no', note)
+
+const FEATURES: Record<string, WorkFeature> = {
+  title: feature('yes', 'yes', 'yes', 'yes', '20자 한도, 바꾼 칸만 검사'),
+  description: feature('yes', 'yes', 'yes', 'yes', '짧은 소개 1만자·상세 소개 10만자'),
+  main_prompt: feature('yes', 'yes', 'yes', 'yes', '50,000자 한도'),
+  first_message: feature('yes', 'yes', 'yes', 'yes', '인트로 내용이 첫 글, 5,000자'),
+  start_scenarios: feature('yes', 'partial', 'partial', 'yes', '1~10개, 추천응답·적용 턴은 개수만 읽음'),
+  lorebook: feature('yes', 'partial', 'partial', 'partial', '300개, 고급 칸은 읽지 못하고 값만 보존'),
+  characters: NONE('캐릭터 칸 없음, 작품 하나에 프롬프트 하나'),
+  example_dialogue: NONE('전용 칸 없음, 메인에 씀'),
+  user_persona: NONE('전용 칸 없음, 메인에 씀'),
+  output_rules: NONE('전용 칸 없음, 메인·로어북에 씀'),
+  situation_images: feature('yes', 'yes', 'partial', 'partial', '추가·빼기·순서만, 참조키는 5자'),
+  cover: feature('yes', 'yes', 'yes', 'yes', '바꾸기만, 삭제 불가, 10MB'),
+  tags: feature('yes', 'yes', 'partial', 'partial', '해시태그 10개, 새 작품 때만 입력'),
+  visibility: feature('yes', 'yes', 'partial', 'partial', '바꾸면 발행됨, 발행본 있고 같은 값이면 무시'),
+  create_work: feature('yes', 'yes', 'yes', 'yes', '비공개 초안으로 생성'),
+  delete_work: feature('yes', 'yes', 'yes', 'yes', '2단계 확인, 막힌 작품은 사이트에서'),
+  versioning_review: feature('yes', 'partial', 'partial', 'no', '초안·발행 구분만, 심사는 모름'),
+  language_editions: NONE('언어 판본 없음'),
+  bgm_voice: feature('yes', 'partial', 'no', 'no', '개수만 읽고 값은 그대로 유지'),
+  jsx_html: feature('yes', 'yes', 'yes', 'yes', 'jsx: 칸, 20개, 저장 때 컴파일'),
+  model_settings: feature('yes', 'yes', 'no', 'partial', '추천 모델·이미지 프롬프트는 읽기만'),
+  comments_stats: feature('yes', 'partial', 'no', 'no', '댓글 허용만 읽음, 수치는 알림 수집')
+}
+
+/** 이 연결부가 값을 읽지 못하는 사이트 설정 (extras에는 개수·길이만 싣는다) */
+const UNSUPPORTED = [
+  '로어북 고급 설정',
+  '로어북 폴더',
+  '인트로 추천 응답·적용 턴·BGM',
+  '스킬',
+  'BGM·오디오',
+  '주사위',
+  '업적',
+  '메모장',
+  '댓글·좋아요·채팅 수',
+  '수익·공개 제한 설정'
+]
+
+const GENDER_NAME: Record<number, string> = { 1: 'male', 2: 'female', 3: 'all' }
+const EXTRA_TEXT = 80
+const EXTRA_LIST = 20
+
+/**
+ * 공통 칸에 들지 않는 우마이 설정을 짧게 옮긴다. 원본에 그 칸이 있을 때만 싣고, 작품 글·주소·계정 값은 싣지 않는다.
+ * 조회 수처럼 읽을 때마다 달라지는 값은 계획 뒤 변화 검사(PLAN_STALE)를 깨므로 싣지 않는다.
+ */
+function uumaiExtras(r: UumaiRaw): Record<string, unknown> {
+  const w = r.work
+  const out: Record<string, unknown> = {}
+  const flag = (key: string, name: string): void => {
+    if (typeof w[key] === 'boolean') out[name] = w[key]
+  }
+  const count = (key: string, name: string): void => {
+    if (Array.isArray(w[key])) out[name] = (w[key] as unknown[]).length
+  }
+  if (Array.isArray(w.hashtags)) {
+    const tags = strings(w.hashtags)
+    if (tags.length <= EXTRA_LIST && tags.every((t) => t.length <= EXTRA_TEXT)) out.hashtags = tags
+    else out.hashtag_count = tags.length
+  }
+  flag('isAdult', 'is_adult')
+  if (typeof w.genderTendency === 'number')
+    out.gender_tendency = GENDER_NAME[w.genderTendency] ?? w.genderTendency
+  flag('allowComment', 'allow_comment')
+  flag('imagePromptEnabled', 'image_prompt_enabled')
+  flag('creatorStyleEnabled', 'creator_style_enabled')
+  flag('isDerivativeWork', 'is_derivative_work')
+  if (typeof w.recommendedLlmModelId === 'number')
+    out.recommended_llm_model_id = w.recommendedLlmModelId
+  out.has_cover = isObj(w.thumbnail) && !!(text(w.thumbnail.imageId) || text(w.thumbnail.url))
+  if (isObj(w.bgmCover)) out.has_bgm_cover = !!text(w.bgmCover.imageId)
+  if (typeof w.blindStatus === 'number') out.blind_status = w.blindStatus
+  if (strOrNull(w.createdAt)) out.created_at = text(w.createdAt).slice(0, EXTRA_TEXT)
+  out.has_published_version = !!r.publishedSnapshotId
+  out.has_unpublished_draft = uumaiPendingDraft(r)
+
+  count('intros', 'intro_count')
+  count('lorebooks', 'lorebook_count')
+  count('lorebookFolders', 'lorebook_folder_count')
+  count('images', 'image_count')
+  count('audios', 'audio_count')
+  count('skills', 'skill_count')
+  count('dice', 'dice_count')
+  count('achievements', 'achievement_count')
+  count('jsx', 'jsx_count')
+  if (typeof w.notepad === 'string') out.notepad_length = w.notepad.length
+
+  const intros = list(w.intros)
+  if (Array.isArray(w.intros)) {
+    out.intro_recommend_count = intros.reduce(
+      (n, e) => n + strings(e.recommends).filter((s) => s.trim() !== '').length,
+      0
+    )
+    out.intro_max_turn_count = intros.filter((e) => typeof e.promptMaxTurn === 'number').length
+    out.intro_bgm_count = intros.filter((e) => !!strOrNull(e.bgmAudioId)).length
+  }
+  if (Array.isArray(w.lorebooks)) {
+    const lores = list(w.lorebooks)
+    out.lorebook_activate_on_intro_count = lores.filter((l) => l.activateOnIntro === true).length
+    out.lorebook_and_keyword_count = lores.filter((l) => strings(l.andKeywords).length > 0).length
+    out.lorebook_dependency_count = lores.filter((l) => strings(l.dependsOnIds).length > 0).length
+    // 적용 인트로를 일부로 좁힌 항목 (번호를 적지 않았거나 모든 인트로를 적었으면 전체 인트로다)
+    out.lorebook_intro_limited_count = lores.filter((l) => {
+      if (!Array.isArray(l.introSequences)) return false
+      const listed = new Set(
+        (l.introSequences as unknown[]).filter(
+          (n): n is number => typeof n === 'number' && n >= 0 && n < intros.length
+        )
+      )
+      return listed.size > 0 && listed.size < intros.length
+    }).length
+  }
+  return out
+}
+
 export const uumaiWorks: WorkAdapter = {
   id: 'uumai',
+  // 서버가 저장하지 않는 순서 번호 (2026-11-13 실제 저장에서 확인)
+  rawIgnore: [/^work\.lorebooks\[[^\]]*\]\.order$/],
   label: '우마이',
+  features: FEATURES,
   guide: {
-    save: '저장은 늘 초안(임시저장)이다. 이미 발행한 작품은 발행본이 그대로이고, visibility를 주면 그때 발행되며 초안 내용도 같이 나간다.',
+    save: '저장은 늘 초안(임시저장)이다. 이미 발행한 작품은 발행본이 그대로이고, 지금과 다른 visibility를 주면 그때 발행되며 초안 내용도 같이 나간다(발행본이 있고 같은 값이면 무시).',
     manual: ['BGM·스킬·주사위·업적 편집(읽은 값 그대로 다시 보낸다)', '로어북 발동 테스트'],
     unverified: [
       '발행(visibility)',
@@ -312,21 +492,26 @@ export const uumaiWorks: WorkAdapter = {
         situation: '',
         description: ''
       })),
-      characters: []
+      characters: [],
+      extras: uumaiExtras(r),
+      unsupported: [...UNSUPPORTED]
     }
   },
 
   applyChanges(raw, changes) {
-    uumaiRaw(raw)
+    const r = uumaiRaw(raw)
     const next = structuredClone(raw) as UumaiRaw & { publish?: boolean }
     const w = next.work
 
     if (changes.visibility !== undefined) {
       const status = PUBLISH_STATUS[changes.visibility]
       if (!status) throw new Error('BAD_VISIBILITY')
-      w.publishStatus = status
-      // 편집기에서 공개 여부는 '작품 등록(발행)'을 눌러야 반영된다. 그래서 공개 상태를 바꾸면 발행한다.
-      next.publish = true
+      // 발행본이 있는 작품에 지금과 같은 값을 주면 아무것도 하지 않는다. 발행하면 계획에 안 보이는 초안 전체가 독자에게 나간다
+      if (!(r.publishedSnapshotId && uumaiVisibility(r.work) === changes.visibility)) {
+        w.publishStatus = status
+        // 편집기에서 공개 여부는 '작품 등록(발행)'을 눌러야 반영된다. 그래서 공개 상태를 바꾸면 발행한다.
+        next.publish = true
+      }
     }
 
     let fieldsChanged = false
@@ -348,7 +533,8 @@ export const uumaiWorks: WorkAdapter = {
           const all = list(w.jsx)
           if (at < 0) all.push({ ...compiled })
           else all[at] = { ...all[at], ...compiled }
-          if (all.length > JSX_MAX_FILES) throw new Error('BAD_JSX count')
+          // 개수는 파일을 새로 더할 때만 본다 (이미 있는 파일을 고치는 것은 개수를 늘리지 않는다)
+          if (at < 0 && all.length > JSX_MAX_FILES) throw new Error('BAD_JSX count')
           w.jsx = all
         }
         continue
@@ -358,14 +544,22 @@ export const uumaiWorks: WorkAdapter = {
       w[key] = value
       fieldsChanged = true
     }
-    if (fieldsChanged) checkFields(w)
+    if (fieldsChanged) checkFields(w, r.work)
 
     const folders = list(w.lorebookFolders)
     let lores = arrangeLorebooks(list(w.lorebooks), folders)
     const loreBefore = JSON.stringify(lores)
+    const loresOld = [...lores]
     if (changes.lorebook) {
-      const old = lores
-      lores = changes.lorebook.map((e, i) => loreFrom(e, old[i]))
+      // 번호·숨은 설정은 제목이 같은 옛 항목에서 물려받는다 (자리 번호로 잇지 않는다). 짝이 없는 항목은 새 항목이다
+      const paired = matchOld(
+        changes.lorebook.map((e) => e.title),
+        loresOld,
+        (l) => text(l.name),
+        // 제목이 겹치는 항목이 있어 내용까지 견줘 짝짓는다 (2026-11-13 실제 스냅샷에서 겹침 확인)
+        { contents: changes.lorebook.map((e) => e.content), contentOf: (l) => text(l.content) }
+      )
+      lores = changes.lorebook.map((e, i) => loreFrom(e, paired[i]))
     }
     for (const patch of changes.lorebookPatch ?? []) {
       const i = at(patch.index, lores.length)
@@ -384,8 +578,11 @@ export const uumaiWorks: WorkAdapter = {
     }
     for (const entry of changes.lorebookAdd ?? []) lores.push(loreFrom(entry, undefined))
 
-    let intros = list(w.intros)
+    const introsOld = list(w.intros)
+    let intros = [...introsOld]
     const introsBefore = JSON.stringify(intros)
+    // intros[i]가 고치기 전 몇 번째 인트로였는지 (새 인트로는 null). 바뀐 칸만 검사하려고 따라간다
+    let origin: (number | null)[] = intros.map((_, i) => i)
     for (const patch of changes.startScenarios ?? []) {
       const i = at(patch.index, intros.length)
       noStartExtras(patch)
@@ -401,6 +598,7 @@ export const uumaiWorks: WorkAdapter = {
       // 뒤에서부터 지워야 번호가 어긋나지 않는다
       for (const i of gone.sort((a, b) => b - a)) {
         intros = intros.filter((_, n) => n !== i)
+        origin = origin.filter((_, n) => n !== i)
         lores = shiftSequences(lores, i)
       }
     }
@@ -415,14 +613,19 @@ export const uumaiWorks: WorkAdapter = {
         bgmAudioId: null,
         recommends: []
       })
+      origin.push(null)
     }
     if (JSON.stringify(intros) !== introsBefore) {
-      checkIntros(intros)
+      checkIntros(
+        intros,
+        origin.map((o) => (o === null ? undefined : introsOld[o])),
+        introsOld.length
+      )
       w.intros = intros
     }
     const arranged = arrangeLorebooks(lores, folders)
     if (JSON.stringify(arranged) !== loreBefore) {
-      checkLorebook(arranged)
+      checkLorebook(arranged, loresOld)
       w.lorebooks = arranged
     }
 

@@ -222,6 +222,8 @@ async function applyAndSave(
   const wid = nekoWorkId(id)
   const next = structuredClone(nekoRaw(raw))
   const c = next.character
+  // 저장(nekoPut)이 공개 여부를 모르면 멈추므로, 파일을 올리기 전에 먼저 본다 (올린 파일이 고아로 남지 않게)
+  if (typeof c.isPublic !== 'boolean') throw new Error('UNKNOWN_VISIBILITY')
   let slots = list(c.imageSlots)
   const taken = new Set(slots.map((e) => text(e.slug)))
 

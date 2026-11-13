@@ -1,4 +1,4 @@
-// 엘린 작품 본문 읽기·저장. 주소와 필드는 2026-11-10 엘린 편집기 공개 스크립트에서 읽었다 (실제 호출 전).
+// 엘린 작품 본문 읽기·저장. 주소와 필드는 2026-11-10 엘린 편집기 공개 스크립트에서 읽었고, 같은 날 실제 계정 호출(읽기 스냅샷, 새 작품·삭제)로 확인했다. 확인 정도는 features 표의 verified.
 //   GET    /api/v1/characters/mine?page=&limit=50            내 작품 목록 {characters, total}
 //   GET    /api/v1/characters/{id}?minimal=false             작품 원본 {characters:[…]}
 //   GET    /api/v1/characters/{id}/revisions/status          {draft, in_review, latest_approved, rejected, latest_revision, …}
@@ -17,10 +17,12 @@ import {
   REV,
   UUID,
   UUID_RE,
+  VISIBILITIES,
   at,
   bytes,
   checkImageFile,
   elynCommit,
+  elynExtras,
   elynJson,
   elynJsonData,
   elynPlain,
@@ -43,12 +45,14 @@ import {
   elynSendRule,
   elynUploadCover
 } from './elyn-media'
+import { matchOld } from './match-old'
 import type {
   LocalImage,
   LoreEntry,
   WorkAdapter,
   WorkBody,
   WorkDraft,
+  WorkFeature,
   WorkFetch,
   WorkIo,
   WorkListItem,
@@ -65,8 +69,6 @@ const WRITE_PATHS: Record<string, RegExp[]> = {
   POST: [new RegExp(C_PATH + UUID + '/revisions/' + REV + '/submit$', 'i')],
   DELETE: [new RegExp(C_PATH + UUID + '$', 'i')]
 }
-// 편집기의 공개 범위 선택지 (unlisted = 일부 공개)
-const VISIBILITIES = ['public', 'unlisted', 'private']
 
 const onlyKeys = (q: URLSearchParams, keys: Record<string, RegExp>): boolean => {
   const seen = [...q.keys()]
@@ -92,35 +94,78 @@ function readAllowed(url: string): boolean {
 const nonSpace = (s: string): number => s.replace(/\s/g, '').length
 const within = (s: string, chars: number, maxBytes: number): boolean =>
   s.length <= chars || bytes(s) <= maxBytes
-function checkFields(form: Obj): void {
-  const name = text(form.name)
-  if (!name || !within(name, 20, 35)) throw new Error('BAD_FIELD title 1~20자')
-  const notes = text(form.creatorNotes)
-  if (!notes || !within(notes, 9000, 12000)) throw new Error('BAD_FIELD description 1~9000자')
-  const main = text(form.description)
-  if (nonSpace(main) < 50 || bytes(main) > 300_000)
-    throw new Error('BAD_FIELD main 공백 빼고 50자 이상, 300,000바이트 이하')
-  const tags = tagText(form.tags)
-    .split(',')
-    .map((t) => t.trim())
-    .filter(Boolean)
-  if (tags.length > 10 || tags.some((t) => bytes(t) > 40))
-    throw new Error('BAD_FIELD hashtags 10개 이하, 각 40바이트 이하')
+/**
+ * 칸 검사. only를 주면 그 칸(폼 칸 이름)만 본다 — 고칠 때는 바뀐 칸만, 새 작품은 전부.
+ * 바뀌지 않은 칸은 사이트가 받아 준 옛 값일 수 있어 막지 않는다.
+ */
+function checkFields(form: Obj, only?: string[]): void {
+  const on = (key: string): boolean => !only || only.includes(key)
+  if (on('name')) {
+    const name = text(form.name)
+    if (!name || !within(name, 20, 35)) throw new Error('BAD_FIELD title 1~20자')
+  }
+  if (on('creatorNotes')) {
+    const notes = text(form.creatorNotes)
+    if (!notes || !within(notes, 9000, 12000)) throw new Error('BAD_FIELD description 1~9000자')
+  }
+  if (on('description')) {
+    const main = text(form.description)
+    if (nonSpace(main) < 50 || bytes(main) > 300_000)
+      throw new Error('BAD_FIELD main 공백 빼고 50자 이상, 300,000바이트 이하')
+  }
+  if (on('tags')) {
+    const tags = tagText(form.tags)
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    if (tags.length > 10 || tags.some((t) => bytes(t) > 40))
+      throw new Error('BAD_FIELD hashtags 10개 이하, 각 40바이트 이하')
+  }
 }
-function checkStarts(form: Obj): void {
+/**
+ * 원본에 없던(바뀌었거나 새로 더한) 항목의 자리 번호. 같은 모양의 옛 항목이 있으면 그대로인 항목이다
+ * (순서만 바뀐 것도 그대로). 같은 모양이 여럿이면 옛 항목 수만큼만 그대로로 본다.
+ */
+function touched(now: Obj[], before: Obj[]): Set<number> {
+  const left = before.map((e) => JSON.stringify(e))
+  const out = new Set<number>()
+  now.forEach((e, i) => {
+    const k = left.indexOf(JSON.stringify(e))
+    if (k < 0) out.add(i)
+    else left.splice(k, 1)
+  })
+  return out
+}
+/** before를 주면(고칠 때) 바뀌었거나 새로 더한 첫 메시지만 본다. 개수는 늘었을 때만 막는다 */
+function checkStarts(form: Obj, before?: Obj[]): void {
   const messages = list(form.firstMessages)
-  if (messages.length < 1 || messages.length > 10) throw new Error('START_LIMIT')
+  if (messages.length < 1 || (messages.length > 10 && messages.length > (before?.length ?? 0)))
+    throw new Error('START_LIMIT')
+  const check = before ? touched(messages, before) : null
   for (const [i, m] of messages.entries()) {
+    if (check && !check.has(i)) continue
     const message = text(m.message)
     if (!message || !within(message, 2000, 5500))
       throw new Error('BAD_START start_scenarios[' + i + '].content 1~2000자')
   }
 }
-function checkLorebook(form: Obj): void {
+const countNames = (lores: Obj[]): Map<string, number> => {
+  const out = new Map<string, number>()
+  for (const e of lores) {
+    const name = text(e.name).trim()
+    out.set(name, (out.get(name) ?? 0) + 1)
+  }
+  return out
+}
+/** before를 주면(고칠 때) 바뀌었거나 새로 더한 항목만 본다. 개수는 늘었을 때만, 이름 중복은 새로 생겼을 때만 막는다 */
+function checkLorebook(form: Obj, before?: Obj[]): void {
   const lores = list(isObj(form.lorebook) ? form.lorebook.lores : null)
-  if (lores.length > 250) throw new Error('LOREBOOK_LIMIT')
-  const names = new Set<string>()
+  if (lores.length > 250 && lores.length > (before?.length ?? 0)) throw new Error('LOREBOOK_LIMIT')
+  const check = before ? touched(lores, before) : null
+  const now = countNames(lores)
+  const was = countNames(before ?? [])
   for (const [i, e] of lores.entries()) {
+    if (check && !check.has(i)) continue
     const name = text(e.name)
     const content = text(e.content)
     const where = 'lorebook[' + i + ']'
@@ -131,8 +176,9 @@ function checkLorebook(form: Obj): void {
     if (keys.some((k) => k.length > 30)) throw new Error('BAD_LOREBOOK ' + where + '.keys 각 30자')
     if (e.condition === 'on_match' && !keys.length)
       throw new Error('BAD_LOREBOOK ' + where + '.keys 1개 이상')
-    if (names.has(name.trim())) throw new Error('BAD_LOREBOOK ' + where + '.title 중복')
-    names.add(name.trim())
+    const seen = now.get(name.trim()) ?? 0
+    if (seen > 1 && seen > (was.get(name.trim()) ?? 0))
+      throw new Error('BAD_LOREBOOK ' + where + '.title 중복')
   }
 }
 
@@ -176,10 +222,29 @@ function loreFrom(entry: Partial<LoreEntry>, base?: Obj): Obj {
       }
   if (entry.title !== undefined) out.name = entry.title
   if (entry.content !== undefined) out.content = entry.content
-  if (entry.keys !== undefined) out.trigger_strings = keyList(entry.keys)
+  // 읽을 때 ', '로 이은 글 그대로면 키워드를 다시 쪼개지 않는다 (쉼표가 든 키워드, 앞뒤 공백이 있는 키워드가 깨진다)
+  // 전체 교체에서 keys를 적지 않았으면(given에 없음) 짝지은 옛 항목의 키워드를 그대로 둔다
+  const keysOmitted = !!base && !!entry.given && !entry.given.includes('keys')
+  if (
+    entry.keys !== undefined &&
+    !keysOmitted &&
+    !(base && entry.keys === strings(base.trigger_strings).join(', '))
+  )
+    out.trigger_strings = keyList(entry.keys)
   if (entry.mode) out.condition = entry.mode
   if (typeof turns === 'number') out.scan_turns = turns
   return out
+}
+/**
+ * 제목이 바뀐 채 자리로만 이어진 옛 항목은, 내용이 같거나 키워드가 하나라도 겹칠 때만 숨은 설정을 물려준다.
+ * (옛 항목을 지우고 다른 항목을 같은 자리에 넣은 경우에 지워진 항목의 설정이 새 항목에 붙지 않게)
+ */
+function sameEntry(old: Obj, entry: Partial<LoreEntry>): boolean {
+  if (text(old.name) === entry.title) return true
+  if (entry.content !== undefined && entry.content === text(old.content)) return true
+  if (entry.given && !entry.given.includes('keys')) return true
+  const oldKeys = strings(old.trigger_strings).map((k) => k.trim())
+  return keyList(entry.keys ?? '').some((k) => oldKeys.includes(k))
 }
 type StartExtras = {
   title?: string
@@ -200,9 +265,52 @@ const exclusiveLocked = (form: Obj): boolean => {
   return !until || Date.parse(until) > Date.now()
 }
 
+const feature = (
+  site: WorkFeature['site'],
+  read: WorkFeature['read'],
+  write: WorkFeature['write'],
+  verified: WorkFeature['verified'],
+  note: string
+): WorkFeature => ({ site, read, write, verified, note })
+const NOT_ON_SITE = (note: string): WorkFeature => feature('no', 'no', 'no', 'no', note)
+
+const FEATURES: Record<string, WorkFeature> = {
+  title: feature('yes', 'yes', 'yes', 'partial', '1~20자(또는 35바이트)'),
+  description: feature('yes', 'yes', 'yes', 'partial', '소개 1~9,000자(12,000바이트)'),
+  main_prompt: feature('yes', 'yes', 'yes', 'partial', '공백 뺀 50자 이상, 30만 바이트 이하'),
+  first_message: feature('yes', 'yes', 'yes', 'partial', '1~10개, 각 2,000자(5,500바이트)'),
+  start_scenarios: feature('yes', 'yes', 'partial', 'partial', '제목 없음, 0번 삭제 불가'),
+  lorebook: feature('yes', 'partial', 'partial', 'partial', '새·고친 항목만 내용 800자 검사'),
+  characters: NOT_ON_SITE('캐릭터 칸 없음(작품 하나=캐릭터 하나)'),
+  example_dialogue: NOT_ON_SITE('전용 칸 없음'),
+  user_persona: NOT_ON_SITE('전용 칸 없음'),
+  output_rules: NOT_ON_SITE('전용 칸 없음, 메인 본문에 씀'),
+  situation_images: feature(
+    'yes',
+    'partial',
+    'partial',
+    'partial',
+    '갤러리 100장, slug 12자, 설명 고치기 없음'
+  ),
+  cover: feature('yes', 'yes', 'partial', 'partial', '대표 필수, 교체만 가능'),
+  tags: feature('yes', 'yes', 'partial', 'no', '10개·각 40바이트, 만들 때만 입력'),
+  visibility: feature('yes', 'yes', 'partial', 'partial', 'public 전환 미확인'),
+  create_work: feature('yes', 'no', 'yes', 'yes', '비공개로만, 대표 이미지 필수'),
+  delete_work: feature('yes', 'no', 'yes', 'yes', '계획 후 제목 확인'),
+  versioning_review: feature('yes', 'yes', 'no', 'partial', '공개작 저장=검수 요청, 취소 없음'),
+  language_editions: feature('yes', 'partial', 'no', 'no', '첫 언어 하나만 읽고 저장'),
+  bgm_voice: NOT_ON_SITE('편집 패널에 칸 없음'),
+  jsx_html: feature('yes', 'partial', 'no', 'no', '컴포넌트 개수만 읽음, 사이트에서 직접'),
+  model_settings: feature('yes', 'yes', 'no', 'no', '읽기만, 고치기는 사이트에서 직접'),
+  comments_stats: feature('yes', 'no', 'no', 'no', '댓글은 알림 쪽 별도, 통계는 못 읽음')
+}
+
 export const elynWorks: WorkAdapter = {
   id: 'elyn',
+  // 서버가 만드는 작품 보기·판 상태 (고칠 수 있는 값은 form에 있다) (2026-11-13 실제 저장에서 확인)
+  rawIgnore: [/^character\b/, /^status\b/, /^revision\b/],
   label: '엘린',
+  features: FEATURES,
   guide: {
     save: '판 저장 후 제출이다. 공개 작품은 저장하면 검수 요청이 되고, 검수 중에는 저장이 막힌다(IN_REVIEW). 비공개 작품은 바로 반영된다.',
     manual: [],
@@ -248,16 +356,21 @@ export const elynWorks: WorkAdapter = {
     const r = elynRaw(raw)
     const f = r.form
     const rev = r.revision
-    const version = rev ? (rev.version_number ?? rev.versionNumber ?? '?') : null
+    // 목록과 같은 수정 시각. 판 번호·판 상태는 extras(revision_version, revision_status)에 있다
+    const locales = new Set(
+      [r.character.creatorNotes, r.character.firstMessage].flatMap((v) =>
+        list(v).flatMap((e) => strOrNull(e.locale) ?? [])
+      )
+    )
     return {
       id: r.id,
       title: text(f.name),
       visibility: strOrNull(f.visibility),
       status: null,
-      // 수정 시각 대신 판 번호와 판 상태(draft / in_review / approved …)를 보여 준다
-      updatedAt: rev
-        ? ['v' + String(version), text(rev.status)].filter(Boolean).join(' ')
-        : (strOrNull(r.character.updatedAt) ?? strOrNull(r.character.updated_at)),
+      updatedAt:
+        strOrNull(r.character.updatedAt) ??
+        strOrNull(r.character.updated_at) ??
+        (rev ? (strOrNull(rev.updated_at) ?? strOrNull(rev.updatedAt)) : null),
       fields: Object.fromEntries(Object.entries(FIELDS).map(([k, key]) => [k, text(f[key])])),
       lorebook: list(isObj(f.lorebook) ? f.lorebook.lores : null).map((e) => ({
         title: text(e.name),
@@ -278,7 +391,14 @@ export const elynWorks: WorkAdapter = {
         situation: '',
         description: ''
       })),
-      characters: []
+      characters: [],
+      extras: elynExtras(r),
+      unsupported: [
+        '로어북 항목별 첫 메시지 스캔·그룹·선행 조건',
+        'JSX 스크립트 코드',
+        '통계(좋아요·대화·댓글 수)',
+        ...(locales.size > 1 ? ['다른 언어의 소개·첫 메시지'] : [])
+      ]
     }
   },
 
@@ -297,21 +417,34 @@ export const elynWorks: WorkAdapter = {
       }
     }
 
-    let fieldsChanged = false
+    const changedKeys: string[] = []
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
       const key = FIELDS[name]
       if (!key || typeof value !== 'string') throw new Error('BAD_FIELD')
+      if (f[key] !== value) changedKeys.push(key)
       f[key] = value
-      fieldsChanged = true
     }
-    if (fieldsChanged) checkFields(f)
+    // 바뀐 칸만 본다 (안 건드린 칸의 옛 값 때문에 저장이 막히지 않게)
+    if (changedKeys.length) checkFields(f, changedKeys)
 
     const book = isObj(f.lorebook) ? f.lorebook : { lores: [] }
     let lores = list(book.lores)
+    const loreOld = [...lores]
     const loreBefore = JSON.stringify(lores)
     if (changes.lorebook) {
-      const old = lores
-      lores = changes.lorebook.map((e, i) => loreFrom(e, old[i]))
+      // 제목이 같은 옛 항목의 숨은 설정만 물려받는다. 짝이 없는 새 항목은 기본값으로 시작한다
+      const whole = changes.lorebook
+      const picked = matchOld(
+        whole.map((e) => e.title),
+        loreOld,
+        (o) => text(o.name),
+        // 내용까지 견준다: 그 자리 항목을 지우고 새로 넣은 것이 지운 항목의 숨은 설정을 물려받지 않게
+        { contents: whole.map((e) => e.content), contentOf: (o) => text(o.content) }
+      )
+      lores = whole.map((e, i) => {
+        const old = picked[i]
+        return loreFrom(e, old && sameEntry(old, e) ? old : undefined)
+      })
     }
     for (const patch of changes.lorebookPatch ?? []) {
       const i = at(patch.index, lores.length)
@@ -323,9 +456,10 @@ export const elynWorks: WorkAdapter = {
     }
     for (const entry of changes.lorebookAdd ?? []) lores.push(loreFrom(entry))
     f.lorebook = { ...book, lores }
-    if (JSON.stringify(lores) !== loreBefore) checkLorebook(f)
+    if (JSON.stringify(lores) !== loreBefore) checkLorebook(f, loreOld)
 
     let messages = list(f.firstMessages)
+    const startsOld = [...messages]
     const startsBefore = JSON.stringify(messages)
     for (const patch of changes.startScenarios ?? []) {
       const i = at(patch.index, messages.length)
@@ -342,7 +476,10 @@ export const elynWorks: WorkAdapter = {
       messages.push({ message: draft.content ?? '' })
     }
     f.firstMessages = messages
-    if (JSON.stringify(messages) !== startsBefore) checkStarts(f)
+    if (JSON.stringify(messages) !== startsBefore) checkStarts(f, startsOld)
+
+    // 공개 범위를 모르면 저장 때가 아니라 계획 단계에서 멈춘다 (elynCommit도 같은 검사를 한다)
+    if (!text(f.visibility)) throw new Error('BAD_VISIBILITY')
 
     // 엘린은 작품 하나에 캐릭터 하나다
     if (

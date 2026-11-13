@@ -27,6 +27,11 @@ export interface LoreEntry {
   offKeys: string[]
   turnRange: number | null
   offTurnRange: number | null
+  /**
+   * 전체 교체로 받은 항목에서 호출한 쪽이 실제로 적어 준 칸 이름. 없는 칸은 "안 줬다"는 뜻이라
+   * 짝지은 옛 항목의 값을 그대로 둔다(빈 값으로 "비웠다"와 구분한다). 읽기 결과에는 없다.
+   */
+  given?: string[]
 }
 export interface StartScenario {
   id: string | number | null
@@ -60,6 +65,13 @@ export interface WorkBody {
   lorebook: LoreEntry[]
   startScenarios: StartScenario[]
   characters: WorkCharacter[]
+  /**
+   * 공통 칸에 들지 않는 그 플랫폼의 설정(태그·분류·성인 표시·모델 설정·통계 등). 읽기 전용으로 보여 준다.
+   * 값은 짧은 것만 그대로, 긴 글·목록은 길이·개수로 줄여 싣는다. 작품 본문은 싣지 않는다.
+   */
+  extras?: Record<string, unknown>
+  /** 사이트에는 있는데 이 연결부가 읽지 못하는 것. 빈 목록·빈 글을 "없음"으로 오해하지 않게 적는다 */
+  unsupported?: string[]
 }
 
 export interface EditionInfo {
@@ -88,10 +100,34 @@ export interface WorkGuide {
   unverified?: string[]
 }
 
+/** 기능 하나를 이 플랫폼에서 어디까지 할 수 있는지 */
+export interface WorkFeature {
+  /** 사이트에 그 기능이 있는지 */
+  site: 'yes' | 'no' | 'unknown'
+  read: 'yes' | 'no' | 'partial'
+  write: 'yes' | 'no' | 'partial' | 'blocked'
+  /** 실제 계정에서 확인했는지 */
+  verified: 'yes' | 'no' | 'partial'
+  /** 한도·막은 이유 등 한 줄 */
+  note?: string
+}
+
 export interface WorkAdapter {
   id: string
   label: string
   capabilities: string[]
+  /**
+   * 할 수 있는 것 표. 열쇠는 title, description, main_prompt, first_message, start_scenarios, lorebook,
+   * characters, example_dialogue, user_persona, output_rules, situation_images, cover, tags, visibility,
+   * create_work, delete_work, versioning_review, language_editions, bgm_voice, jsx_html, model_settings,
+   * comments_stats. sites_list가 그대로 돌려준다.
+   */
+  features?: Record<string, WorkFeature>
+  /**
+   * 저장 뒤 원본째 견줄 때(raw_check) 문제로 치지 않을 경로. 서버가 저장할 때마다 스스로 다시 만드는 값
+   * (겹친 사본, 다시 매기는 번호·순서 등)이다. 2026-11-13 실제 저장 시험에서 본 것만 적는다.
+   */
+  rawIgnore?: RegExp[]
   /** sites_list와 계획 도구 결과에 싣는 플랫폼 안내 */
   guide?: WorkGuide
   /** 작품 번호가 대소문자를 구분한다 (공용 도구가 소문자로 바꾸지 않는다) */
@@ -113,7 +149,13 @@ export interface WorkAdapter {
   applyChanges?(raw: unknown, changes: WorkChanges): unknown
   /** 새 원본을 플랫폼에 저장한다. 공개 상태는 원본에 있던 값 그대로 보낸다. */
   /** io는 JSON이 아닌 저장(파일 묶음·CSRF 헤더)이 필요한 플랫폼용 통로 묶음 */
-  save?(write: WorkWrite, workId: string, next: unknown, io?: WorkIo): Promise<void>
+  /** 플랫폼이 "달라진 것이 없다"고 해서 보내지 않았으면 { skipped: true }를 돌려준다 */
+  save?(
+    write: WorkWrite,
+    workId: string,
+    next: unknown,
+    io?: WorkIo
+  ): Promise<void | { skipped: true }>
   /** 이 플랫폼이 받는 공개 상태 값 (work_plan의 visibility) */
   visibilities?: string[]
   /** 작품을 통째로 지운다. 되돌릴 수 없다. */

@@ -237,6 +237,23 @@ describe('작품 계획·저장', () => {
     })
   })
 
+  it('완전 공개(public)로 바꾸는 계획은 받지 않는다: 사용자만 하는 일이다', async () => {
+    const s = site()
+    s.work.visibility = 'private'
+    const t = tools(s)
+    await expect(t.run('work_plan', { site: 'eden', work_id: W, visibility: 'public' })).rejects.toThrow(
+      'PUBLIC_BY_USER'
+    )
+    // 링크 공개로 바꾸는 계획은 된다
+    const plan = await t.run('work_plan', { site: 'eden', work_id: W, visibility: 'link' })
+    expect(plan.plan_id).toMatch(/^[0-9a-f]{8}$/)
+    expect(s.puts).toHaveLength(0)
+    // 이미 public인 작품에 같은 값을 주는 것은 막지 않는다
+    s.work.visibility = 'public'
+    const same = await t.run('work_plan', { site: 'eden', work_id: W, visibility: 'public' })
+    expect(same.nothing_to_save).toBe(true)
+  })
+
   it('work_save: 바꾼 칸만 달라지고 공개 상태·나머지는 그대로다', async () => {
     const s = site()
     const t = tools(s)
@@ -255,7 +272,15 @@ describe('작품 계획·저장', () => {
       status: 'active'
     })
     expect(saved.backup).toBe('C:/snap/1.json')
-    expect(t.snaps).toHaveLength(2) // 저장 전 백업 + 저장 뒤 확인본
+    // 저장 전 백업 + 저장 뒤 확인본 + 원본째 견준 보고(이 시험 서버는 저장 본문의 칸을 캐릭터에 더 붙여 돌려준다)
+    expect(t.snaps).toHaveLength(3)
+    expect(t.snaps[2]).toBe('eden/' + W + '.save-report')
+    expect(saved.report).toBe('C:/snap/3.json')
+    const check = saved.raw_check as { same: boolean; differences: { path: string; kind: string }[] }
+    expect(check.same).toBe(false)
+    expect(check.differences.every((d) => d.kind === 'added' && /^characters\[id=/.test(d.path))).toBe(
+      true
+    )
     expect(s.puts).toHaveLength(1)
     expect(s.puts[0]).toMatchObject({
       scenario_settings: '새 메인',

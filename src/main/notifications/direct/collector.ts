@@ -883,15 +883,28 @@ export function createDirectCollector(options: {
       if (!current) throw new ReplyError('LOGIN_REQUIRED')
       const holder = { profile: current.profile }
       const origin = new URL(url).origin
-      const call = (): Promise<Response> =>
+      // POST 읽기(루나 작품 목록)는 쿠키를 직접 실어 보낸다. 앱이 보내는 요청은 "같은 사이트에서 보낸 요청"으로
+      // 치지 않아 SameSite=Lax 쿠키(루나의 자동 로그인 쿠키)가 POST에 빠지고, 사이트가 로그인 안 됨으로 답한다
+      // (2026-11-13 맥미니에서 확인: 같은 쿠키로 GET은 로그인 상태, POST만 거절). 브라우저가 붙이는 Origin도 같이 보낸다.
+      const post = init?.method === 'POST'
+      const jar = async (): Promise<Record<string, string>> => {
+        if (!post) return {}
+        const cookies = await ses.cookies.get({ url })
+        return {
+          cookie: cookies.map((c) => c.name + '=' + c.value).join('; '),
+          origin
+        }
+      }
+      const call = async (): Promise<Response> =>
         ses.fetch(url, {
           method: init?.method ?? 'GET',
           headers: {
             ...(holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}),
-            ...(init?.contentType ? { 'content-type': init.contentType } : {})
+            ...(init?.contentType ? { 'content-type': init.contentType } : {}),
+            ...(await jar())
           },
           body: init?.body,
-          credentials: 'include',
+          credentials: post ? 'omit' : 'include',
           redirect: 'error',
           signal: AbortSignal.timeout(20_000)
         })

@@ -405,7 +405,9 @@ app.whenReady().then(() => {
   // mac dock 아이콘 (dev 미리보기용 — 패키징 앱은 icns 사용)
   if (process.platform === 'darwin' && app.dock) app.dock.setIcon(appIcon)
 
-  createWindow()
+  // 서비스 모드(--service): 창 없이 떠서 알림 수집·로그인 연장·작품 MCP만 돈다(맥미니의 아틀리에MCP).
+  // 로그인할 때처럼 화면이 필요하면 Dock 아이콘을 누르면 창이 열린다(activate).
+  if (!process.argv.includes('--service')) createWindow()
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

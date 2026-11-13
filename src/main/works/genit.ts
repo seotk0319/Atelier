@@ -37,12 +37,14 @@ import {
   genitImageParts,
   genitPlanImages
 } from './genit-media'
+import { matchOld } from './match-old'
 import type {
   LoreEntry,
   SendRule,
   WorkAdapter,
   WorkBody,
   WorkDraft,
+  WorkFeature,
   WorkFetch,
   WorkSend,
   WorkListItem,
@@ -59,6 +61,163 @@ const CSRF = { domain: 'genit.ai', name: 'wavechat_csrftoken', header: 'x-csrfto
 const SEND_HEADERS = ['origin', 'referer', 'accept', 'x-request-id']
 const VISIBILITY_CODES: Record<string, number> = { public: 1, link: 2, private: 3 }
 const LORE_DEFAULT_CATEGORY = '설정'
+
+const feature = (
+  site: WorkFeature['site'],
+  read: WorkFeature['read'],
+  write: WorkFeature['write'],
+  verified: WorkFeature['verified'],
+  note: string
+): WorkFeature => ({ site, read, write, verified, note })
+
+/** 기능별로 이 연결부가 어디까지 되는지 (분석 문서 9절). 노트는 40자 이내 */
+const GENIT_FEATURES: Record<string, WorkFeature> = {
+  title: feature('yes', 'yes', 'yes', 'yes', '작품 이름. 빈 값은 거절'),
+  description: feature('yes', 'yes', 'yes', 'yes', '작품 소개. 문서상 최대 5만자'),
+  main_prompt: feature('yes', 'yes', 'partial', 'partial', '문서상 8천자. 옛 모델별 형식은 막힘'),
+  first_message: feature('yes', 'yes', 'yes', 'partial', '시작 상황 본문. 제목·본문 둘 다 필요'),
+  start_scenarios: feature('yes', 'yes', 'yes', 'partial', '첫 대사·보조 칸 없음. 커버는 사이트에서'),
+  lorebook: feature('yes', 'yes', 'yes', 'partial', '분류 필수. 부가 칸은 읽기·수정 불가'),
+  characters: feature('yes', 'yes', 'yes', 'partial', '글 칸은 소개 하나(문서상 500자)'),
+  example_dialogue: feature('no', 'no', 'no', 'no', '전용 칸 못 찾음'),
+  user_persona: feature('unknown', 'no', 'no', 'no', '전용 칸 못 찾음'),
+  output_rules: feature('no', 'no', 'no', 'no', '전용 칸 없음. 메인 프롬프트에 씀'),
+  situation_images: feature('yes', 'yes', 'partial', 'yes', '에셋 올리기·빼기만. 순서 변경 불가'),
+  cover: feature('yes', 'yes', 'partial', 'partial', '대표 이미지 끝에 더하기, 첫 장 외 빼기'),
+  tags: feature('yes', 'yes', 'no', 'no', '읽기만(태그·장르 이름). 쓰기는 사이트에서'),
+  visibility: feature('yes', 'yes', 'yes', 'partial', '공개·링크·비공개. 공개 전환은 미확인'),
+  create_work: feature('yes', 'no', 'yes', 'yes', '항상 비공개. 태그는 사이트에서 직접'),
+  delete_work: feature('yes', 'no', 'yes', 'yes', '시험 작품으로 확인'),
+  versioning_review: feature('yes', 'partial', 'no', 'no', '버전 수·패치노트 길이만 읽기. 심사는 사이트'),
+  language_editions: feature('unknown', 'no', 'no', 'no', '작품 단위 언어 판본 못 찾음'),
+  bgm_voice: feature('unknown', 'no', 'no', 'no', '사이트에 있는지 확인 안 됨'),
+  jsx_html: feature('yes', 'partial', 'no', 'no', '템플릿 개수만 읽기. 본문 저장 때 같이 보냄'),
+  model_settings: feature('yes', 'partial', 'no', 'no', '모델 설정값만 읽기. 프롬프트 내용은 못 읽음'),
+  comments_stats: feature('yes', 'no', 'no', 'no', '통계는 사이트에서. 답글은 알림 탭')
+}
+
+/**
+ * 사이트에는 있는데 이 연결부가 내용을 읽지 못하는 것. 개수만 extras에 있는 것도 내용은 못 읽는다.
+ * 비어 보여도 "없음"이 아니다.
+ */
+const GENIT_UNSUPPORTED = [
+  '로어북 부가 칸(표시 설명·회상 단서·상태·활성·숨김·고정)',
+  '시작 상황 휘발 상황·추천 질문·활성·커버 이미지 내용',
+  '캐릭터 부가 칸(코드명·초기 기록·배경·별칭·키워드·활성)',
+  '상태창 템플릿 내용',
+  '템플릿 값',
+  '상태 변수',
+  '단축어',
+  '모델별 프롬프트',
+  '사용 안내',
+  '댓글·통계'
+]
+
+const SHORT_TEXT = 80
+const SHORT_LIST = 20
+
+/**
+ * 공통 칸에 들지 않는 설정. 원본에 있는 칸만 싣고, 긴 글은 글자 수로, 목록은 개수로 줄인다.
+ * 조회·좋아요·댓글 수처럼 읽을 때마다 달라지는 값은 싣지 않는다(계획 뒤 변화 검사가 깨진다).
+ */
+export function genitExtras(c: Obj): Record<string, unknown> {
+  const v = version(c)
+  const out: Record<string, unknown> = {}
+  const flag = (name: string, o: Obj, key: string): void => {
+    if (typeof o[key] === 'boolean') out[name] = o[key]
+  }
+  const num = (name: string, o: Obj, key: string): void => {
+    const n = o[key]
+    if (typeof n === 'number' && Number.isFinite(n)) out[name] = n
+  }
+  const word = (name: string, o: Obj, key: string): void => {
+    const s = o[key]
+    if (typeof s === 'string' && s.length <= SHORT_TEXT) out[name] = s
+  }
+  const size = (name: string, o: Obj, key: string): void => {
+    const s = o[key]
+    if (typeof s === 'string') out[name] = s.length
+  }
+  const count = (name: string, o: Obj, key: string): void => {
+    if (!(key in o)) return
+    const x = o[key]
+    if (Array.isArray(x)) out[name] = x.length
+    else if (isObj(x)) out[name] = Object.keys(x).length
+    else if (x == null) out[name] = 0
+  }
+  const has = (name: string, o: Obj, key: string): void => {
+    if (!(key in o)) return
+    const x = o[key]
+    out[name] = typeof x === 'string' ? x.trim() !== '' : x != null && x !== false
+  }
+  /** 목록의 개수와, 이름이 짧고 20개 이하일 때 이름들 */
+  const named = (countName: string, listName: string, x: unknown): void => {
+    if (!Array.isArray(x)) return
+    out[countName] = x.length
+    const found = x.flatMap((e): string[] => {
+      const s = typeof e === 'string' ? e : isObj(e) ? text(e.name_ko) || text(e.name) : ''
+      return s.trim() ? [s] : []
+    })
+    if (found.length && found.length <= SHORT_LIST && found.every((s) => s.length <= SHORT_TEXT))
+      out[listName] = found
+  }
+
+  named('tag_count', 'tags', c.tags)
+  named('genre_count', 'genres', c.genres)
+  flag('is_adult', c, 'is_adult')
+  word('work_type', c, 'type')
+  word('target_gender', c, 'gender')
+  word('prompt_type', c, 'prompt_type')
+  named(
+    'default_model_tier_count',
+    'default_model_tiers',
+    Array.isArray(c.default_model_tiers) ? c.default_model_tiers : v.default_model_tiers
+  )
+  flag('use_tier_prompts', 'use_tier_prompts' in v ? v : c, 'use_tier_prompts')
+  flag('use_submodel', v, 'use_submodel')
+  if ('character_prompt' in c) out.prompt_by_model = basePrompt(c.character_prompt).byModel
+  count('tier_prompt_count', v, 'tier_prompts')
+  size('usage_guide_length', v, 'usage_guide')
+  count('html_template_count', v, 'html_templates')
+  count('template_value_count', v, 'template_values_data' in v ? 'template_values_data' : 'template_values')
+  count('info_value_count', v, 'info_values')
+  count('shortcut_count', v, 'shortcuts')
+  if (Array.isArray(v.greetings)) {
+    const greetings = list(v.greetings)
+    out.sample_question_count = greetings.reduce(
+      (sum, g) => sum + (Array.isArray(g.sample_questions) ? g.sample_questions.length : 0),
+      0
+    )
+    out.start_scenario_cover_count = greetings.filter(
+      (g) => text(g.cover_image).trim() || text(g.cover_url).trim()
+    ).length
+  }
+  if (Array.isArray(c.profile_images)) {
+    const profiles = list(c.profile_images)
+    out.profile_image_count = c.profile_images.length
+    out.has_profile_image = profiles.length > 0
+    out.profile_images_under_review_count = profiles.filter((p) => p.is_under_review === true).length
+  }
+  count('description_image_count', c, 'description_images')
+  has('has_review_cover_image', c, 'review_cover_image_url')
+  num('version_count', c, 'version_count')
+  word('latest_patch_note_at', c, 'latest_patch_note_at')
+  size('latest_patch_note_length', c, 'latest_patch_note')
+  size('change_summary_length', c, 'change_summary')
+  flag('age_editable', c, 'age_editable')
+  has('has_admin_private_reason', c, 'admin_private_reason')
+  flag('is_board_enabled', c, 'is_board_enabled')
+  has('has_comment_ban', c, 'comment_ban')
+  flag('monetization_enabled', c, 'monetization_enabled')
+  word('settlement_class', c, 'settlement_class')
+  has('has_custom_settlement_request', c, 'custom_settlement_request')
+  if (isObj(c.comment_reward_setting)) {
+    num('comment_reward_amount', c.comment_reward_setting, 'reward_amount')
+    num('comment_reward_min_characters', c.comment_reward_setting, 'min_characters')
+    num('comment_reward_min_usage_messages', c.comment_reward_setting, 'min_usage_messages')
+  }
+  return out
+}
 
 function workId(id: string): string {
   if (!UUID_RE.test(id)) throw new Error('BAD_WORK_ID')
@@ -151,6 +310,26 @@ const keywords = (keys: string): string[] =>
     .split(',')
     .map((k) => k.trim())
     .filter(Boolean)
+/**
+ * 읽을 때 ', '로 이은 키워드 글이 그대로 돌아왔으면 원본 키워드 목록을 그대로 쓴다.
+ * 쉼표가 든 키워드나 앞뒤 공백이 있는 키워드가 안 바꾼 항목에서 쪼개지지 않게 한다.
+ */
+const keepKeywords = (keys: string, old: unknown): unknown[] =>
+  Array.isArray(old) && strings(old).join(', ') === keys ? [...old] : keywords(keys)
+/** rows 중 original에 똑같은 항목이 없는 것(바꿨거나 새로 더한 것). 같은 항목이 여러 개면 개수만큼만 짝짓는다 */
+function changedRows(rows: Obj[], original: Obj[]): Obj[] {
+  const left = new Map<string, number>()
+  for (const row of original) {
+    const key = JSON.stringify(row)
+    left.set(key, (left.get(key) ?? 0) + 1)
+  }
+  return rows.filter((row) => {
+    const key = JSON.stringify(row)
+    const n = left.get(key) ?? 0
+    if (n > 0) left.set(key, n - 1)
+    return n === 0
+  })
+}
 /** 공통 mode → 젠잇 로어북 분류. 분류 이름이 아니면(keyword 등) 기본값을 쓴다 */
 const category = (mode: string | null | undefined, fallback: string): string =>
   mode && LORE_CATEGORIES.includes(mode) ? mode : fallback
@@ -229,7 +408,10 @@ function checkLore(rows: Obj[]): void {
 
 export const genitWorks: WorkAdapter = {
   id: 'genit',
+  // 서버가 만드는 언어별 사본·순서 번호·최신 판 사본 (2026-11-13 실제 저장에서 확인)
+  rawIgnore: [/_(en|ko)$/, /\bdisplay_order$/, /^latest_version\b/],
   label: '젠잇',
+  features: GENIT_FEATURES,
   guide: {
     save: '본문이 바뀌면 새 버전이 된다.',
     manual: [
@@ -350,7 +532,9 @@ export const genitWorks: WorkAdapter = {
         details: text(m.introduction),
         info: '',
         imageCount: text(m.profile_url) || text(m.profile_filename) ? 1 : 0
-      }))
+      })),
+      extras: genitExtras(c),
+      unsupported: [...GENIT_UNSUPPORTED]
     }
   },
 
@@ -385,18 +569,30 @@ export const genitWorks: WorkAdapter = {
     // ── 로어북 ──
     const hadLore = list(original.lorebooks).length > 0
     if (changes.lorebook) {
-      // 전체 교체: 자리가 같은 항목은 기존 칸(표시 설명·회상 단서 등)을 물려받는다
+      // 전체 교체: 제목이 같은 옛 항목(제목만 고친 것은 같은 자리)의 기존 칸(표시 설명·회상 단서 등)을 물려받는다.
+      // 짝이 없는 항목은 새 항목이다. 분류는 새 값이 분류 이름일 때만 바꾸고 아니면 옛 값 그대로 둔다(없으면 없는 채로).
       const old = list(next.lorebooks)
+      const paired = matchOld(
+        changes.lorebook.map((entry) => entry.title),
+        old,
+        (l) => text(l.title),
+        // 제목이 겹치는 항목이 있어도 순서를 바꿨을 때 제 짝을 찾도록 내용까지 견준다
+        { contents: changes.lorebook.map((entry) => entry.content), contentOf: (l) => text(l.description) }
+      )
       next.lorebooks = changes.lorebook.map((entry, i) => {
-        const fresh = loreFresh(entry)
-        if (!old[i]) return fresh
-        return {
-          ...old[i],
+        const prev = paired[i]
+        if (!prev) return loreFresh(entry)
+        const row: Obj = {
+          ...prev,
           title: entry.title,
-          description: entry.content,
-          keywords: keywords(entry.keys),
-          category: category(entry.mode, text(old[i].category) || LORE_DEFAULT_CATEGORY)
+          description: entry.content
         }
+        // given이 있으면 호출한 쪽이 적어 준 칸만 바꾼다(키워드는 keys 칸, 분류는 mode 칸). given이 없는 옛 호출은 그대로
+        if (!entry.given || entry.given.includes('keys'))
+          row.keywords = keepKeywords(entry.keys, prev.keywords)
+        const gaveMode = !entry.given || entry.given.includes('mode')
+        if (gaveMode && entry.mode && LORE_CATEGORIES.includes(entry.mode)) row.category = entry.mode
+        return row
       })
     }
     if (changes.lorebookPatch?.length) {
@@ -408,7 +604,7 @@ export const genitWorks: WorkAdapter = {
           throw new Error('BAD_CHANGES')
         if (p.title !== undefined) row.title = p.title
         if (p.content !== undefined) row.description = p.content
-        if (p.keys !== undefined) row.keywords = keywords(p.keys)
+        if (p.keys !== undefined) row.keywords = keepKeywords(p.keys, row.keywords)
         if (p.mode !== undefined && p.mode !== null) {
           if (!LORE_CATEGORIES.includes(p.mode)) throw new Error('BAD_LOREBOOK')
           row.category = p.mode
@@ -433,8 +629,15 @@ export const genitWorks: WorkAdapter = {
         const row = rows[at(patch.index, rows.length)]
         if (patch.subPrompt !== undefined || patch.dialogue !== undefined)
           throw new Error('BAD_CHANGES')
-        if (patch.title !== undefined) row.title = patch.title
-        if (patch.content !== undefined) row.content = patch.content
+        // 편집기는 제목이나 본문이 빈 시작 상황을 저장에서 빼 버린다 → 바꾸는 칸이 비면 막는다. 안 바꾼 칸은 검사하지 않는다.
+        if (patch.title !== undefined) {
+          if (!patch.title.trim()) throw new Error('BAD_CHANGES')
+          row.title = patch.title
+        }
+        if (patch.content !== undefined) {
+          if (!patch.content.trim()) throw new Error('BAD_CHANGES')
+          row.content = patch.content
+        }
         if (patch.situation !== undefined) row.background = patch.situation
         if (patch.description !== undefined) row.description = patch.description
       }
@@ -446,14 +649,13 @@ export const genitWorks: WorkAdapter = {
       if (gone.has(0)) throw new Error('KEEP_DEFAULT')
       v.greetings = rows.filter((_, i) => !gone.has(i))
     }
-    if (changes.startScenariosAdd?.length)
-      v.greetings = [...list(v.greetings), ...changes.startScenariosAdd.map(startFresh)]
-    // 편집기는 제목이나 본문이 빈 시작 상황을 저장에서 빼 버린다 → 바뀐 시작 상황에 그런 것이 있으면 막는다
-    if (
-      JSON.stringify(v.greetings) !== JSON.stringify(version(original).greetings) &&
-      list(v.greetings).some((g) => !text(g.title).trim() || !text(g.content).trim())
-    )
-      throw new Error('BAD_CHANGES')
+    if (changes.startScenariosAdd?.length) {
+      const added = changes.startScenariosAdd.map(startFresh)
+      // 더하는 시작 상황은 제목과 본문이 모두 있어야 한다 (편집기 규칙). 손대지 않은 옛 항목은 검사하지 않고 그대로 보낸다.
+      if (added.some((g) => !text(g.title).trim() || !text(g.content).trim()))
+        throw new Error('BAD_CHANGES')
+      v.greetings = [...list(v.greetings), ...added]
+    }
 
     // ── 캐릭터 ──
     if (changes.characters?.length) {
@@ -481,8 +683,12 @@ export const genitWorks: WorkAdapter = {
       v.cast_members = [...list(v.cast_members), ...changes.charactersAdd.map(castFresh)]
 
     const content = contentKey(next) !== contentKey(original)
-    // 본문 묶음을 보낼 때는 로어북 전체가 같이 가므로 전체가 편집기 규칙(제목·내용·분류)을 지켜야 한다
-    if (content) checkLore(list(next.lorebooks))
+    // 본문 묶음에는 로어북 전체가 같이 가지만, 편집기 규칙(제목·내용·분류)은 바꾸거나 더한 항목만 검사한다.
+    // 손대지 않은 옛 항목(분류 미설정 구작 등)은 원본 그대로 보낸다.
+    if (content) checkLore(changedRows(list(next.lorebooks), list(original.lorebooks)))
+    // 저장 때 걸릴 본문 모양 검사(공개 범위·유형·성별·모델별 프롬프트·빈 목록)를 계획 단계에서 미리 돌린다.
+    // 저장 단계에서 걸리면 승인된 계획이 소진된다.
+    genitForm(next, { content })
     CONTENT_CHANGED.set(next, content)
     return next
   },

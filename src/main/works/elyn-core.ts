@@ -12,6 +12,8 @@ export const REV = '(?:' + UUID + '|[0-9]{1,18})'
 export const REV_RE = new RegExp('^' + REV + '$', 'i')
 /** 작품 주소 경로의 앞부분 (정규식 조각) */
 export const C_PATH = '^/api/v1/characters/'
+// 편집기의 공개 범위 선택지 (unlisted = 일부 공개)
+export const VISIBILITIES = ['public', 'unlisted', 'private']
 
 // 편집기가 받는 이미지 (IMAGE_UPLOAD_ACCEPT: webp·jpg·jpeg·png). 한 번에 올리는 묶음은
 // 10개·20MiB까지다 (IMAGE_UPLOAD_CHUNK_MAX_FILES / _BYTES). 파일 하나의 서버 한도는 코드에 없다.
@@ -99,7 +101,8 @@ export function elynCharacterForm(c: Obj): Obj {
     imageUrl: text(c.imageUrl),
     creatorNotes: text(list(c.creatorNotes)[0]?.content),
     tags: tagText(c.tags),
-    visibility: text(c.visibility) || 'private',
+    // 값이 없으면 비워 둔다. 저장 때 elynCommit이 공개 범위를 확인하고 멈춘다 (임의로 private·public을 넣지 않는다)
+    visibility: text(c.visibility),
     target: text(c.target) || 'all',
     isNsfw: c.is_nsfw === true,
     isExclusive: c.isExclusive === true,
@@ -227,6 +230,103 @@ export function elynLanguage(raw: ElynRaw): string {
   )
 }
 
+const shortText = (v: unknown): string | null => {
+  const s = strOrNull(v)
+  return s && s.length <= 80 ? s : null
+}
+/** 짧은 글 목록(20개 이하, 각 80자 이하)은 그대로, 아니면 개수만 싣는다 */
+function putList(out: Obj, key: string, countKey: string, items: string[]): void {
+  if (items.length <= 20 && items.every((s) => s.length <= 80)) out[key] = items
+  else out[countKey] = items.length
+}
+const putText = (out: Obj, key: string, v: unknown): void => {
+  const s = shortText(v)
+  if (s) out[key] = s
+}
+const putNumber = (out: Obj, key: string, v: unknown): void => {
+  if (typeof v === 'number') out[key] = v
+}
+
+/**
+ * 공통 칸에 들지 않는 설정 (work_read의 extras, 읽기 전용). 폼에 있는 칸만 싣고(판이 없는 작품은 편집기가 채우는
+ * 기본값 false·all·none 포함), 긴 글·목록은 개수로 줄인다.
+ * 좋아요·대화·댓글 수처럼 읽을 때마다 달라지는 값은 싣지 않는다 (계획 뒤 변화 검사가 깨진다).
+ */
+export function elynExtras(r: ElynRaw): Obj {
+  const f = r.form
+  const c = r.character
+  const out: Obj = {}
+  putList(
+    out,
+    'tags',
+    'tag_count',
+    tagText(f.tags)
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+  )
+  if (typeof f.isNsfw === 'boolean') out.is_nsfw = f.isNsfw
+  putText(out, 'target', f.target)
+  if (typeof f.isPaug === 'boolean') out.is_paug = f.isPaug
+  putText(out, 'favored_model_id', f.favoredModelId)
+  if (isObj(c.favoredModel)) putText(out, 'favored_model_name', c.favoredModel.name)
+  if (typeof f.isExclusive === 'boolean') out.is_exclusive = f.isExclusive
+  putText(out, 'exclusive_locked_until', f.exclusiveLockedUntil)
+  if (typeof c.isOfficialPartner === 'boolean') out.is_official_partner = c.isOfficialPartner
+  out.has_cover = !!text(f.imageUrl)
+  out.gallery_image_count = list(f.subImages).length
+  out.custom_script_component_count = list(f.customScript).length
+  if (isObj(c.statusData)) {
+    for (const [from, to] of [
+      ['global_status', 'status_data_global_count'],
+      ['character_status', 'status_data_character_count'],
+      ['user_status', 'status_data_user_count']
+    ] as const)
+      if (Array.isArray(c.statusData[from])) out[to] = (c.statusData[from] as unknown[]).length
+  }
+
+  // 로어북 항목별로는 못 읽는 칸(첫 메시지 스캔·그룹·선행 조건)은 개수로만 알린다
+  const lores = list(isObj(f.lorebook) ? f.lorebook.lores : null)
+  out.lorebook_scan_first_message_count = lores.filter((e) => e.scan_first_message === true).length
+  out.lorebook_grouped_count = lores.filter((e) => strOrNull(e.group)).length
+  out.lorebook_requires_count = lores.filter((e) => strings(e.requires).length > 0).length
+
+  // 판·심사 상태 (저장·심사로만 바뀐다)
+  const rev = r.revision
+  if (rev) {
+    const version = rev.version_number ?? rev.versionNumber
+    if (typeof version === 'number') out.revision_version = version
+    else putText(out, 'revision_version', version)
+    putText(out, 'revision_status', rev.status)
+    putText(out, 'revision_submitted_at', rev.submitted_at)
+    putText(out, 'revision_reviewed_at', rev.reviewed_at)
+  }
+  out.has_draft_revision = isObj(r.status.draft)
+  out.has_in_review_revision = isObj(r.status.in_review)
+  out.has_rejected_revision = isObj(r.status.rejected)
+  if (isObj(r.status.latest_approved))
+    putNumber(out, 'latest_approved_version', r.status.latest_approved.version_number)
+  putNumber(out, 'active_revision_version', r.status.active_revision_version)
+
+  putText(out, 'created_at', c.createdAt)
+  putText(out, 'public_at', c.publicAt)
+  if (Array.isArray(c.creatorNotes))
+    putList(
+      out,
+      'creator_notes_locales',
+      'creator_notes_locale_count',
+      list(c.creatorNotes).flatMap((e) => strOrNull(e.locale) ?? [])
+    )
+  if (Array.isArray(c.firstMessage))
+    putList(
+      out,
+      'first_message_locales',
+      'first_message_locale_count',
+      list(c.firstMessage).flatMap((e) => strOrNull(e.locale) ?? [])
+    )
+  return out
+}
+
 export function checkImageFile(file: LocalImage): void {
   const ext = (file.name.split('.').pop() || '').toLowerCase()
   if (!ELYN_IMAGE_RULES.extensions.includes(ext)) throw new Error('BAD_IMAGE')
@@ -253,6 +353,10 @@ export async function elynCommit(
   // 편집기는 검수 중인 판이 있으면 "검수 요청을 바꿀지" 따로 묻는다. 여기서는 바꾸지 않는다.
   if (isObj(next.status.in_review)) throw new Error('IN_REVIEW')
   const form = next.form
+  // 공개 범위를 모르면(비어 있으면) 판을 저장하기 전에 멈춘다. public·private로 채워 보내지 않는다.
+  // 사이트가 준 값이면 우리가 모르는 값이어도 그대로 보낸다 (바꾸려는 값은 applyChanges가 세 값만 받는다).
+  const visibility = text(form.visibility)
+  if (!visibility) throw new Error('BAD_VISIBILITY')
   const res = await io.send({
     method: 'POST',
     url: ELYN_BASE + wid + '/draft',
@@ -269,7 +373,7 @@ export async function elynCommit(
   if (!REV_RE.test(rid)) throw new Error('SAVE_FAILED revision')
 
   const submit = await io.write('POST', ELYN_BASE + wid + '/revisions/' + rid + '/submit', {
-    visibility: text(form.visibility) || 'public',
+    visibility,
     isExclusive: form.isExclusive === true
   })
   if (submit.status === 401 || submit.status === 403) throw new Error('LOGIN_REQUIRED')

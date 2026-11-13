@@ -50,6 +50,11 @@ const MESSAGES: [RegExp, string][] = [
     '나눠 읽기 값이 맞지 않아요. work_read·edition_read의 offset은 fields에 칸을 하나만 줬을 때만 쓰고 0 이상 그 칸 길이 미만이어야 해요. max_chars는 숫자, images_list의 group은 있는 묶음 번호, offset은 0 이상, limit은 1~500이에요.'
   ],
   [
+    // 연결부가 칸 이름과 한도를 붙여 던진 것(BAD_FIELD subtitle 1~1000자)은 "없는 칸"이 아니라 길이·필수 문제다
+    /BAD_FIELD \S+ /,
+    '그 칸의 길이가 이 플랫폼의 범위를 벗어나요(비어 있거나 너무 길어요). 괄호 안이 칸 이름과 범위예요.'
+  ],
+  [
     /BAD_FIELD/,
     '그 플랫폼에 없는 칸이에요. work_read의 field_lengths에 나오는 이름 중에서 골라 주세요.'
   ],
@@ -60,6 +65,10 @@ const MESSAGES: [RegExp, string][] = [
   [/NO_EDITIONS/, '언어 판본이 없는 플랫폼이에요.'],
   [/UNAPPROVED_(READ|WRITE)_ROUTE/, '허용되지 않은 주소라 요청하지 않았어요.'],
   [/NO_SAVE/, '이 플랫폼은 아직 저장을 지원하지 않아요.'],
+  [
+    /PUBLIC_BY_USER/,
+    '완전 공개(public)로 바꾸는 일은 이 도구로 하지 않아요. 사용자가 사이트에서 직접 공개해요. 링크 공개·일부공개·비공개로 바꾸는 것은 돼요.'
+  ],
   [/NO_DELETE/, '이 플랫폼은 아직 작품 삭제를 지원하지 않아요.'],
   [/NO_CREATE/, '이 플랫폼은 아직 새 작품 만들기를 지원하지 않아요.'],
   [/NO_IMAGES/, '이 플랫폼은 아직 이미지 올리기를 지원하지 않아요.'],
@@ -106,7 +115,36 @@ const MESSAGES: [RegExp, string][] = [
     '대표 이미지는 그냥 지울 수 없어요. 새 대표 이미지를 같이 올리거나(에덴: add의 default, 베이비챗: main_file) 전부 지울 때만 돼요.'
   ],
   [/KEEP_DEFAULT/, '기본 시작 상황과 주연 캐릭터는 지울 수 없어요. 하나는 꼭 남아야 해요.'],
-  [/START_LIMIT/, '이 플랫폼은 추가 시작 설정을 2개까지만 받아요.'],
+  [
+    /UNKNOWN_VISIBILITY|UNKNOWN_START_PUBLIC/,
+    '이 작품의 공개 상태를 원본에서 읽지 못해서 저장하지 않았어요. 모르는 채로 보내면 공개로 바뀔 수 있어요. 사이트에서 공개 상태를 확인해 주세요.'
+  ],
+  [
+    /BAD_LENGTH/,
+    '바꾼 칸이 이 플랫폼의 길이·개수 한도를 넘어요. 괄호 안이 넘은 칸과 한도예요.'
+  ],
+  [
+    /KEY_COMMA/,
+    '이 항목에는 쉼표가 든 키워드가 있어요. 키워드 글을 통째로 바꾸면 그 키워드가 쪼개져서, 이 도구로는 이 항목의 키워드를 바꾸지 않아요. 사이트에서 고쳐 주세요.'
+  ],
+  [/NO_BASE/, '저장 전 원본을 읽지 못해서 저장하지 않았어요. 다시 읽은 뒤 계획부터 해 주세요.'],
+  [/EMPTY_FIELD/, '비울 수 없는 칸을 비우려고 했어요. 괄호 안이 그 칸이에요.'],
+  [
+    /LOCALIZATION_MISSING/,
+    '이 작품의 언어별 설정을 읽지 못해서 저장하지 않았어요. 사이트에서 작품을 한 번 열어 본 뒤 다시 해 주세요.'
+  ],
+  [
+    /LIST_REFUSED/,
+    '플랫폼이 작품 목록 요청을 거절했어요. 로그인 문제가 아닐 수 있어요(괄호 안이 플랫폼이 준 이유예요).'
+  ],
+  [
+    /WORK_ACCESS_REFUSED/,
+    '플랫폼이 이 작품을 보여 주지 않았어요. 성인 인증이나 비공개 설정 때문일 수 있어요(괄호 안이 플랫폼이 준 이유예요).'
+  ],
+  [
+    /START_LIMIT/,
+    '시작 상황 개수가 이 플랫폼의 범위를 벗어나요(하나도 없거나 한도를 넘음). 괄호 안이 플랫폼이 알려 준 범위예요.'
+  ],
   [/NO_CHARACTERS/, '이 플랫폼은 작품 하나에 캐릭터가 하나라 캐릭터를 더하거나 지울 수 없어요.'],
   [
     /NO_CHANGES/,
@@ -207,7 +245,7 @@ export function toolMessage(error: unknown): string {
   for (const [re, message] of MESSAGES)
     if (re.test(code))
       // 플랫폼이 거절한 경우는 받은 상태 코드도 같이 알려 준다
-      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS |PUBLISH_REQUIREMENTS |BAD_CANVAS_FILE |IMPORT_LANGUAGE_MISMATCH |IMPORT_SETTINGS_CHOICE_REQUIRED /.test(
+      return /_FAILED |BAD_DRAFT |COVER_AMBIGUOUS |PUBLISH_REQUIREMENTS |BAD_CANVAS_FILE |IMPORT_LANGUAGE_MISMATCH |IMPORT_SETTINGS_CHOICE_REQUIRED |LIST_REFUSED |WORK_ACCESS_REFUSED |BAD_LENGTH |KEY_COMMA |EMPTY_FIELD |BAD_LOREBOOK |BAD_FIELD |BAD_START |LOREBOOK_LIMIT |START_LIMIT /.test(
         code
       )
         ? message + ' (' + code.slice(0, 90) + ')'
@@ -425,7 +463,7 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
       {
         name: 'sites_list',
         description:
-          '작품 본문을 읽을 수 있는 플랫폼과 각 플랫폼이 지원하는 기능을 돌려준다. guide에 플랫폼별 안내가 있다: ' +
+          '작품 본문을 읽을 수 있는 플랫폼과 각 플랫폼이 지원하는 기능을 돌려준다. features는 기능별로 이 플랫폼에서 읽기·고치기가 되는지와 실제 계정 확인 여부다(site: 사이트에 그 기능이 있는지). guide에 플랫폼별 안내가 있다: ' +
           'save = 저장하면 생기는 일, manual = 이 도구로 못 해서 사이트에서 직접 할 일, unverified = 실제 계정에서 ' +
           '아직 확인하지 않은 동작. 처음 쓰는 플랫폼은 저장 전에 guide를 읽는다.',
         inputSchema: { type: 'object', properties: {} },
@@ -442,6 +480,7 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
               can_cover: !!a.uploadCover,
               can_edition_save: !!a.saveEdition,
               can_canvas: canCanvas(a),
+              features: a.features ?? null,
               guide: a.guide
                 ? {
                     save: a.guide.save,
@@ -479,7 +518,9 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
           '스냅샷 파일 경로)만 돌려준다. fields에 title / subtitle / description / main / creator_comment를 ' +
           '넣으면 그 칸의 본문을 같이 준다. 칸 하나가 max_chars(기본 20000)를 넘으면 그만큼만 주고 ' +
           'content_parts에 total·offset·next_offset을 적는다. 이어 읽기는 fields에 그 칸 하나와 offset. ' +
-          '읽을 때마다 플랫폼 원본 전체가 snapshot 경로의 JSON 파일로 남는다.',
+          '읽을 때마다 플랫폼 원본 전체가 snapshot 경로의 JSON 파일로 남는다. extras는 공통 칸에 들지 않는 ' +
+          '그 플랫폼의 설정(태그·분류·성인 표시·모델 설정 등, 읽기 전용)이고, unsupported는 사이트에는 있는데 이 ' +
+          '도구가 읽지 못하는 것이다. unsupported에 든 것은 빈 목록으로 보여도 "없음"이 아니다.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -504,6 +545,8 @@ export function createWorkTools(deps: WorkToolDeps): ToolDef[] {
             status: body.status,
             updated_at: body.updatedAt,
             field_lengths: lengths(body),
+            ...(body.extras ? { extras: body.extras } : {}),
+            ...(body.unsupported?.length ? { unsupported: body.unsupported } : {}),
             ...readFields(body, args.fields, args),
             lorebook: body.lorebook.map((e, index) => ({
               index,

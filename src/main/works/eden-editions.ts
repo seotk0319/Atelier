@@ -56,7 +56,8 @@ function mergeById(
     if (item.id !== undefined && item.id !== null && !byId.has(item.id)) byId.set(item.id, item)
   if (!byId.size) return source
   return list(source).flatMap((item) => {
-    if (item.id === undefined || item.id === null) return []
+    // 번호가 없는 원문 항목은 판본과 짝지을 수 없으니 원문 그대로 둔다 (빼면 저장 때 사라진다)
+    if (item.id === undefined || item.id === null) return [item]
     const found = byId.get(item.id)
     if (!found) return [item]
     const out: Obj = { ...item }

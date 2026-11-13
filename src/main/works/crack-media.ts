@@ -15,6 +15,7 @@ import {
   crackPlain,
   crackRaw,
   crackReadRaw,
+  crackShapeCheck,
   crackWorkId,
   isObj,
   text,
@@ -161,6 +162,7 @@ export function crackPlanImages(raw: unknown, changes: ImageChanges): ImagePlanL
     throw new Error('NOT_SUPPORTED situation_images')
   if (!changes.main) throw new Error('NO_CHANGES')
   checkFile(changes.main)
+  crackShapeCheck(crackRaw(raw).story)
   return [{ action: 'main', detail: '대표 이미지(프로필) ← ' + changes.main.name }]
 }
 
@@ -172,6 +174,8 @@ async function replaceProfile(
   file: LocalImage
 ): Promise<string> {
   const wid = crackWorkId(id)
+  // 이미지를 올리기 전에 수정 등록 본문을 지을 수 있는 원본인지 본다 (올린 이미지만 남지 않게)
+  crackShapeCheck(crackRaw(raw).story)
   const url = await uploadProfile(io.write, file)
   const next = structuredClone(crackRaw(raw))
   next.story.portraitImage = { origin: url }

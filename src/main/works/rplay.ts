@@ -54,6 +54,7 @@ import {
   rplayImportCanvas,
   rplaySendRule
 } from './rplay-canvas'
+import { matchOld } from './match-old'
 import type {
   ImageGroup,
   LoreEntry,
@@ -130,6 +131,15 @@ function patternsOf(e: Obj): string[] {
     .map((k) => k.trim())
     .filter(Boolean)
 }
+/** 발동 단어 글("a, b") → 쪼갠 목록 */
+const patternsFrom = (keys: string): string[] =>
+  keys
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+/** 항목의 유지 턴을 읽을 때 쓰는 값 (없거나 0 이하면 1) */
+const turnsOf = (e: Obj): number =>
+  typeof e.durationTurns === 'number' && e.durationTurns > 0 ? e.durationTurns : 1
 function loreOf(r: RplayRaw): LoreEntry[] {
   return ofType(r, 'lorebook').flatMap((n) => {
     const m = metaOf(r, n)
@@ -139,10 +149,137 @@ function loreOf(r: RplayRaw): LoreEntry[] {
       content: text(e.text),
       mode: e.activationMode === 'always' ? 'always' : 'keyword',
       offKeys: [],
-      turnRange: typeof e.durationTurns === 'number' && e.durationTurns > 0 ? e.durationTurns : 1,
+      turnRange: turnsOf(e),
       offTurnRange: null
     }))
   })
+}
+
+// ───────────── 공통 칸에 안 드는 설정 (읽기 전용) ─────────────
+
+const EXTRA_TEXT_MAX = 80
+const EXTRA_LIST_MAX = 20
+/** 사이트에는 있는데 이 연결부가 읽지 못하는 것 (extras로 읽는 것은 넣지 않는다) */
+const UNSUPPORTED = [
+  '댓글',
+  '통계(좋아요·대화 수)',
+  '수정 시각',
+  '컴파일 상태·시각',
+  '사이트가 만든 해시태그 수',
+  '언어별 제목·소개·설명 내용',
+  '스토리별 고급 설정',
+  '노드 연결(스토리별 인물·매크로)',
+  '매크로 항목 우선순위',
+  '유저 노드 본문',
+  '인물 호버 설명·간단 소개·시작 대사 본문',
+  '스토리 줄거리·업적·상태창·프리셋 노트 내용'
+]
+
+const sumLengths = (nodes: Obj[], key: string): number | undefined => {
+  const found = nodes.filter((m) => Array.isArray(m[key]))
+  return found.length ? found.reduce((n, m) => n + (m[key] as unknown[]).length, 0) : undefined
+}
+
+/**
+ * 원본에 실제 있는 칸만 싣는다. 짧은 값은 그대로, 긴 글은 글자 수, 목록은 개수.
+ * 조회 수·대화 수 같은 통계는 읽을 때마다 달라져 계획이 낡은 것으로 판정되므로 싣지 않는다.
+ */
+function extrasOf(r: RplayRaw, stories: Obj[]): Record<string, unknown> {
+  const c = r.content
+  const out: Record<string, unknown> = {}
+  const set = (key: string, value: unknown): void => {
+    if (value !== undefined) out[key] = value
+  }
+  const flag = (key: string, v: unknown): void => set(key, typeof v === 'boolean' ? v : undefined)
+  const num = (key: string, v: unknown): void =>
+    set(key, typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+  const str = (key: string, v: unknown): void =>
+    set(key, typeof v === 'string' && v && v.length <= EXTRA_TEXT_MAX ? v : undefined)
+  const count = (key: string, v: unknown): void => set(key, Array.isArray(v) ? v.length : undefined)
+  const names = (key: string, v: unknown): void =>
+    set(key, isObj(v) && Object.keys(v).length <= EXTRA_LIST_MAX ? Object.keys(v) : undefined)
+
+  // 태그·성인 표시
+  if (Array.isArray(c.hashtags)) {
+    const tags = strings(c.hashtags)
+    set('hashtag_count', tags.length)
+    if (tags.length <= EXTRA_LIST_MAX && tags.every((t) => t.length <= EXTRA_TEXT_MAX))
+      set('hashtags', tags)
+  }
+  flag('is_adult_content', c.isAdultContent)
+  // 모델·프롬프트 설정 (작품 전체. 스토리마다 따로 둔 값은 못 읽는다)
+  if (isObj(c.advancedSettings))
+    set(
+      'advanced_settings',
+      Object.fromEntries(
+        Object.entries(c.advancedSettings).filter(
+          ([, v]) => typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))
+        )
+      )
+    )
+  num('prompt_input_expansion_steps', c.promptInputExpansionSteps)
+  num('canvas_compiler_version', r.canvas.compilerVersion)
+  num('image_tagging_method', r.canvas.imageTaggingMethod)
+  flag('use_kr_jp_guidelines', r.canvas.useKRJPGuidelines)
+  str('embedding_model', r.canvas.embeddingModel)
+  // 표지·소개 영상 (있는지만)
+  if ('thumbnailAsset' in c)
+    set('has_thumbnail', isObj(c.thumbnailAsset) && text(c.thumbnailAsset.s3Key) !== '')
+  if ('introVideo' in c) set('has_intro_video', c.introVideo !== null && c.introVideo !== undefined)
+  // 공개·열람 설정, 수익·독점
+  flag('is_canvas_public', c.isCanvasPublic)
+  flag('display_image_descriptions', c.displayImageDescriptions)
+  flag('view_without_sub', c.viewableWithoutSub)
+  flag('only_for_subscribers', c.onlyForSubscribers)
+  flag('only_purchasable_with_coins', c.onlyPurchasableWithCoins)
+  flag('is_paid_content', c.isPaidContent)
+  flag('allow_bonus', c.allowBonus)
+  flag('reward_enabled', c.rewardEnabled)
+  num('price', c.price)
+  num('credit', c.credit)
+  flag('is_original_story', c.isOriginalStory)
+  flag('is_original_story_locked', c.isOriginalStoryLocked)
+  str('original_story_locked_until', c.originalStoryLockedUntil)
+  if (isObj(c.collaborators)) set('collaborator_count', Object.keys(c.collaborators).length)
+  flag('restrict_collaborator_editing', c.restrictCollaboratorEditing)
+  if (isObj(c.blocked)) flag('is_blocked', c.blocked.isBlocked)
+  count('achievement_count', c.achievements)
+  // 컴파일 상태(needsCompilation·compiled·compiledDate)는 싣지 않는다: 사이트가 계획과 저장 사이에도 바꾸므로 PLAN_STALE이 된다
+  str('published_at', c.publishedAt)
+  // 언어별 설정 (언어 목록만)
+  const loc = r.localization && isObj(r.localization.localization) ? r.localization.localization : null
+  flag('localization_enabled', loc?.enabled ?? c.localizationEnabled)
+  str('source_language', loc?.sourceLanguage)
+  names('localization_languages', loc?.entries)
+  names('canvas_languages', c.multiLangCanvases)
+  str('main_canvas_language', c.mainCanvasLanguage)
+  // 노드 안의 칸: 개수·글자 수만
+  const storyMeta = stories.map((n) => metaOf(r, n))
+  set('story_preset_note_count', sumLengths(storyMeta, 'presetNoteNodes'))
+  set('story_status_view_count', sumLengths(storyMeta, 'statusViewNodes'))
+  set('story_achievement_node_count', sumLengths(storyMeta, 'achievementNodes'))
+  const plot = storyMeta.filter((m) => text(m.plotSummary) !== '').length
+  if (storyMeta.some((m) => 'plotSummary' in m)) set('story_plot_summary_count', plot)
+  if (storyMeta.some((m) => 'creatorNotice' in m))
+    set(
+      'later_story_creator_notice_count',
+      storyMeta.slice(1).filter((m) => text(m.creatorNotice) !== '').length
+    )
+  const people = ofType(r, 'character').map((n) => metaOf(r, n))
+  const filled = (key: string): number | undefined =>
+    people.some((m) => key in m) ? people.filter((m) => text(m[key]) !== '').length : undefined
+  set('character_simplified_intro_count', filled('simplifiedIntro'))
+  set('character_hover_description_count', filled('hoverDescription'))
+  set('character_starting_dialogue_count', filled('startingDialogue'))
+  if (people.some((m) => 'hiddenInPreview' in m))
+    set('character_hidden_in_preview_count', people.filter((m) => m.hiddenInPreview === true).length)
+  const users = ofType(r, 'user').map((n) => metaOf(r, n))
+  set('user_node_count', users.length)
+  set('user_text_length', users.reduce((n, m) => n + text(m.text).length, 0))
+  set('image_node_count', ofType(r, 'image').length)
+  if (isObj(r.canvas.characterSpeechStyles))
+    set('character_speech_style_count', Object.keys(r.canvas.characterSpeechStyles).length)
+  return out
 }
 
 export function rplayNormalize(raw: unknown): WorkBody {
@@ -178,6 +315,8 @@ export function rplayNormalize(raw: unknown): WorkBody {
         description: text(m.text)
       }
     }),
+    extras: extrasOf(r, stories),
+    unsupported: [...UNSUPPORTED],
     characters: ofType(r, 'character').map((n) => {
       const m = metaOf(r, n)
       return {
@@ -209,10 +348,25 @@ function sourceLanguage(r: RplayRaw): string | null {
 
 type Entry = { owner: string; entry: Obj }
 
-/** 공통 로어북 항목 → 매크로 항목. null은 알플레이 기본값(keyword, 1턴) */
-function entryFrom(e: Partial<LoreEntry>, base: Obj | undefined, where: string): Obj {
+/**
+ * 공통 로어북 항목 → 매크로 항목. 옛 항목(base)이 있으면 바뀐 칸만 덮는다:
+ * 읽을 때 만든 값 그대로(또는 null=안 줌)면 옛 값을 건드리지 않고 검사도 하지 않는다.
+ * 옛 항목이 없는 새 항목에서만 null이 알플레이 기본값(keyword, 1턴)이 된다.
+ * whole: 전체 교체. given이 없으면 빈 발동 단어는 "안 줌"으로 보고 옛 발동 단어를 둔다. given에 keys가 있으면 빈 값은 "비움"이다.
+ * 발동 단어는 쪼갠 목록으로 견주고, 바뀔 때도 항목 이름(key)은 파생값일 때만 따라 바꾼다.
+ */
+function entryFrom(
+  e: Partial<LoreEntry>,
+  base: Obj | undefined,
+  where: string,
+  whole = false
+): Obj {
   if ((e.offKeys !== undefined && e.offKeys.length) || (e.offTurnRange ?? null) !== null)
     throw new Error('BAD_LOREBOOK ' + where + ' off_keys·off_turn_range 없음')
+  // 전체 교체로 들어온 항목(given 있음)은 호출한 쪽이 적은 칸만 옛 항목을 덮는다. 적지 않은 칸은 옛 값 그대로.
+  // given이 없는 옛 호출은 null을 "안 줌"으로 본다. 옛 항목이 없으면 null이 알플레이 기본값이 된다.
+  const takes = (field: string, value: unknown): boolean =>
+    e.given && base ? e.given.includes(field) : value !== null || !base
   const out: Obj = base
     ? { ...base }
     : {
@@ -224,51 +378,73 @@ function entryFrom(e: Partial<LoreEntry>, base: Obj | undefined, where: string):
         durationTurns: 1,
         activationMode: 'keyword'
       }
-  if (e.keys !== undefined) {
-    const patterns = e.keys
-      .split(',')
-      .map((k) => k.trim())
-      .filter(Boolean)
-    if (patterns.length > MACRO_PATTERNS_MAX || patterns.some((p) => p.includes('|')))
-      throw new Error('BAD_LOREBOOK ' + where + '.keys 5개 이하, | 없이')
-    out.patterns = patterns
-    out.key = patterns.join('|')
+  // 전체 교체에서 given이 없으면 빈 발동 단어는 "안 줌"이다. given에 keys가 있으면 빈 값도 "비움"이다
+  const keysGiven = e.given ? e.given.includes('keys') : !(whole && e.keys === '')
+  if (e.keys !== undefined && keysGiven) {
+    const patterns = patternsFrom(e.keys)
+    const was = base ? patternsOf(base) : []
+    // 쪼갠 발동 단어가 옛 것과 같으면(쉼표 뒤 공백만 달라도) 옛 항목을 건드리지 않고 검사도 하지 않는다
+    if (!base || patterns.length !== was.length || patterns.some((p, i) => p !== was[i])) {
+      if (patterns.length > MACRO_PATTERNS_MAX || patterns.some((p) => p.includes('|')))
+        throw new Error('BAD_LOREBOOK ' + where + '.keys 5개 이하, | 없이')
+      // key는 사이트가 붙인 항목 이름일 수 있다. 옛 발동 단어를 이은 값(=파생값)일 때만 따라 바꾼다
+      if (!base || text(base.key) === was.join('|')) out.key = patterns.join('|')
+      out.patterns = patterns
+    }
   }
-  if (e.content !== undefined) out.text = e.content
-  if (e.mode !== undefined) {
+  if (e.content !== undefined && !(base && e.content === text(base.text))) out.text = e.content
+  if (e.mode !== undefined && takes('mode', e.mode)) {
     const mode = e.mode ?? 'keyword'
     if (mode !== 'keyword' && mode !== 'always')
       throw new Error('BAD_LOREBOOK ' + where + '.mode keyword/always')
-    out.activationMode = mode
+    // 옛 항목의 발동 방식을 읽을 때와 같게 본 값(loreOf)과 같으면 옛 값을 그대로 둔다
+    if (!base || mode !== (base.activationMode === 'always' ? 'always' : 'keyword'))
+      out.activationMode = mode
   }
-  if (e.turnRange !== undefined) {
+  if (e.turnRange !== undefined && takes('turnRange', e.turnRange)) {
     const turns = e.turnRange ?? 1
-    if (!Number.isInteger(turns) || turns < DURATION_MIN || turns > DURATION_MAX)
-      throw new Error('BAD_LOREBOOK ' + where + '.turn_range 1~5')
-    out.durationTurns = turns
+    if (!base || turns !== turnsOf(base)) {
+      if (!Number.isInteger(turns) || turns < DURATION_MIN || turns > DURATION_MAX)
+        throw new Error('BAD_LOREBOOK ' + where + '.turn_range 1~5')
+      out.durationTurns = turns
+    }
   }
   return out
 }
 
-/** 시작 상황 칸 → 스토리 노드 칸 */
-function storyFields(s: StartScenarioDraft, allowSubPrompt: boolean): Obj {
+/**
+ * 시작 상황 칸 → 스토리 노드 칸. cur(고칠 노드의 지금 내용)를 주면 지금 값과 같은 칸은 뺀다
+ * (읽은 값을 그대로 돌려줘도 없던 칸에 빈 글이 채워지거나 앞뒤 공백이 깎이지 않게).
+ * 첫 스토리의 sub_prompt는 읽을 때 늘 ''이라 ''이면 "그대로"로 보고 넘긴다.
+ */
+function storyFields(s: StartScenarioDraft, allowSubPrompt: boolean, cur?: Obj): Obj {
   if (s.dialogue !== undefined && s.dialogue !== '') throw new Error('BAD_CHANGES dialogue 없음')
-  if (s.subPrompt !== undefined && !allowSubPrompt)
+  if (s.subPrompt !== undefined && s.subPrompt !== '' && !allowSubPrompt)
     throw new Error('BAD_CHANGES 첫 스토리의 중요 정보는 fields.main')
   const out: Obj = {}
-  if (s.title !== undefined) out.title = s.title.trim()
-  if (s.content !== undefined) out.prologue = s.content
-  if (s.subPrompt !== undefined) out.coreContext = s.subPrompt
-  if (s.situation !== undefined) out.prologueGuide = s.situation
-  if (s.description !== undefined) out.text = s.description
+  const put = (key: string, given: string | undefined, value = given): void => {
+    if (given !== undefined && !(cur && text(cur[key]) === given)) out[key] = value
+  }
+  put('title', s.title, s.title?.trim())
+  put('prologue', s.content)
+  put('coreContext', allowSubPrompt ? s.subPrompt : undefined)
+  put('prologueGuide', s.situation)
+  put('text', s.description)
   return out
 }
-function checkStory(m: Obj, where: string): void {
-  if (!text(m.title).trim()) throw new Error('BAD_START ' + where + '.title 비어 있음')
-  if (m.useTokenBlock !== true && text(m.prologue).length > PROLOGUE_CHAR_MAX)
+/** 바뀐 칸만 편집기 규칙으로 본다 (old = 처음 읽은 노드 내용, 새 노드는 없음) */
+function checkStory(m: Obj, old: Obj | undefined, where: string): void {
+  const changed = (k: string): boolean => !old || JSON.stringify(m[k]) !== JSON.stringify(old[k])
+  if (changed('title') && !text(m.title).trim())
+    throw new Error('BAD_START ' + where + '.title 비어 있음')
+  if (changed('prologue') && m.useTokenBlock !== true && text(m.prologue).length > PROLOGUE_CHAR_MAX)
     throw new Error('BAD_START ' + where + '.content 1000자')
-  if (text(m.creatorNotice).length > CREATOR_NOTICE_MAX)
+  if (changed('creatorNotice') && text(m.creatorNotice).length > CREATOR_NOTICE_MAX)
     throw new Error('BAD_FIELD creator_comment 500자')
+}
+/** 지금 값과 같으면 쓰지 않는다 (없던 칸에 빈 글을 채우지 않는다) */
+function putText(m: Obj, key: string, value: string): void {
+  if (text(m[key]) !== value) m[key] = value
 }
 
 /** 다음 원본을 고치는 도구 묶음 */
@@ -374,14 +550,23 @@ class Draft {
       .map((c) => ({ ...c, uid: randomUUID(), targetNodeId: to.uid }))
     this.next.canvas.connections = [...this.connections, ...added]
   }
+  /** 제목만 고친 항목이 옮겨 간 새 매크로 노드는 옛 매크로 노드가 이어져 있던 스토리에만 잇는다 */
+  copyOutgoing(from: Obj, to: Obj): void {
+    const added = this.connections
+      .filter((c) => c.sourceNodeId === from.uid)
+      .map((c) => ({ ...c, uid: randomUUID(), sourceNodeId: to.uid }))
+    this.next.canvas.connections = [...this.connections, ...added]
+  }
 }
 
 export function rplayApplyChanges(raw: unknown, changes: WorkChanges): RplayRaw {
   const d = new Draft(rplayRaw(raw))
   const next = d.next
 
-  if (changes.visibility !== undefined) {
-    if (!VISIBILITIES.includes(changes.visibility)) throw new Error('BAD_VISIBILITY')
+  // 읽을 때 보인 공개 여부를 그대로 돌려주면 바꾸지 않는다 (작업 중 작품은 isPrivate와 상관없이 private으로 보인다)
+  if (changes.visibility !== undefined && !VISIBILITIES.includes(changes.visibility))
+    throw new Error('BAD_VISIBILITY')
+  if (changes.visibility !== undefined && changes.visibility !== visibilityOf(next.content)) {
     const c = next.content
     if (changes.visibility === 'public' && c.status !== 'published')
       // 처음 공개는 업로드(스토리 컴파일·썸네일 필요)라 여기서 하지 않는다
@@ -397,7 +582,8 @@ export function rplayApplyChanges(raw: unknown, changes: WorkChanges): RplayRaw 
   const touched = new Set<Obj>()
   for (const patch of changes.startScenarios ?? []) {
     const i = at(patch.index, before.length)
-    Object.assign(d.meta(before[i]), storyFields(patch, i !== 0))
+    const m = d.meta(before[i])
+    Object.assign(m, storyFields(patch, i !== 0, m))
     touched.add(before[i])
   }
   let storiesChanged = false
@@ -434,32 +620,38 @@ export function rplayApplyChanges(raw: unknown, changes: WorkChanges): RplayRaw 
     if (typeof value !== 'string') throw new Error('BAD_FIELD')
     if (name === 'title' || name === 'subtitle' || name === 'description') {
       const key = name === 'subtitle' ? 'simpleIntro' : name
+      const was = text(infoOf(next)[key])
       infoOf(next)[key] = value
-      if (name === 'title' && !value.trim()) throw new Error('BAD_FIELD title 비어 있음')
-      if (name === 'subtitle') {
-        const max = SIMPLE_INTRO_MAX[sourceLanguage(next) ?? 'ko'] ?? 40
-        if (value.length > max) throw new Error('BAD_FIELD subtitle ~' + max + '자')
+      // 지금 값 그대로면 검사하지 않는다 (사이트가 받아 주던 옛 값)
+      if (value !== was) {
+        if (name === 'title' && !value.trim()) throw new Error('BAD_FIELD title 비어 있음')
+        if (name === 'subtitle') {
+          const max = SIMPLE_INTRO_MAX[sourceLanguage(next) ?? 'ko'] ?? 40
+          if (value.length > max) throw new Error('BAD_FIELD subtitle ~' + max + '자')
+        }
       }
     } else if (name === 'main' || name === 'creator_comment') {
       if (!stories[0]) throw new Error('NO_STORY')
-      d.meta(stories[0])[name === 'main' ? 'coreContext' : 'creatorNotice'] = value
+      putText(d.meta(stories[0]), name === 'main' ? 'coreContext' : 'creatorNotice', value)
       touched.add(stories[0])
     } else throw new Error('BAD_FIELD')
   }
+  const old = next.base?.metadataSet ?? {}
   stories.forEach((n, i) => {
-    if (touched.has(n)) checkStory(metaOf(next, n), 'start_scenarios[' + i + ']')
+    if (touched.has(n))
+      checkStory(metaOf(next, n), old[text(n.metadataOid)], 'start_scenarios[' + i + ']')
   })
 
   // 캐릭터 (인물 노드)
   const chars = ofType(next, 'character')
   for (const patch of changes.characters ?? []) {
     const m = d.meta(chars[at(patch.index, chars.length)])
-    if (patch.name !== undefined) {
+    if (patch.name !== undefined && patch.name !== text(m.name)) {
       if (!patch.name.trim()) throw new Error('EMPTY_FIELD')
-      m.name = patch.name.trim()
+      putText(m, 'name', patch.name.trim())
     }
-    if (patch.details !== undefined) m.text = patch.details
-    if (patch.info !== undefined) m.coreContext = patch.info
+    if (patch.details !== undefined) putText(m, 'text', patch.details)
+    if (patch.info !== undefined) putText(m, 'coreContext', patch.info)
   }
   if (changes.charactersRemove?.length) {
     const gone = new Set(changes.charactersRemove.map((i) => at(i, chars.length)))
@@ -480,6 +672,62 @@ export function rplayApplyChanges(raw: unknown, changes: WorkChanges): RplayRaw 
   return next
 }
 
+/**
+ * 전체 교체의 새 항목마다 물려받을 옛 항목. matchOld(제목·내용·자리)의 짝 가운데
+ *  - 제목과 내용이 모두 같은 짝은 그대로 쓰고,
+ *  - 나머지는 같은 노드 안에서 발동 단어가 같은 옛 항목을 먼저 짝지은 뒤(내용을 고치면서 항목을 끼워도 숨은 값이 밀리지 않게),
+ *  - 그래도 짝이 없으면 matchOld의 자리 짝을 쓴다. 단 제목이 다른 자리 짝은 발동 단어나 내용이 겹칠 때만 인정한다
+ *    (지우고 새로 넣은 항목이 옛 항목의 발동 방식·턴·우선순위를 물려받지 않게).
+ */
+function pairOld(
+  whole: LoreEntry[],
+  items: Entry[],
+  titleOf: (owner: string) => string
+): (Entry | undefined)[] {
+  const guess = matchOld(
+    whole.map((e) => e.title),
+    items,
+    (x) => titleOf(x.owner),
+    // 알플레이는 매크로 노드 하나에 항목이 여럿이라 제목(노드 이름)이 대부분 겹친다. 내용까지 견줘 짝짓는다
+    { contents: whole.map((e) => e.content), contentOf: (x) => text(x.entry.text) }
+  )
+  const sameList = (a: string[], b: string[]): boolean =>
+    a.length === b.length && a.every((v, i) => v === b[i])
+  // 발동 단어를 안 준 항목(빈 글)은 발동 단어로 견주지 않는다
+  const wanted = whole.map((e) => patternsFrom(e.keys))
+  const out: (Entry | undefined)[] = guess.map((x, k) =>
+    x && titleOf(x.owner) === whole[k].title && text(x.entry.text) === whole[k].content
+      ? x
+      : undefined
+  )
+  const claimed = new Set<Entry>(out.filter((x): x is Entry => !!x))
+  whole.forEach((e, k) => {
+    if (out[k] || !wanted[k].length) return
+    const x = items.find(
+      (it) =>
+        !claimed.has(it) &&
+        titleOf(it.owner) === e.title &&
+        sameList(patternsOf(it.entry), wanted[k])
+    )
+    if (x) {
+      out[k] = x
+      claimed.add(x)
+    }
+  })
+  whole.forEach((e, k) => {
+    const x = guess[k]
+    if (out[k] || !x || claimed.has(x)) return
+    if (titleOf(x.owner) !== e.title) {
+      const sharesContent = e.content !== '' && text(x.entry.text) === e.content
+      const sharesKeys = wanted[k].length > 0 && sameList(patternsOf(x.entry), wanted[k])
+      if (!sharesContent && !sharesKeys) return
+    }
+    out[k] = x
+    claimed.add(x)
+  })
+  return out
+}
+
 function applyLore(d: Draft, changes: WorkChanges): void {
   const next = d.next
   const owners = ofType(next, 'lorebook')
@@ -489,15 +737,39 @@ function applyLore(d: Draft, changes: WorkChanges): void {
   const titleOf = (owner: string): string => text(next.metadataSet[owner]?.title)
   const before = JSON.stringify(items)
 
+  /**
+   * 제목이 같은 매크로 노드. 없으면 새 노드를 만든다. 새 항목이면(from 없음) 모든 스토리에 잇고,
+   * 제목만 고친 항목이면(from = 옛 노드 번호) 옛 노드가 이어져 있던 곳에만 잇는다
+   */
+  const ownerOf = (title: string, from?: string): string => {
+    let owner = ofType(next, 'lorebook').find((n) => text(metaOf(next, n).title) === title)
+    if (!owner) {
+      owner = d.add('lorebook', { title, entries: [] })
+      const old = from ? ofType(next, 'lorebook').find((n) => text(n.metadataOid) === from) : undefined
+      if (old) d.copyOutgoing(old, owner)
+      else for (const s of storyNodes(next)) d.connect(owner, s)
+    }
+    return text(owner.metadataOid)
+  }
+
   let patches = changes.lorebookPatch ?? []
   let removes = changes.lorebookRemove ?? []
   let adds = changes.lorebookAdd ?? []
   if (changes.lorebook) {
-    // 전체 교체 = 앞에서부터 고치기 + 남는 것 지우기 + 모자란 것 더하기
+    // 전체 교체: 제목으로 옛 항목과 짝지어(match-old) 짝 있는 항목만 옛 항목의 숨은 값을 물려받고,
+    // 짝 없는 새 항목은 새 항목이다. 짝 없는 옛 항목은 지워진다.
     const whole = changes.lorebook
-    patches = whole.slice(0, items.length).map((e, index) => ({ ...e, index }))
-    removes = items.map((_, i) => i).slice(whole.length)
-    adds = whole.slice(items.length)
+    const pairs = pairOld(whole, items, titleOf)
+    items = whole.map((e, k) => {
+      const old = pairs[k]
+      const where = 'lorebook[' + k + ']'
+      // 제목은 매크로 노드 이름이다. 제목만 고친 짝은 그 이름의 노드로 옮기되, 옛 노드의 연결을 이어받는다
+      const owner = old && titleOf(old.owner) === e.title ? old.owner : ownerOf(e.title, old?.owner)
+      return { owner, entry: entryFrom(e, old?.entry, where, true) }
+    })
+    patches = []
+    removes = []
+    adds = []
   }
   for (const patch of patches) {
     const i = at(patch.index, items.length)
@@ -515,12 +787,7 @@ function applyLore(d: Draft, changes: WorkChanges): void {
   }
   for (const [k, e] of adds.entries()) {
     const where = 'lorebook_add[' + k + ']'
-    let owner = ofType(next, 'lorebook').find((n) => text(metaOf(next, n).title) === e.title)
-    if (!owner) {
-      owner = d.add('lorebook', { title: e.title, entries: [] })
-      for (const s of storyNodes(next)) d.connect(owner, s)
-    }
-    items.push({ owner: text(owner.metadataOid), entry: entryFrom(e, undefined, where) })
+    items.push({ owner: ownerOf(e.title), entry: entryFrom(e, undefined, where) })
   }
   if (JSON.stringify(items) === before) return
   for (const n of ofType(next, 'lorebook')) {
@@ -582,7 +849,8 @@ export async function rplaySave(
 ): Promise<void> {
   const r = structuredClone(rplayRaw(nextRaw))
   const base = r.base
-  if (!base) return
+  // applyChanges를 거치지 않은 원본이면 무엇이 바뀌었는지 모른다. 성공으로 돌려주면 저장된 줄 안다
+  if (!base) throw new Error('NO_BASE')
   const wid = rplayWorkId(id)
   if (wid !== r.id) throw new Error('BAD_WORK_ID')
   const a = await needAccount(write, io?.read)
@@ -591,6 +859,27 @@ export async function rplaySave(
   const canvasOid = r.canvasOid
   const nodes = list(r.canvas.nodes)
   const fresh = nodes.filter((n) => isNew(text(n.metadataOid)))
+
+  // 제목·소개를 보낼 수 있는지 노드 내용을 쓰기 전에 본다 (나중에 막히면 일부만 저장되고 멈춘다)
+  const info = infoOf(r)
+  const patches = (
+    [
+      ['title', 'title'],
+      ['simpleIntro', 'simpleIntro'],
+      ['description', 'description']
+    ] as const
+  ).flatMap(([key, field]) =>
+    text(info[key]) !== text(base.info[key]) ? [{ field, value: text(info[key]) }] : []
+  )
+  let lang: { language: string; revision: number } | null = null
+  if (patches.length) {
+    const language = sourceLanguage(r)
+    const loc =
+      r.localization && isObj(r.localization.localization) ? r.localization.localization : null
+    // 읽은 revision을 그대로 보낸다 (모르면 0으로 짐작하지 않고 멈춘다)
+    if (!language || !loc || typeof loc.revision !== 'number') throw new Error('LOCALIZATION_MISSING')
+    lang = { language, revision: loc.revision }
+  }
 
   // 새 인물 노드 해시가 이미지 해시와 겹치지 않는지 먼저 본다 (편집기 fr/mr)
   if (fresh.some((n) => n.type === 'character')) {
@@ -710,24 +999,10 @@ export async function rplaySave(
     await postMeta(write, a, canvasOid, null, 'story-sort', { sortUpdates: updates })
   }
   // 5) 제목·간단 소개·상세 설명 (언어 상태의 원본 언어 칸)
-  const info = infoOf(r)
-  const patches = (
-    [
-      ['title', 'title'],
-      ['simpleIntro', 'simpleIntro'],
-      ['description', 'description']
-    ] as const
-  ).flatMap(([key, field]) =>
-    text(info[key]) !== text(base.info[key]) ? [{ field, value: text(info[key]) }] : []
-  )
-  if (patches.length) {
-    const language = sourceLanguage(r)
-    const loc =
-      r.localization && isObj(r.localization.localization) ? r.localization.localization : null
-    if (!language || !loc) throw new Error('LOCALIZATION_MISSING')
+  if (patches.length && lang) {
     const res = await write('POST', RPLAY_CHAT + '/localization/' + wid + '/edit', {
-      revision: typeof loc.revision === 'number' ? loc.revision : 0,
-      patches: patches.map((p) => ({ language, ...p })),
+      revision: lang.revision,
+      patches: patches.map((p) => ({ language: lang.language, ...p })),
       ...accountBody(a)
     })
     await rplayWritten(res, 'LOCALIZATION')
@@ -887,7 +1162,39 @@ function rplayImageGroups(raw: unknown): ImageGroup[] {
 
 export const rplayWorks: WorkAdapter = {
   id: 'rplay',
+  // 저장 뒤 사라지는 작업용 값과 서버가 만드는 언어별 사본 (2026-11-13 실제 저장에서 확인)
+  rawIgnore: [/^base$/, /^canvas\.dirtyMetadataIds\b/, /^metadataSet\.new:/, /^localization\.multiLang/, /^content\.multiLang/],
   label: '알플레이',
+  features: {
+    title: { site: 'yes', read: 'yes', write: 'yes', verified: 'partial', note: '빈 값 거부, 쓰기 실계정 미확인' },
+    description: { site: 'yes', read: 'yes', write: 'yes', verified: 'partial', note: '글자 한도 검사 없음, 쓰기 미확인' },
+    main_prompt: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '첫 스토리 중요 정보, 공개작 저장 미확인'
+    },
+    first_message: { site: 'yes', read: 'yes', write: 'yes', verified: 'yes', note: '스토리마다 하나, 1,000토큰' },
+    start_scenarios: { site: 'yes', read: 'yes', write: 'yes', verified: 'yes', note: '스토리 노드, 추가·삭제만(순서 변경 불가)' },
+    lorebook: { site: 'yes', read: 'yes', write: 'yes', verified: 'yes', note: '매크로 노드, 제목 고정, 발동 단어 5개 이하' },
+    characters: { site: 'yes', read: 'yes', write: 'yes', verified: 'yes', note: '이름·중요 정보·상세 3칸만 다룸' },
+    example_dialogue: { site: 'unknown', read: 'partial', write: 'no', verified: 'no', note: '인물 시작 대사는 개수만 읽음' },
+    user_persona: { site: 'yes', read: 'partial', write: 'partial', verified: 'no', note: '유저 노드는 캔버스 JSON으로만' },
+    output_rules: { site: 'no', read: 'no', write: 'no', verified: 'no', note: '별도 칸 없음' },
+    situation_images: { site: 'yes', read: 'partial', write: 'blocked', verified: 'partial', note: '읽기만, 올리기 막음' },
+    cover: { site: 'yes', read: 'partial', write: 'blocked', verified: 'no', note: '있는지만 읽음, 올리기 막음' },
+    tags: { site: 'yes', read: 'yes', write: 'partial', verified: 'no', note: '읽기는 extras, 쓰기는 새 작품 때만' },
+    visibility: { site: 'yes', read: 'yes', write: 'partial', verified: 'partial', note: '첫 공개는 사이트에서 직접' },
+    create_work: { site: 'yes', read: 'no', write: 'yes', verified: 'yes', note: '항상 비공개로 생성' },
+    delete_work: { site: 'yes', read: 'no', write: 'yes', verified: 'yes', note: '삭제 때 OTP 요구 가능' },
+    versioning_review: { site: 'unknown', read: 'no', write: 'blocked', verified: 'no', note: '컴파일은 사이트에서, 상태는 안 읽음' },
+    language_editions: { site: 'yes', read: 'partial', write: 'no', verified: 'no', note: '언어 목록만 읽음, 판본 도구 없음' },
+    bgm_voice: { site: 'no', read: 'no', write: 'no', verified: 'no', note: '사이트에 그런 칸 없음' },
+    jsx_html: { site: 'no', read: 'no', write: 'no', verified: 'no', note: 'JSX 칸 없음' },
+    model_settings: { site: 'yes', read: 'partial', write: 'partial', verified: 'partial', note: '작품 단위만 읽음, 쓰기는 캔버스 JSON' },
+    comments_stats: { site: 'yes', read: 'no', write: 'no', verified: 'no', note: '읽을 때 댓글을 일부러 뺌' }
+  },
   guide: {
     save: '저장만 하고 스토리 컴파일은 하지 않는다. 컴파일은 사이트에서 한다.',
     manual: [
@@ -899,7 +1206,8 @@ export const rplayWorks: WorkAdapter = {
     unverified: [
       '노드가 많은 실제 작품의 캔버스 가져오기(시험은 노드 3개짜리 새 작품으로 했다)',
       '가져올 때 언어·공통 설정이 다른 경우의 선택(settings_choice, language)',
-      '공개 작품 저장 뒤 컴파일 없이 반영되는지'
+      '공개 작품 저장 뒤 컴파일 없이 반영되는지',
+      '로어북 전체 교체의 짝짓기·제목 바꾸기(가짜 사이트로만 시험했다)'
     ]
   },
   capabilities: [

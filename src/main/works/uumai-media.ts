@@ -219,6 +219,8 @@ async function applyAndSave(
   const wid = uumaiWorkId(id)
   const next = structuredClone(uumaiRaw(raw))
   const w = next.work
+  // 저장 본문을 못 만드는 작품(WORK_SHAPE 등)은 파일을 올리기 전에 멈춘다 (올린 이미지만 남지 않게)
+  uumaiSaveBody(w, { isPublish: false, workId: wid })
   let images = list(w.images)
   const taken = new Set(images.map((e) => text(e.slug)))
 

@@ -39,6 +39,22 @@ function page(id: string): string {
   ].join('\n')
 }
 
+// 상세 페이지 머리 칸(표지·대화 수·좋아요·날짜·태그·이미지팩). 값은 지어낸 것이다.
+function header(chat = '1,234', tagItems = ['남성향', '로맨스', 'R-19'], heart = '5'): string {
+  const tag = (t: string): string =>
+    `<li onclick="document.location = '/character/genre?sort=latest&order=desc&tags=${t}';" style="cursor:pointer;">${t}</li>`
+  return [
+    '<div class="lImgWrap">\n<div class="lImg">\n  <img src="/public/uploads/character/2026/01/main_x.jpg" alt="t">\n</div></div>',
+    `<div class="lData"><div class="lChat"><span>${chat}</span></div><div class="lHeart"><span>${heart}</span></div></div>`,
+    '<ul class="detailDate">',
+    '<li>\n<p class="dTit">등록일</p>\n<p class="dDate">2026.01.02</p>\n</li>',
+    '<li>\n<p class="dTit">수정일</p>\n<p class="dDate">2026.03.04</p>\n</li>',
+    '</ul>',
+    `<ul class="lTag">\n${tagItems.map(tag).join('\n')}\n</ul>`,
+    '<ul class="detailImgpack"><li><p class="dIcon"></p>\n<p class="dTxt">24개의 이미지팩</p></li></ul>'
+  ].join('\n')
+}
+
 function site(): { read: WorkFetch; calls: string[] } {
   const calls: string[] = []
   const read: WorkFetch = async (url, init) => {
@@ -63,6 +79,32 @@ function site(): { read: WorkFetch; calls: string[] } {
       return html(
         "<script>alert('캐릭터를 찾을 수 없습니다.');</script><script>window.location.href = '/';</script>"
       )
+    if (id === '3')
+      return html(
+        "<script>alert('성인 인증이 필요한 작품입니다.');</script><script>window.location.href = '/';</script>"
+      )
+    if (id === '4') return html("<script>window.location.href = '/';</script>")
+    if (id === '7') return html(page(id).replace('</body>', header() + '</body>'))
+    if (id === '8')
+      return html(page(id).replace('</body>', header('9,999', undefined, '4,321') + '</body>'))
+    if (id === '10')
+      return html(
+        "<script>alert('삭제된 캐릭터입니다.');</script><script>window.location.href = '/';</script>"
+      )
+    if (id === '11')
+      return html(
+        "<script>alert('존재하지 않는 캐릭터입니다.');</script><script>window.location.href = '/';</script>"
+      )
+    // 경고 문구에 로그인 말이 없어도 로그인 화면으로 보내면 로그인 문제
+    if (id === '12')
+      return html(
+        "<script>alert('회원 전용 작품입니다.');</script><script>window.location.href = '/login?next=/character/detail/12';</script>"
+      )
+    if (id === '13') return html("<script>window.location.href = '/login';</script>")
+    if (id === '9') {
+      const long = header('1', ['가', 'x'.repeat(81)])
+      return html(page(id).replace('</body>', long + '</body>'))
+    }
     if (id) return html(page(id))
     return new Response('no', { status: 404 })
   }
@@ -180,6 +222,116 @@ describe('루나톡 작품', () => {
     await expect(run('images_list', { site: 'luna', work_id: '73535' })).rejects.toThrow(
       'NO_IMAGES'
     )
+  })
+
+  it('기능 표: 22칸이 모두 있고 메모는 40자 이내이며 sites_list가 그대로 돌려준다', async () => {
+    const keys = [
+      'title',
+      'description',
+      'main_prompt',
+      'first_message',
+      'start_scenarios',
+      'lorebook',
+      'characters',
+      'example_dialogue',
+      'user_persona',
+      'output_rules',
+      'situation_images',
+      'cover',
+      'tags',
+      'visibility',
+      'create_work',
+      'delete_work',
+      'versioning_review',
+      'language_editions',
+      'bgm_voice',
+      'jsx_html',
+      'model_settings',
+      'comments_stats'
+    ]
+    const features = lunaWorks.features!
+    expect(Object.keys(features).sort()).toEqual([...keys].sort())
+    for (const f of Object.values(features)) expect(f.note!.length).toBeLessThanOrEqual(40)
+    // 코드와 맞는 값: 읽는 것 / 못 읽는 것 / 막힌 쓰기
+    expect(features.tags).toMatchObject({ site: 'yes', read: 'yes', write: 'blocked' })
+    expect(features.cover).toMatchObject({ read: 'partial', write: 'blocked' })
+    // 시작 상황은 제목·기본 여부·본문만 읽는다 (보조 프롬프트·대사·상황·설명은 빈 값 고정)
+    expect(features.start_scenarios).toMatchObject({ read: 'partial', write: 'blocked' })
+    expect(features.lorebook).toMatchObject({ read: 'no', write: 'blocked' })
+    expect(features.language_editions).toMatchObject({ site: 'no', verified: 'yes' })
+    const sites = (await tools(site().read)('sites_list')).sites as Obj[]
+    expect(sites.find((s) => s.site === 'luna')!.features).toEqual(features)
+  })
+
+  it('읽기: 상세 페이지의 태그·성인 태그·표지 유무·이미지팩 수를 extras로, 수정일을 updated_at으로 싣는다', async () => {
+    const out = await tools(site().read)('work_read', { site: 'luna', work_id: '7' })
+    expect(out.extras).toEqual({
+      tags: ['남성향', '로맨스', 'R-19'],
+      has_r19_tag: true,
+      registered_on: '2026.01.02',
+      has_cover_image: true,
+      image_pack_count: 24
+    })
+    expect(out.updated_at).toBe('2026.03.04')
+    expect(out.unsupported).toEqual([
+      '메인 프롬프트(세계관·인물 설정·응답 규칙)',
+      '한 줄 소개',
+      '로어북',
+      '등장인물',
+      '위키 본문',
+      '공개 범위(상세 읽기)',
+      '모델·엔진 설정'
+    ])
+    // 표지 주소·작성자·대화 수·좋아요 수는 싣지 않는다
+    expect(JSON.stringify(out.extras)).not.toMatch(/uploads|1,234|chat|like/)
+  })
+
+  it('extras에는 읽을 때마다 달라지는 값이 없어 계획 전후 비교가 깨지지 않는다', async () => {
+    const a = lunaWorks.normalize(await lunaWorks.readRaw(site().read, '7'))
+    const b = lunaWorks.normalize(await lunaWorks.readRaw(site().read, '8'))
+    // 8번은 대화 수와 좋아요 수만 다르다
+    expect(JSON.stringify(a)).toContain('"registered_on"')
+    expect(JSON.stringify({ ...b, id: a.id })).toBe(JSON.stringify(a))
+  })
+
+  it('extras: 구조를 못 찾은 칸은 넣지 않고, 태그가 너무 많거나 길면 개수만 싣는다', async () => {
+    const plain = lunaWorks.normalize(await lunaWorks.readRaw(site().read, '73535'))
+    expect(plain.extras).toBeUndefined()
+    expect(plain.updatedAt).toBeNull()
+    expect(plain.unsupported).toContain('로어북')
+    const long = lunaWorks.normalize(await lunaWorks.readRaw(site().read, '9'))
+    expect(long.extras).toMatchObject({ tag_count: 2, has_r19_tag: false })
+    expect(long.extras).not.toHaveProperty('tags')
+  })
+
+  it('오류 코드: 로그인 아닌 경고와 거절은 따로 알린다', async () => {
+    await expect(lunaWorks.readRaw(site().read, '1')).rejects.toThrow('LOGIN_REQUIRED')
+    await expect(lunaWorks.readRaw(site().read, '2')).rejects.toThrow('WORK_NOT_FOUND')
+    await expect(lunaWorks.readRaw(site().read, '3')).rejects.toThrow(
+      'WORK_ACCESS_REFUSED 성인 인증이 필요한 작품입니다.'
+    )
+    // 경고 문구가 없으면 가릴 수 없어 지금처럼 작품 없음으로 본다
+    await expect(lunaWorks.readRaw(site().read, '4')).rejects.toThrow('WORK_NOT_FOUND')
+    await expect(lunaWorks.readRaw(site().read, '10')).rejects.toThrow('WORK_NOT_FOUND')
+    await expect(lunaWorks.readRaw(site().read, '11')).rejects.toThrow('WORK_NOT_FOUND')
+    await expect(lunaWorks.readRaw(site().read, '12')).rejects.toThrow('LOGIN_REQUIRED')
+    await expect(lunaWorks.readRaw(site().read, '13')).rejects.toThrow('LOGIN_REQUIRED')
+
+    const listing = (body: unknown, status = 200): WorkFetch =>
+      async () => new Response(JSON.stringify(body), { status })
+    await expect(
+      lunaWorks.list(listing({ success: false, message: '로그인이 필요합니다.' }))
+    ).rejects.toThrow('LOGIN_REQUIRED')
+    await expect(lunaWorks.list(listing({ success: false }))).rejects.toThrow('LOGIN_REQUIRED')
+    await expect(
+      lunaWorks.list(listing({ success: false, message: '잠시 후 다시 시도해 주세요.' }))
+    ).rejects.toThrow('LIST_REFUSED 잠시 후 다시 시도해 주세요.')
+    await expect(lunaWorks.list(listing({}, 403))).rejects.toThrow('LOGIN_REQUIRED')
+    // 세션 만료를 뜻하는 다른 문구도 예전처럼 로그인 안내로 간다
+    for (const message of ['세션이 만료되었습니다.', '회원만 이용할 수 있습니다.'])
+      await expect(lunaWorks.list(listing({ success: false, message }))).rejects.toThrow(
+        'LOGIN_REQUIRED'
+      )
   })
 
   it('문자 참조 풀기', () => {

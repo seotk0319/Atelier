@@ -125,6 +125,22 @@ describe('판본 겹치기와 저장 본문', () => {
     expect(() => edenEditionView({}, english())).toThrow('EDITION_SHAPE')
   })
 
+  it('번호가 없는 원문 항목은 판본과 짝지을 수 없어도 사라지지 않는다', () => {
+    const src = source()
+    ;(src.work as Obj).recommended_personas = [
+      { name: '번호 없음', description: '그대로' },
+      { id: 'p1', name: '철수', description: '학생' }
+    ]
+    const view = edenEditionView(src, english())
+    expect((view.work as Obj).recommended_personas).toEqual([
+      { name: '번호 없음', description: '그대로' },
+      { id: 'p1', name: 'Chulsoo', description: '학생', source_name: '철수' }
+    ])
+    expect(
+      ((edenEditionBody(view).work as Obj).recommended_personas as Obj[]).map((p) => p.name)
+    ).toEqual(['번호 없음', 'Chulsoo'])
+  })
+
   it('저장 본문은 편집기의 번역 저장과 같은 칸만 담는다', () => {
     const body = edenEditionBody(edenEditionView(source(), english()))
     expect(Object.keys(body)).toEqual(['work', 'characters'])

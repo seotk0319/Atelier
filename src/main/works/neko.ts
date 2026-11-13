@@ -20,6 +20,8 @@ import {
   greetingTitle,
   isObj,
   list,
+  NEKO_UNSUPPORTED,
+  nekoExtras,
   nekoForm,
   nekoJson,
   nekoPlain,
@@ -42,6 +44,7 @@ import {
   nekoUploadAvatar,
   nekoUploadCover
 } from './neko-media'
+import { matchOld } from './match-old'
 import type {
   LoreEntry,
   WorkAdapter,
@@ -74,6 +77,7 @@ const LIMITS = {
   loreKeys: 25,
   loreNegativeKeys: 5,
   loreEntries: 500,
+  startTitle: 100,
   tag: 20,
   tags: 10
 }
@@ -87,28 +91,35 @@ const FIELDS: Record<string, string> = {
 // 비어 있으면 안 되는 칸
 const REQUIRED = new Set(['displayName', 'shortDescription', 'description', 'systemPrompt'])
 
-function checkFields(c: Obj): void {
-  for (const [name, key] of Object.entries(FIELDS)) {
+/** 바뀐 글 칸(names: 공통 칸 이름)만 편집기 입력 규칙으로 본다. 손대지 않은 칸은 옛 값 그대로 둔다 */
+function checkFields(c: Obj, names: string[]): void {
+  for (const name of names) {
+    const key = FIELDS[name]
     const value = text(c[key])
     const max = LIMITS[key as keyof typeof LIMITS]
     if ((REQUIRED.has(key) && !value.trim()) || value.length > max)
       throw new Error('BAD_FIELD ' + name + (REQUIRED.has(key) ? ' 1~' : ' ~') + max + '자')
   }
 }
-function checkStarts(c: Obj): void {
-  const greeting = strings(c.greeting)
-  if (greeting.length < 1 || greeting.length > LIMITS.greetings) throw new Error('START_LIMIT')
-  for (const [i, g] of greeting.entries())
-    if (!g || g.length > LIMITS.greeting)
-      throw new Error('BAD_START start_scenarios[' + i + '].content 1~' + LIMITS.greeting + '자')
-  for (const [i, s] of list(c.greetingSettings).entries())
-    if (text(s.title).length > 100)
-      throw new Error('BAD_START start_scenarios[' + i + '].title 100자')
+/** 첫상황 제목은 저장 때 100자로 잘려 들어가므로(greetingSettings) 받은 제목을 먼저 본다 */
+function checkStartTitle(title: string | undefined, i: number): void {
+  if (title !== undefined && title.trim().length > LIMITS.startTitle)
+    throw new Error('BAD_START start_scenarios[' + i + '].title ' + LIMITS.startTitle + '자')
 }
-function checkLorebook(c: Obj): void {
-  const lores = list(c.lorebook)
-  if (lores.length > LIMITS.loreEntries) throw new Error('LOREBOOK_LIMIT')
+/** touched[i] = i번째 첫상황이 바뀌었거나 새로 더한 것. 그것만 글 길이를 본다. before = 고치기 전 첫상황 수 */
+function checkStarts(c: Obj, touched: boolean[], before: number): void {
+  const greeting = strings(c.greeting)
+  if (greeting.length < 1 || (greeting.length > LIMITS.greetings && greeting.length > before))
+    throw new Error('START_LIMIT')
+  for (const [i, g] of greeting.entries())
+    if (touched[i] && (!g || g.length > LIMITS.greeting))
+      throw new Error('BAD_START start_scenarios[' + i + '].content 1~' + LIMITS.greeting + '자')
+}
+/** isChanged(e) = 바뀌었거나 새로 더한 항목. 그것만 항목 규칙을 본다. before = 고치기 전 항목 수 */
+function checkLorebook(lores: Obj[], isChanged: (e: Obj) => boolean, before: number): void {
+  if (lores.length > LIMITS.loreEntries && lores.length > before) throw new Error('LOREBOOK_LIMIT')
   for (const [i, e] of lores.entries()) {
+    if (!isChanged(e)) continue
     const where = 'lorebook[' + i + ']'
     const name = text(e.name)
     const content = text(e.content)
@@ -128,6 +139,8 @@ function checkLorebook(c: Obj): void {
   }
 }
 
+const sameList = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((v, i) => v === b[i])
 const keyList = (keys: string): string[] =>
   keys
     .split(',')
@@ -160,8 +173,16 @@ function loreFrom(entry: Partial<LoreEntry>, base: Obj | undefined, order: numbe
       }
   if (entry.title !== undefined) out.name = entry.title
   if (entry.content !== undefined) out.content = entry.content
-  if (entry.keys !== undefined) out.keys = keyList(entry.keys)
-  if (entry.offKeys !== undefined)
+  // 읽을 때 이은 글을 그대로 돌려받았으면 옛 키 배열을 둔다 (다시 쪼개면 쉼표가 든 키·앞뒤 공백이 깨진다)
+  if (entry.keys !== undefined && !(base && strings(base.keys).join(', ') === entry.keys))
+    out.keys = keyList(entry.keys)
+  // 전체 교체에서 제외키를 적어 주지 않았으면(given에 없음) 짝지은 옛 항목의 제외키를 그대로 둔다
+  const keepOffKeys = !!base && !!entry.given && !entry.given.includes('offKeys')
+  if (
+    entry.offKeys !== undefined &&
+    !keepOffKeys &&
+    !(base && sameList(strings(base.negativeKeys), entry.offKeys))
+  )
     out.negativeKeys = entry.offKeys.map((k) => k.trim()).filter(Boolean)
   return out
 }
@@ -188,6 +209,8 @@ function shiftAuxiliary(prompts: Obj[], removed: number): Obj[] {
 
 export const nekoWorks: WorkAdapter = {
   id: 'neko',
+  // 서버가 제목으로 다시 쓰는 대체 글, 새 로어북 항목에 붙이는 번호 (2026-11-13 실제 저장에서 확인)
+  rawIgnore: [/^character\.avatar\.alt$/, /^character\.lorebook\[[^\]]*\]\._id$/],
   label: '네코챗',
   guide: {
     save: 'JSON으로 저장한다. 편집기가 저장 직후 따로 보내는 JSX 렌더러·네코 모바일 설정은 보내지 않는다.',
@@ -198,6 +221,156 @@ export const nekoWorks: WorkAdapter = {
     ]
   },
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'save', 'images'],
+  features: {
+    title: { site: 'yes', read: 'yes', write: 'yes', verified: 'yes', note: '80자' },
+    description: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '캐릭터설명 20만자·짧은설명 1천자'
+    },
+    main_prompt: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '페르소나 30만자'
+    },
+    first_message: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '첫상황 0번, 2만자'
+    },
+    start_scenarios: {
+      site: 'yes',
+      read: 'partial',
+      write: 'partial',
+      verified: 'yes',
+      note: '제목·본문만, 최대 10개'
+    },
+    lorebook: {
+      site: 'yes',
+      read: 'partial',
+      write: 'partial',
+      verified: 'yes',
+      note: '켬끔·예산은 사이트에서 직접'
+    },
+    characters: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'yes',
+      note: '캐릭터 개념 없음'
+    },
+    example_dialogue: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '전용 칸 없음'
+    },
+    user_persona: {
+      site: 'unknown',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '개수만 extras에, 용도 모름'
+    },
+    output_rules: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '상시 컨텍스트로 대용'
+    },
+    situation_images: {
+      site: 'yes',
+      read: 'partial',
+      write: 'partial',
+      verified: 'partial',
+      note: '슬롯 추가·삭제·순서만, 300장'
+    },
+    cover: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'yes',
+      note: '아바타(대표 이미지), webp·png·jpg 4.5MB'
+    },
+    tags: {
+      site: 'yes',
+      read: 'yes',
+      write: 'partial',
+      verified: 'no',
+      note: '읽기만, 입력은 새 작품 때만'
+    },
+    visibility: {
+      site: 'yes',
+      read: 'yes',
+      write: 'yes',
+      verified: 'partial',
+      note: 'public 전환 미확인'
+    },
+    create_work: {
+      site: 'yes',
+      read: 'no',
+      write: 'yes',
+      verified: 'yes',
+      note: '비공개로만 생성'
+    },
+    delete_work: {
+      site: 'yes',
+      read: 'no',
+      write: 'yes',
+      verified: 'yes',
+      note: '제목 확인 필요'
+    },
+    versioning_review: {
+      site: 'yes',
+      read: 'partial',
+      write: 'no',
+      verified: 'no',
+      note: 'version만 읽음, 시트 검수는 안 보임'
+    },
+    language_editions: {
+      site: 'no',
+      read: 'no',
+      write: 'no',
+      verified: 'yes',
+      note: '판본 없음'
+    },
+    bgm_voice: {
+      site: 'unknown',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '원본 칸에 없음, 사이트는 미확인'
+    },
+    jsx_html: {
+      site: 'yes',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '별도 요청, 사이트에서 직접'
+    },
+    model_settings: {
+      site: 'unknown',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '원본 칸에 없음, 사이트는 미확인'
+    },
+    comments_stats: {
+      site: 'yes',
+      read: 'no',
+      write: 'no',
+      verified: 'no',
+      note: '알림 쪽에만, 사이트에서 직접'
+    }
+  },
 
   readAllowed: (url) => nekoPlain(url, READ_PATHS),
   writeAllowed(method, url) {
@@ -266,7 +439,9 @@ export const nekoWorks: WorkAdapter = {
         situation: '',
         description: ''
       })),
-      characters: []
+      characters: [],
+      extras: nekoExtras(c),
+      unsupported: [...NEKO_UNSUPPORTED]
     }
   },
 
@@ -282,20 +457,30 @@ export const nekoWorks: WorkAdapter = {
       c.isLinkShareOnly = changes.visibility === 'link'
     }
 
-    let fieldsChanged = false
+    const changedFields: string[] = []
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
       const key = FIELDS[name]
       if (!key || typeof value !== 'string') throw new Error('BAD_FIELD')
       c[key] = value
-      fieldsChanged = true
+      changedFields.push(name)
     }
-    if (fieldsChanged) checkFields(c)
+    checkFields(c, changedFields)
 
     let lores = list(c.lorebook)
+    const loreCount = lores.length
     const loreBefore = JSON.stringify(lores)
+    const loreOld = new Set(lores.map((e) => JSON.stringify(e)))
     if (changes.lorebook) {
+      // 제목으로 옛 항목과 짝짓는다. 짝이 없는 새 항목은 새 항목으로 만든다 (옛 항목의 번호·켜짐 상태를 물려받지 않는다)
       const old = lores
-      lores = changes.lorebook.map((e, i) => loreFrom(e, old[i], i))
+      const paired = matchOld(
+        changes.lorebook.map((e) => e.title ?? ''),
+        old,
+        (o) => text(o.name),
+        // 내용까지 견준다: 그 자리 항목을 지우고 새로 넣은 것이 지운 항목의 번호·꺼짐·내보내기 상태를 물려받지 않게
+        { contents: changes.lorebook.map((e) => e.content), contentOf: (o) => text(o.content) }
+      )
+      lores = changes.lorebook.map((e, i) => loreFrom(e, paired[i], i))
     }
     for (const patch of changes.lorebookPatch ?? []) {
       const i = at(patch.index, lores.length)
@@ -308,20 +493,27 @@ export const nekoWorks: WorkAdapter = {
     for (const entry of changes.lorebookAdd ?? [])
       lores.push(loreFrom(entry, undefined, lores.length))
     if (JSON.stringify(lores) !== loreBefore) {
+      // 바뀌었거나 새로 더한 항목만 규칙을 본다 (손대지 않은 옛 항목은 사이트가 받아 주던 값 그대로 보낸다)
+      checkLorebook(lores, (e) => !loreOld.has(JSON.stringify(e)), loreCount)
       // 순서 값은 자리대로 다시 매긴다
       c.lorebook = lores.map((e, order) => ({ ...e, order }))
-      checkLorebook(c)
     }
 
     const form = nekoForm(c)
     let greeting = strings(form.greeting)
     let settings = list(form.greetingSettings)
     let auxiliary = list(c.auxiliaryPrompts)
+    const startCount = greeting.length
+    let touched = greeting.map(() => false)
     const startsBefore = JSON.stringify([greeting, settings])
     for (const patch of changes.startScenarios ?? []) {
       const i = at(patch.index, greeting.length)
       noStartExtras(patch)
-      if (patch.content !== undefined) greeting[i] = patch.content
+      checkStartTitle(patch.title, i)
+      if (patch.content !== undefined) {
+        greeting[i] = patch.content
+        touched[i] = true
+      }
       if (patch.title !== undefined)
         settings[i] = { ...settings[i], title: patch.title.trim() || greetingTitle(i) }
     }
@@ -332,12 +524,15 @@ export const nekoWorks: WorkAdapter = {
       for (const i of gone.sort((a, b) => b - a)) {
         greeting = greeting.filter((_, n) => n !== i)
         settings = settings.filter((_, n) => n !== i)
+        touched = touched.filter((_, n) => n !== i)
         auxiliary = shiftAuxiliary(auxiliary, i)
       }
     }
     for (const draft of changes.startScenariosAdd ?? []) {
       noStartExtras(draft)
+      checkStartTitle(draft.title, greeting.length)
       greeting.push(draft.content ?? '')
+      touched.push(true)
       settings.push({
         title: draft.title?.trim() || greetingTitle(greeting.length - 1),
         includeLorebook: false,
@@ -348,7 +543,7 @@ export const nekoWorks: WorkAdapter = {
       c.greeting = greeting
       c.greetingSettings = greetingSettings(settings, greeting.length)
       c.auxiliaryPrompts = auxiliary
-      checkStarts(c)
+      checkStarts(c, touched, startCount)
     }
 
     // 네코챗은 작품 하나에 캐릭터 하나다
@@ -462,7 +657,10 @@ export function nekoCreateBody(draft: WorkDraft): Obj {
   if (tags.length > LIMITS.tags || tags.some((t) => !t.trim() || t.length > LIMITS.tag))
     bad('hashtags 10개 이하, 각 20자 이하')
   const starts = draft.startScenarios ?? []
-  for (const s of starts) noStartExtras(s)
+  for (const [i, s] of starts.entries()) {
+    noStartExtras(s)
+    checkStartTitle(s.title, i)
+  }
   const greeting = starts.map((s) => s.content ?? '')
 
   const c: Obj = {
@@ -497,9 +695,9 @@ export function nekoCreateBody(draft: WorkDraft): Obj {
     language,
     isDraftMode: false
   }
-  checkFields(c)
-  checkStarts(c)
-  checkLorebook(c)
+  checkFields(c, Object.keys(FIELDS))
+  checkStarts(c, greeting.map(() => true), 0)
+  checkLorebook(list(c.lorebook), () => true, 0)
   return {
     ...c,
     characterId,

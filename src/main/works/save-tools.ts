@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto'
 import { platformNote, workAdapter, workKey } from './adapters'
 import { loadImage } from './media-tools'
+import { rawCheck, rawDiff } from './raw-diff'
 import type { ToolDef, WorkToolDeps } from './tools'
 import {
   textLength,
@@ -213,6 +214,8 @@ export async function parseChanges(input: Obj, deps: WorkToolDeps): Promise<Work
   const whole = (v: unknown): LoreEntry[] => {
     if (!Array.isArray(v)) throw new Error('BAD_CHANGES')
     return v.map((e) => ({
+      // 호출한 쪽이 실제로 적어 준 칸 (연결부가 "안 줌"과 "비움"을 가릴 때 쓴다)
+      given: Object.keys(loreEntry(e, false)),
       title: '',
       keys: '',
       content: '',
@@ -355,7 +358,12 @@ export const CHANGE_PROPERTIES = {
   lorebook: {
     type: 'array',
     items: lorebookItem,
-    description: '로어북 전체를 이 목록으로 바꾼다'
+    description:
+      '로어북 전체를 이 목록으로 바꾼다. 옛 항목의 번호·숨은 설정은 제목(과 내용)이 같은 항목이 이어받고, ' +
+      '제자리에서 제목·내용을 고친 항목도 그 자리의 옛 항목을 잇는다. 항목에 적지 않은 칸(mode, off_keys, ' +
+      'turn_range 등)은 이어받은 옛 값을 그대로 둔다. 어떤 항목을 지우고 그 자리에 전혀 다른 항목을 넣을 때는 ' +
+      '전체 교체 대신 lorebook_remove와 lorebook_add를 쓴다(전체 교체로는 "고친 것"과 구분되지 않는다). ' +
+      '항목 몇 개만 고칠 때는 lorebook_patch가 안전하다.'
   },
   lorebook_file: {
     type: 'string',
@@ -464,7 +472,10 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
       expires: number
     }
   >()
-  const frozen = (body: WorkBody): string => JSON.stringify({ ...body, updatedAt: null })
+  // 계획 뒤 작품이 바뀌었는지는 고칠 수 있는 칸으로만 본다. 읽기 전용 안내(extras·unsupported)에는 사이트가
+  // 스스로 다시 계산하는 값이 섞일 수 있어, 넣으면 저장이 까닭 없이 PLAN_STALE로 막힌다.
+  const frozen = (body: WorkBody): string =>
+    JSON.stringify({ ...body, updatedAt: null, extras: undefined, unsupported: undefined })
 
   return [
     {
@@ -488,6 +499,10 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
         const changes = await parseChanges(args, deps)
         const raw = await adapter.readRaw(deps.reader(adapter.id), id)
         const before = adapter.normalize(raw)
+        // 완전 공개(목록에 뜨는 public)로 바꾸는 일은 사용자만 한다 (2026-11-13 아빠 결정). 이미 public인 작품을
+        // 그대로 저장하는 것, link·unlisted·private으로 바꾸는 것은 된다.
+        if (changes.visibility === 'public' && before.visibility !== 'public')
+          throw new Error('PUBLIC_BY_USER')
         const after = adapter.normalize(adapter.applyChanges(raw, changes))
         const diff = diffBodies(before, after)
         const head = {
@@ -526,7 +541,9 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
       description:
         'work_plan으로 세운 계획을 플랫폼에 저장한다. 사용자가 그 계획의 변경 내용을 보고 저장하라고 ' +
         '한 뒤에만 부른다. 계획을 세운 뒤 플랫폼 내용이 바뀌었으면 저장하지 않는다. 저장 직전 원본을 ' +
-        'backup 경로에 남기고, 저장 뒤 다시 읽어 견준 결과를 verified로 돌려준다.',
+        'backup 경로에 남기고, 저장 뒤 다시 읽어 견준 결과를 verified로 돌려준다. raw_check는 플랫폼 원본째 ' +
+        '견준 결과다: same이 false면 보내려던 것과 다르게 저장된 칸이 있으니 differences(경로와 값의 모양)를 ' +
+        '사용자에게 그대로 알린다. 다른 곳이 있으면 전체 목록이 report 경로의 파일로 남는다.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -557,16 +574,47 @@ export function createSaveTools(deps: WorkToolDeps, forget: (key: string) => voi
 
         plans.delete(planId)
         forget(adapter.id + ':' + plan.workId)
-        await adapter.save(deps.writer(adapter.id), plan.workId, next, workIo(deps, adapter.id))
+        const outcome = await adapter.save(
+          deps.writer(adapter.id),
+          plan.workId,
+          next,
+          workIo(deps, adapter.id)
+        )
+        const skipped = !!outcome && outcome.skipped === true
 
         const afterRaw = await adapter.readRaw(read, plan.workId)
         const after = adapter.normalize(afterRaw)
         await deps.snapshot(adapter.id, plan.workId, afterRaw)
         const mismatches = diffBodies(expected, after)
+        // 공통 모양으로는 안 보이는 칸까지 원본째 견준다. verified의 뜻은 그대로 두고 따로 싣는다.
+        const raw_check = rawCheck(next, afterRaw, 30, adapter.rawIgnore)
+        const report =
+          mismatches.length || !raw_check.same
+            ? await deps
+                .snapshot(adapter.id, plan.workId + '.save-report', {
+                  work_id: plan.workId,
+                  mismatches: mismatches.map(({ where, kind, before_length, after_length }) => ({
+                    where,
+                    kind,
+                    before_length,
+                    after_length
+                  })),
+                  raw_differences: rawDiff(next, afterRaw)
+                })
+                .catch(() => null)
+            : null
         return {
-          saved: true,
+          saved: !skipped,
+          ...(skipped
+            ? {
+                skipped: true,
+                note: '플랫폼이 달라진 것이 없다고 해서 보내지 않았어요. 저장된 것은 없어요.'
+              }
+            : {}),
           verified: mismatches.length === 0,
           mismatches,
+          raw_check,
+          ...(report ? { report } : {}),
           id: after.id,
           title: after.title,
           visibility: after.visibility,

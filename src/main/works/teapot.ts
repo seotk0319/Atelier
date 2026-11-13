@@ -47,6 +47,7 @@ import {
   type Obj,
   type TeapotAccount
 } from './teapot-core'
+import { matchOld } from './match-old'
 import type {
   ImageGroup,
   LoreEntry,
@@ -54,6 +55,7 @@ import type {
   WorkAdapter,
   WorkBody,
   WorkChanges,
+  WorkFeature,
   WorkDraft,
   WorkFetch,
   WorkListItem,
@@ -67,6 +69,7 @@ const LIMITS = {
   title: 30,
   subtitle: 35,
   description: 1000,
+  recommendedAnswer: 1000,
   loreEntries: 500,
   loreTitle: 60,
   loreInfo: 2500,
@@ -91,7 +94,8 @@ const FIELDS: Record<string, string> = {
 const FIELD_MAX: Record<string, number> = {
   char_name: LIMITS.title,
   oneline_description: LIMITS.subtitle,
-  detail_description: LIMITS.description
+  detail_description: LIMITS.description,
+  recommended_answer_prompt: LIMITS.recommendedAnswer
 }
 
 /** 읽은 작품 원본: 고른 저장 파일 하나와 그 snapshot, 그리고 저장 파일 목록 */
@@ -129,6 +133,241 @@ function newest(checkpoints: Obj[]): Obj | null {
 
 const status = (cp: Obj): string => cpStatus(cp.cp_status) ?? 'DRAFT'
 
+// ── 숨은 설정(extras) ──
+// 짧은 값은 그대로, 긴 글은 <이름>_length, 목록은 개수만 싣는다. 작품 본문·계정 정보·주소는 싣지 않는다.
+// 조회 수 같은 통계는 읽을 때마다 달라져 계획이 낡은 것으로 보이므로 싣지 않는다.
+const SHORT_TEXT = 80
+const SHORT_LIST = 20
+function putText(out: Obj, name: string, v: unknown): void {
+  if (typeof v !== 'string') return
+  if (v.length <= SHORT_TEXT) out[name] = v
+  else out[name + '_length'] = v.length
+}
+function putStrings(out: Obj, name: string, v: unknown): void {
+  if (!Array.isArray(v)) return
+  const items = strings(v)
+  if (items.length === v.length && items.length <= SHORT_LIST && items.every((t) => t.length <= SHORT_TEXT))
+    out[name] = items
+  else out[name + '_count'] = v.length
+}
+function putCount(out: Obj, name: string, v: unknown): void {
+  if (Array.isArray(v)) out[name] = v.length
+}
+const filled = (v: unknown): boolean =>
+  typeof v === 'string' || Array.isArray(v)
+    ? v.length > 0
+    : isObj(v)
+      ? Object.keys(v).length > 0
+      : v !== null && v !== undefined
+
+/** 저장 파일 snapshot과 저장 파일 목록에서 공통 칸에 들지 않는 설정을 뽑는다 */
+function teapotExtras(r: TeapotRaw): Obj {
+  const s = r.snapshot
+  const out: Obj = {}
+  putStrings(out, 'genre', s.genre)
+  putStrings(out, 'hashtags', s.hash_tags)
+  putText(out, 'target', s.target)
+  if (typeof s.is_nsfw === 'boolean') out.is_nsfw = s.is_nsfw
+  if (typeof s.image === 'string') out.has_cover_image = s.image !== ''
+  putText(out, 'template', s.template)
+  putText(out, 'template_version', s.template_version)
+  putText(out, 'prompt_mode', s.prompt_mode)
+  putText(out, 'model', s.model)
+  putText(out, 'conv_type', s.conv_type)
+  if (typeof s.max_output_token === 'number') out.max_output_tokens = s.max_output_token
+  if (typeof s.prompt_char_count === 'number') out.prompt_char_count = s.prompt_char_count
+  if ('prompt_template_overrides' in s) out.has_prompt_template_overrides = filled(s.prompt_template_overrides)
+  if ('worldview_id' in s) out.worldview_linked = filled(s.worldview_id)
+  putCount(out, 'guideline_count', s.guidelines)
+  putCount(out, 'user_note_count', s.player_note)
+  putCount(out, 'persona_count', s.personas)
+  putCount(out, 'example_dialogue_count', s.example_dialogues)
+  putCount(out, 'situation_image_count', s.circumstance_images)
+  putCount(out, 'jsx_component_count', s.jsx_components)
+  putCount(out, 'command_count', s.commands)
+  const starts = list(s.start_settings).filter((st) => Array.isArray(st.recommended_answers))
+  if (starts.length)
+    out.start_recommended_answer_count = starts.reduce(
+      (n, st) => n + (st.recommended_answers as unknown[]).length,
+      0
+    )
+  // 저장 파일 목록: 개수와, 가장 최근에 제출한 파일의 심사 결과 (저장·심사로만 바뀐다)
+  out.checkpoint_count = r.checkpoints.filter((c) => ID_RE.test(text(c.id))).length
+  const submitted = r.checkpoints
+    .filter((c) => isoTime(c.submitted_at) !== null)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => timeOf(b.c.submitted_at) - timeOf(a.c.submitted_at) || a.i - b.i)[0]?.c
+  if (submitted) {
+    out.last_submitted_at = isoTime(submitted.submitted_at)
+    if (isObj(submitted.review_result)) putText(out, 'last_review_status', submitted.review_result.status)
+  }
+  return out
+}
+
+/** 사이트에는 있는데 이 연결부가 읽지 못해 비어 보이는 것 */
+const UNSUPPORTED = [
+  '시작 상황 부가 칸(세계관·비밀·출력 형식)',
+  '추천 답변 내용',
+  '예시 대화 내용',
+  '가이드라인·유저노트·페르소나 내용',
+  'JSX 컴포넌트',
+  '시리즈·댓글 허용 설정',
+  '독점·수익 설정',
+  '댓글·좋아요·대화 통계',
+  '이전 저장 파일'
+]
+
+const FEATURES: Record<string, WorkFeature> = {
+  title: { site: 'yes', read: 'yes', write: 'yes', verified: 'partial', note: '30자. 읽기만 실측' },
+  description: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: '한 줄 35자, 소개 1,000자'
+  },
+  main_prompt: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: '칸 한도 검사 없음(전체 400,000자)'
+  },
+  first_message: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: '시작 상황별 3,000자, HTML 가능'
+  },
+  start_scenarios: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: '이름 20자, 설명 500자. 추가·삭제 미확인'
+  },
+  lorebook: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: '500개, 본문 2,500자. 발동 방식 칸 없음'
+  },
+  characters: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'no',
+    note: '이름·설명만. 이미지는 사이트에서 직접'
+  },
+  example_dialogue: {
+    site: 'yes',
+    read: 'partial',
+    write: 'no',
+    verified: 'no',
+    note: '개수만 읽음. 내용은 사이트에서 직접'
+  },
+  user_persona: {
+    site: 'yes',
+    read: 'partial',
+    write: 'no',
+    verified: 'no',
+    note: '페르소나 5개 한도. 개수만 읽음'
+  },
+  output_rules: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: 'output_format_prompt. 한도 검사 없음'
+  },
+  situation_images: {
+    site: 'yes',
+    read: 'partial',
+    write: 'no',
+    verified: 'no',
+    note: '목록만 읽음. 올리기는 사이트에서 직접'
+  },
+  cover: {
+    site: 'yes',
+    read: 'yes',
+    write: 'no',
+    verified: 'partial',
+    note: '1:1, 5MB. 올리기는 사이트에서 직접'
+  },
+  tags: {
+    site: 'yes',
+    read: 'yes',
+    write: 'partial',
+    verified: 'partial',
+    note: '해시태그 10개·20자(검사 안 함). 새 작품에만 씀'
+  },
+  visibility: {
+    site: 'yes',
+    read: 'yes',
+    write: 'blocked',
+    verified: 'yes',
+    note: '저장 파일 값이라 등록해야 반영돼 막음'
+  },
+  create_work: {
+    site: 'yes',
+    read: 'yes',
+    write: 'yes',
+    verified: 'partial',
+    note: '비공개 초안만. 장르·표지는 못 넣음'
+  },
+  delete_work: {
+    site: 'yes',
+    read: 'no',
+    write: 'yes',
+    verified: 'partial',
+    note: '등록작 삭제 영향 미확인'
+  },
+  versioning_review: {
+    site: 'yes',
+    read: 'partial',
+    write: 'blocked',
+    verified: 'partial',
+    note: '임시저장만. 등록·심사는 사이트에서 직접'
+  },
+  language_editions: {
+    site: 'no',
+    read: 'no',
+    write: 'no',
+    verified: 'yes',
+    note: '사이트에 없음'
+  },
+  bgm_voice: {
+    site: 'no',
+    read: 'no',
+    write: 'no',
+    verified: 'no',
+    note: '제작 단계 탭에 없음(추정)'
+  },
+  jsx_html: {
+    site: 'yes',
+    read: 'partial',
+    write: 'partial',
+    verified: 'no',
+    note: 'JSX는 못 다룸. HTML은 시작 메시지 글로'
+  },
+  model_settings: {
+    site: 'yes',
+    read: 'yes',
+    write: 'no',
+    verified: 'partial',
+    note: '읽기 전용. 새 작품은 general·simple 고정'
+  },
+  comments_stats: {
+    site: 'yes',
+    read: 'no',
+    write: 'no',
+    verified: 'no',
+    note: '작품 MCP는 안 읽음. 알림 탭에서만'
+  }
+}
+
 // ── 로어북 ──
 
 const keyList = (keys: string): string[] => [
@@ -150,20 +389,59 @@ function loreFrom(entry: Partial<LoreEntry>, base: Obj | undefined): Obj {
     throw new Error('BAD_CHANGES')
   const out: Obj = base ? { ...base } : { title: '', keys: [], info: '' }
   if (entry.title !== undefined) out.title = entry.title
-  if (entry.keys !== undefined) out.keys = keyList(entry.keys)
+  // 보여 준 글(쉼표로 이은 키)이 그대로면 원본 키 목록을 그대로 둔다 (키 안의 쉼표·공백·중복이 쪼개지거나 다듬어지지 않게)
+  // 전체 교체에서 호출한 쪽이 keys를 안 줬으면(given에 없음) 옛 항목의 키를 그대로 둔다 (whole()이 채운 ''로 지우지 않는다)
+  const keysGiven = entry.given === undefined || entry.given.includes('keys')
+  const same =
+    !!base && Array.isArray(base.keys) && entry.keys === strings(base.keys).join(', ')
+  if (entry.keys !== undefined && (keysGiven || !base) && !same) out.keys = keyList(entry.keys)
   if (entry.content !== undefined) out.info = entry.content
   return out
 }
-function checkLorebook(books: Obj[]): void {
-  if (books.length > LIMITS.loreEntries) throw new Error('LOREBOOK_LIMIT')
-  for (const [i, b] of books.entries()) {
+/** 비교용 모양. 자리 번호(indexLabel)는 항목을 옮기면 바뀌므로 뺀다 */
+const shapeOf = (o: Obj): string => JSON.stringify({ ...o, indexLabel: undefined })
+/** 옛 목록에 그대로 있던 항목(자리만 옮긴 것 포함)을 뺀, 바뀌었거나 새로 생긴 항목의 자리들 */
+function touched(now: Obj[], before: Obj[]): number[] {
+  const left = new Map<string, number>()
+  for (const o of before) left.set(shapeOf(o), (left.get(shapeOf(o)) ?? 0) + 1)
+  return now.flatMap((o, i) => {
+    const k = shapeOf(o)
+    const n = left.get(k) ?? 0
+    if (n > 0) {
+      left.set(k, n - 1)
+      return []
+    }
+    return [i]
+  })
+}
+/** 옛 목록 어딘가에 이미 있던 값인지 (사이트가 받아 주던 값이라 한도 밖이어도 막지 않는다) */
+const seenIn = (before: Obj[], key: string, value: string): boolean =>
+  before.some((o) => text(o[key]) === value)
+/**
+ * 바뀌었거나 새로 더한 항목 안에서도 값이 바뀐 칸만 검사한다.
+ * 손대지 않은 옛 값(같은 항목의 다른 칸을 고쳤을 때 딸려 오는 한도 밖 옛 값 포함)은 사이트가 받아 주던 값 그대로 보낸다.
+ */
+function checkLorebook(books: Obj[], before: Obj[]): void {
+  if (books.length > LIMITS.loreEntries && books.length > before.length)
+    throw new Error('LOREBOOK_LIMIT')
+  const oldKeys = new Set(before.flatMap((o) => strings(o.keys)))
+  const oldKeyCount = Math.max(0, ...before.map((o) => strings(o.keys).length))
+  const oldKeyLists = new Set(before.map((o) => JSON.stringify(strings(o.keys))))
+  for (const i of touched(books, before)) {
+    const b = books[i]
     const where = 'lorebook[' + i + ']'
-    if (text(b.title).length > LIMITS.loreTitle)
+    const title = text(b.title)
+    if (title.length > LIMITS.loreTitle && !seenIn(before, 'title', title))
       throw new Error('BAD_LOREBOOK ' + where + '.title ~' + LIMITS.loreTitle + '자')
-    if (text(b.info).length > LIMITS.loreInfo)
+    const info = text(b.info)
+    if (info.length > LIMITS.loreInfo && !seenIn(before, 'info', info))
       throw new Error('BAD_LOREBOOK ' + where + '.content ~' + LIMITS.loreInfo + '자')
     const keys = strings(b.keys)
-    if (keys.length > LIMITS.loreKeys || keys.some((k) => k.length > LIMITS.loreKey))
+    if (oldKeyLists.has(JSON.stringify(keys))) continue
+    if (
+      (keys.length > LIMITS.loreKeys && keys.length > oldKeyCount) ||
+      keys.some((k) => k.length > LIMITS.loreKey && !oldKeys.has(k))
+    )
       throw new Error('BAD_LOREBOOK ' + where + '.keys 10개 이하, 각 50자 이하')
   }
 }
@@ -196,12 +474,14 @@ function startFrom(patch: StartPatch, base: Obj): Obj {
   if (patch.subPrompt !== undefined) out.additional_prompt = patch.subPrompt
   return out
 }
-function checkStarts(starts: Obj[]): void {
+function checkStarts(starts: Obj[], before: Obj[]): void {
   if (starts.length < 1) throw new Error('START_LIMIT')
-  for (const [i, s] of starts.entries()) {
+  for (const i of touched(starts, before)) {
+    const s = starts[i]
     const where = 'start_scenarios[' + i + ']'
     const over = (key: string, max: number, name: string): void => {
-      if (text(s[key]).length > max)
+      // 손대지 않은 옛 값은 한도 밖이어도 막지 않는다 (같은 시작 상황의 다른 칸만 고친 경우)
+      if (text(s[key]).length > max && !seenIn(before, key, text(s[key])))
         throw new Error('BAD_START ' + where + '.' + name + ' ~' + max + '자')
     }
     over('setting_name', LIMITS.startName, 'title')
@@ -211,8 +491,10 @@ function checkStarts(starts: Obj[]): void {
   }
 }
 
-function checkFields(s: Obj): void {
+/** only가 있으면 그 칸만 검사한다 (손대지 않은 칸의 옛 값 때문에 막지 않는다) */
+function checkFields(s: Obj, only?: ReadonlySet<string>): void {
   for (const [name, key] of Object.entries(FIELDS)) {
+    if (only && !only.has(key)) continue
     const max = FIELD_MAX[key]
     if (s[key] === undefined) continue
     const value = text(s[key])
@@ -255,6 +537,7 @@ export const teapotWorks: TeapotAdapter = {
       '등록된 작품의 삭제가 공개본까지 지우는지(삭제는 새로 만든 초안에서만 확인했다)'
     ]
   },
+  features: FEATURES,
   caseSensitiveIds: true,
   capabilities: ['works_list', 'work_read', 'lorebook', 'start_scenarios', 'characters', 'save'],
 
@@ -396,31 +679,40 @@ export const teapotWorks: TeapotAdapter = {
         details: text(c.description),
         info: '',
         imageCount: text(c.image) ? 1 : 0
-      }))
+      })),
+      extras: teapotExtras(r),
+      unsupported: [...UNSUPPORTED]
     }
   },
 
   applyChanges(raw, changes: WorkChanges) {
-    teapotRaw(raw)
+    const orig = teapotRaw(raw).snapshot
     const next = structuredClone(raw) as TeapotRaw
     const s = next.snapshot
     const before = JSON.stringify(s)
 
     if (changes.visibility !== undefined) throw new Error('TEAPOT_VISIBILITY_NEEDS_SUBMIT')
 
-    let fieldsChanged = false
+    const changedFields = new Set<string>()
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
       const key = FIELDS[name]
       if (!key || typeof value !== 'string') throw new Error('BAD_FIELD')
+      if (value !== orig[key]) changedFields.add(key)
       s[key] = value
-      fieldsChanged = true
     }
-    if (fieldsChanged) checkFields(s)
+    if (changedFields.size) checkFields(s, changedFields)
 
     let books = list(s.keyword_books)
     const booksBefore = JSON.stringify(books)
     if (changes.lorebook) {
-      const old = books
+      // 제목으로 옛 항목과 짝짓는다 (자리 번호로만 이으면 끼워 넣기·순서 바꾸기에서 옛 항목의 숨은 칸이 엉뚱한 항목에 붙는다)
+      const old = matchOld(
+        changes.lorebook.map((e) => e.title),
+        books,
+        (b) => text(b.title),
+        // 제목이 겹치는 항목이 있어 내용까지 견줘 짝짓는다 (2026-11-13 실제 스냅샷에서 겹침 확인)
+        { contents: changes.lorebook.map((e) => e.content), contentOf: (b) => text(b.info) }
+      )
       books = changes.lorebook.map((e, i) => loreFrom(e, old[i]))
     }
     for (const patch of changes.lorebookPatch ?? []) {
@@ -434,7 +726,7 @@ export const teapotWorks: TeapotAdapter = {
     for (const entry of changes.lorebookAdd ?? []) books.push(loreFrom(entry, undefined))
     if (JSON.stringify(books) !== booksBefore) {
       s.keyword_books = relabel(books)
-      checkLorebook(books)
+      checkLorebook(books, list(orig.keyword_books))
     }
 
     let starts = list(s.start_settings)
@@ -455,7 +747,7 @@ export const teapotWorks: TeapotAdapter = {
     }
     if (JSON.stringify(starts) !== startsBefore) {
       s.start_settings = starts
-      checkStarts(starts)
+      checkStarts(starts, list(orig.start_settings))
     }
 
     let chars = list(s.characters)
@@ -616,7 +908,7 @@ export function teapotCreateSnapshot(draft: WorkDraft): Obj {
     characters: []
   }
   checkFields(s)
-  checkLorebook(books)
-  checkStarts(start_settings)
+  checkLorebook(books, [])
+  checkStarts(start_settings, [])
   return s
 }

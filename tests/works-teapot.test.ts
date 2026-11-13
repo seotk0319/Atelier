@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { teapotCreateSnapshot, teapotWorks, type TeapotRaw } from '../src/main/works/teapot'
 import { listQuery, listUrl } from '../src/main/works/teapot-core'
-import type { WorkDraft, WorkFetch, WorkReadInit, WorkWrite } from '../src/main/works/types'
+import type {
+  LoreEntry,
+  WorkDraft,
+  WorkFetch,
+  WorkReadInit,
+  WorkWrite
+} from '../src/main/works/types'
 
 // 가짜 응답 모양은 2026-11-10 티팟 공개 스크립트에서 읽은 필드를 따른다:
 //   호출형 함수 응답 {result:…} (함수 SDK), listCheckpoints {success, summary_only, checkpoints[{id,name,cp_status,time_saved}]},
@@ -570,5 +576,479 @@ describe('티팟 삭제·새 작품', () => {
     expect(
       (teapotCreateSnapshot(draft({ startScenarios: [] })).start_settings as Obj[])[0].setting_name
     ).toBe('시작 상황 1')
+  })
+})
+
+describe('티팟 저장: 바꾸려던 칸만 바뀐다', () => {
+  const lore = (title: string, keys = title, content = title + ' 설명'): LoreEntry => ({
+    title,
+    keys,
+    content,
+    mode: null,
+    offKeys: [],
+    turnRange: null,
+    offTurnRange: null
+  })
+  const books = (raw: TeapotRaw): Obj[] => raw.snapshot.keyword_books as Obj[]
+  const starts = (raw: TeapotRaw): Obj[] => raw.snapshot.start_settings as Obj[]
+
+  it('로어북 전체 교체는 제목으로 옛 항목을 잇는다 (끼워 넣은 새 항목은 옛 항목을 물려받지 않는다)', async () => {
+    const raw = await load()
+    books(raw)[0].hidden = 'h-학교'
+    books(raw)[1].hidden = 'h-마을'
+    const next = teapotWorks.applyChanges!(raw, {
+      lorebook: [lore('새 항목'), lore('학교', '학교, 교실', '학교 설명'), lore('마을')]
+    }) as TeapotRaw
+    expect(books(next).map((b) => [b.title, b.hidden, b.indexLabel])).toEqual([
+      ['새 항목', undefined, 1],
+      ['학교', 'h-학교', 2],
+      ['마을', 'h-마을', 3]
+    ])
+    // 순서만 바꿔도 각 항목의 숨은 칸이 제 항목을 따라간다
+    const swapped = teapotWorks.applyChanges!(raw, {
+      lorebook: [lore('마을'), lore('학교', '학교, 교실', '학교 설명')]
+    }) as TeapotRaw
+    expect(books(swapped).map((b) => [b.title, b.hidden])).toEqual([
+      ['마을', 'h-마을'],
+      ['학교', 'h-학교']
+    ])
+  })
+
+  it('제자리에서 제목만 고친 항목은 옛 항목의 숨은 칸을 잇는다', async () => {
+    const raw = await load()
+    books(raw)[1].hidden = 'h-마을'
+    const next = teapotWorks.applyChanges!(raw, {
+      lorebook: [lore('학교', '학교, 교실', '학교 설명'), lore('고을', '마을', '마을 설명')]
+    }) as TeapotRaw
+    expect(books(next).map((b) => [b.title, b.hidden])).toEqual([
+      ['학교', undefined],
+      ['고을', 'h-마을']
+    ])
+  })
+
+  it('키 안의 쉼표·공백·중복은 보여 준 글을 그대로 돌려줄 때 원본 그대로 둔다', async () => {
+    const raw = await load()
+    books(raw)[0].keys = ['가, 나', ' 다 ', '다']
+    const shown = teapotWorks.normalize(raw).lorebook
+    const patched = teapotWorks.applyChanges!(raw, {
+      lorebookPatch: [{ index: 0, keys: shown[0].keys }]
+    }) as TeapotRaw
+    expect(books(patched)).toEqual(books(raw))
+    expect(patched.checkpoint).toEqual(raw.checkpoint)
+    const whole = teapotWorks.applyChanges!(raw, { lorebook: shown }) as TeapotRaw
+    expect(books(whole)).toEqual(books(raw))
+    // 키 글을 실제로 고치면 그때는 쉼표로 나눈다
+    const edited = teapotWorks.applyChanges!(raw, {
+      lorebookPatch: [{ index: 0, keys: '가, 나, 라' }]
+    }) as TeapotRaw
+    expect(books(edited)[0].keys).toEqual(['가', '나', '라'])
+  })
+
+  it('손대지 않은 글 칸의 옛 값이 한도를 넘어도 다른 칸을 고칠 수 있다', async () => {
+    const raw = await load()
+    raw.snapshot.char_name = '긴'.repeat(31)
+    raw.snapshot.oneline_description = ''.padEnd(40, '소')
+    raw.snapshot.recommended_answer_prompt = '답'.repeat(1200)
+    const next = teapotWorks.applyChanges!(raw, { fields: { main: '새 프롬프트' } }) as TeapotRaw
+    expect(next.snapshot.prompt).toBe('새 프롬프트')
+    expect(next.snapshot.char_name).toBe('긴'.repeat(31))
+    expect(next.snapshot.recommended_answer_prompt).toBe('답'.repeat(1200))
+    // 같은 값을 다시 보내도 바뀐 것이 아니다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { fields: { title: '긴'.repeat(31), main: '또' } })
+    ).not.toThrow()
+    // 바꾼 칸은 여전히 검사한다
+    expect(() => teapotWorks.applyChanges!(raw, { fields: { title: '긴'.repeat(32) } })).toThrow(
+      'BAD_FIELD title'
+    )
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { fields: { recommended_answer_prompt: '답'.repeat(1001) } })
+    ).toThrow('BAD_FIELD recommended_answer_prompt')
+  })
+
+  it('추천 답변 프롬프트는 바꿀 때 1,000자까지만 받는다', async () => {
+    const raw = await load()
+    const set = (n: number): TeapotRaw =>
+      teapotWorks.applyChanges!(raw, {
+        fields: { recommended_answer_prompt: '답'.repeat(n) }
+      }) as TeapotRaw
+    expect(set(1000).snapshot.recommended_answer_prompt).toBe('답'.repeat(1000))
+    expect(() => set(1001)).toThrow('BAD_FIELD recommended_answer_prompt ~1000자')
+  })
+
+  it('손대지 않은 로어북 항목의 옛 값 때문에 저장이 막히지 않는다', async () => {
+    const raw = await load()
+    books(raw)[0].info = '길'.repeat(2600)
+    books(raw)[0].title = '제'.repeat(70)
+    const next = teapotWorks.applyChanges!(raw, {
+      lorebookPatch: [{ index: 1, content: '마을 새 설명' }]
+    }) as TeapotRaw
+    expect(books(next)[0].info).toBe('길'.repeat(2600))
+    expect(books(next)[1].info).toBe('마을 새 설명')
+    // 옛 항목을 지우거나 자리를 옮겨도 막지 않는다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { lorebookRemove: [1], lorebookAdd: [lore('숲')] })
+    ).not.toThrow()
+    // 바꾸거나 새로 더한 항목은 검사한다
+    // 옛 값이 한도 밖인 칸(제목 70자) 말고 바꾼 칸(본문)만 검사한다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { lorebookPatch: [{ index: 0, content: '길'.repeat(2501) }] })
+    ).toThrow('BAD_LOREBOOK lorebook[0].content')
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { lorebookPatch: [{ index: 0, title: '새'.repeat(61) }] })
+    ).toThrow('BAD_LOREBOOK lorebook[0].title')
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { lorebookAdd: [lore('숲', '숲', '길'.repeat(2501))] })
+    ).toThrow('BAD_LOREBOOK lorebook[2].content')
+  })
+
+  it('한도 밖 옛 칸이 있는 항목도 다른 칸만 고치면 저장된다 (바뀐 칸만 검사)', async () => {
+    const raw = await load()
+    books(raw)[0].title = '제'.repeat(70)
+    books(raw)[0].info = '길'.repeat(2600)
+    books(raw)[0].keys = Array.from({ length: 12 }, (_, i) => 'k' + i)
+    // 본문만 한도 안으로 고쳐도, 키 목록만 고쳐도 옛 제목·옛 키 개수 때문에 막히지 않는다
+    const fixed = teapotWorks.applyChanges!(raw, {
+      lorebookPatch: [{ index: 0, content: '짧은 설명' }]
+    }) as TeapotRaw
+    expect(books(fixed)[0].title).toBe('제'.repeat(70))
+    expect(books(fixed)[0].info).toBe('짧은 설명')
+    expect(books(fixed)[0].keys).toEqual(books(raw)[0].keys)
+    const rekey = teapotWorks.applyChanges!(raw, {
+      lorebookPatch: [{ index: 0, keys: 'k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, 새로' }]
+    }) as TeapotRaw
+    expect(books(rekey)[0].keys).toHaveLength(12)
+    // 옛 개수를 넘기거나 50자를 넘는 새 키는 여전히 막는다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, {
+        lorebookPatch: [
+          { index: 0, keys: Array.from({ length: 13 }, (_, i) => 'k' + i).join(', ') }
+        ]
+      })
+    ).toThrow('BAD_LOREBOOK lorebook[0].keys')
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { lorebookPatch: [{ index: 0, keys: '키'.repeat(51) }] })
+    ).toThrow('BAD_LOREBOOK lorebook[0].keys')
+  })
+
+  it('로어북 전체 교체에서 keys를 안 주면 짝지은 옛 항목의 키를 그대로 둔다', async () => {
+    const raw = await load()
+    const entry = (given: string[], more: Partial<LoreEntry> = {}): LoreEntry => ({
+      title: '학교',
+      keys: '',
+      content: '고친 설명',
+      mode: null,
+      offKeys: [],
+      turnRange: null,
+      offTurnRange: null,
+      given,
+      ...more
+    })
+    // whole()이 안 준 keys에 채우는 ''는 "비움"이 아니다
+    const kept = teapotWorks.applyChanges!(raw, {
+      lorebook: [entry(['title', 'content']), { ...entry(['title', 'content']), title: '마을', content: '마을 설명' }]
+    }) as TeapotRaw
+    expect(books(kept)).toEqual([
+      { title: '학교', keys: ['학교', '교실'], info: '고친 설명', indexLabel: 1 },
+      { title: '마을', keys: ['마을'], info: '마을 설명', indexLabel: 2 }
+    ])
+    // keys를 ''로 직접 준 것은 비우라는 뜻이다
+    const cleared = teapotWorks.applyChanges!(raw, {
+      lorebook: [entry(['title', 'keys', 'content'])]
+    }) as TeapotRaw
+    expect(books(cleared)[0].keys).toEqual([])
+    // 새 항목은 키를 안 줘도 빈 목록 칸을 갖는다 (예전과 같은 모양)
+    const added = teapotWorks.applyChanges!(raw, {
+      lorebookAdd: [entry(['title', 'content'], { title: '숲' })]
+    }) as TeapotRaw
+    expect(books(added)[2]).toEqual({ title: '숲', keys: [], info: '고친 설명', indexLabel: 3 })
+  })
+
+  it('원본 항목에 keys 칸이 없고 keys를 주면 예전처럼 목록 칸을 만든다', async () => {
+    const raw = await load()
+    delete books(raw)[1].keys
+    const next = teapotWorks.applyChanges!(raw, {
+      lorebook: [lore('학교', '학교, 교실', '학교 설명'), lore('마을', '', '새 설명')]
+    }) as TeapotRaw
+    expect(books(next)[1]).toEqual({ title: '마을', keys: [], info: '새 설명', indexLabel: 2 })
+    // 안 줬으면 칸을 만들지 않는다
+    const kept = teapotWorks.applyChanges!(raw, {
+      lorebookPatch: [{ index: 1, content: '새 설명' }]
+    }) as TeapotRaw
+    expect(books(kept)[1]).not.toHaveProperty('keys')
+  })
+
+  it('로어북 항목 수는 한도를 넘겨 늘릴 때만 막는다', async () => {
+    const raw = await load()
+    raw.snapshot.keyword_books = Array.from({ length: 501 }, (_, i) => ({
+      title: 't' + i,
+      keys: ['k' + i],
+      info: 'x',
+      indexLabel: i + 1
+    }))
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { lorebookPatch: [{ index: 0, content: '고침' }] })
+    ).not.toThrow()
+    expect(() => teapotWorks.applyChanges!(raw, { lorebookAdd: [lore('더')] })).toThrow(
+      'LOREBOOK_LIMIT'
+    )
+    raw.snapshot.keyword_books = (raw.snapshot.keyword_books as Obj[]).slice(0, 500)
+    expect(() => teapotWorks.applyChanges!(raw, { lorebookAdd: [lore('더')] })).toThrow(
+      'LOREBOOK_LIMIT'
+    )
+  })
+
+  it('손대지 않은 시작 상황의 옛 값 때문에 저장이 막히지 않는다', async () => {
+    const raw = await load()
+    starts(raw)[0].setting_name = '긴'.repeat(25)
+    starts(raw)[0].start_message = '글'.repeat(3100)
+    const next = teapotWorks.applyChanges!(raw, {
+      startScenarios: [{ index: 1, content: '고친 둘째' }]
+    }) as TeapotRaw
+    expect(starts(next)[0].setting_name).toBe('긴'.repeat(25))
+    expect(starts(next)[1].start_message).toBe('고친 둘째')
+    // 바꾼 시작 상황은 검사한다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { startScenarios: [{ index: 1, situation: '배'.repeat(501) }] })
+    ).toThrow('BAD_START start_scenarios[1].situation')
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { startScenariosAdd: [{ title: '긴'.repeat(21) }] })
+    ).toThrow('BAD_START start_scenarios[2].title')
+  })
+
+  it('한도 밖 옛 칸이 있는 시작 상황도 다른 칸만 고치면 저장된다 (바뀐 칸만 검사)', async () => {
+    const raw = await load()
+    starts(raw)[0].setting_name = '긴'.repeat(25)
+    starts(raw)[0].start_message = '글'.repeat(3100)
+    const next = teapotWorks.applyChanges!(raw, {
+      startScenarios: [{ index: 0, situation: '새 배경' }]
+    }) as TeapotRaw
+    expect(starts(next)[0].setting_name).toBe('긴'.repeat(25))
+    expect(starts(next)[0].start_message).toBe('글'.repeat(3100))
+    expect(starts(next)[0].start_circumstance).toBe('새 배경')
+    // 같은 항목에서 한도 밖 값으로 바꾼 칸은 막는다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { startScenarios: [{ index: 0, content: '글'.repeat(3101) }] })
+    ).toThrow('BAD_START start_scenarios[0].content')
+    expect(() =>
+      teapotWorks.applyChanges!(raw, { startScenarios: [{ index: 0, title: '새'.repeat(21) }] })
+    ).toThrow('BAD_START start_scenarios[0].title')
+  })
+})
+
+describe('티팟 기능 표·숨은 설정·못 읽는 칸', () => {
+  const KEYS = [
+    'title',
+    'description',
+    'main_prompt',
+    'first_message',
+    'start_scenarios',
+    'lorebook',
+    'characters',
+    'example_dialogue',
+    'user_persona',
+    'output_rules',
+    'situation_images',
+    'cover',
+    'tags',
+    'visibility',
+    'create_work',
+    'delete_work',
+    'versioning_review',
+    'language_editions',
+    'bgm_voice',
+    'jsx_html',
+    'model_settings',
+    'comments_stats'
+  ]
+  const rich = async (): Promise<TeapotRaw> => {
+    const raw = await load()
+    Object.assign(raw.snapshot, {
+      genre: ['로맨스', '현대'],
+      hash_tags: ['순애', '일상'],
+      target: '여성향',
+      is_nsfw: true,
+      template: 'custom',
+      template_version: null,
+      model: 'test-model-1',
+      conv_type: '',
+      max_output_token: 1200,
+      prompt_char_count: 5000,
+      prompt_template_overrides: null,
+      worldview_id: null,
+      player_note: [],
+      guidelines: [{ title: 'g1', content: '가이드 본문' }, { title: 'g2', content: '둘' }],
+      personas: [{ name: '나', description: '페르소나 본문' }],
+      example_dialogues: [{ text: '예시 본문' }]
+    })
+    raw.checkpoints = [
+      ...summaries('ACCEPTED'),
+      {
+        id: 'cpSub1',
+        name: '제목없음 0',
+        cp_status: 'ACCEPTED',
+        time_saved: { _seconds: 50, _nanoseconds: 0 },
+        submitted_at: { _seconds: 60, _nanoseconds: 0 },
+        review_result: { status: 'REJECT', reviewer: 'someone', comment: null }
+      },
+      {
+        id: 'cpSub2',
+        name: '제목없음 9',
+        cp_status: 'ACCEPTED',
+        time_saved: { _seconds: 70, _nanoseconds: 0 },
+        submitted_at: { _seconds: 80, _nanoseconds: 0 },
+        review_result: { status: 'ACCEPT', reviewer: 'someone', comment: null }
+      }
+    ]
+    return raw
+  }
+
+  it('기능 표는 22개 열쇠를 다 갖고, 한 줄 설명은 40자 이내다', () => {
+    const f = teapotWorks.features!
+    expect(Object.keys(f).sort()).toEqual([...KEYS].sort())
+    for (const [k, v] of Object.entries(f)) {
+      expect(['yes', 'no', 'unknown']).toContain(v.site)
+      expect(['yes', 'no', 'partial']).toContain(v.read)
+      expect(['yes', 'no', 'partial', 'blocked']).toContain(v.write)
+      expect(['yes', 'no', 'partial']).toContain(v.verified)
+      expect(v.note, k).toBeTruthy()
+      expect(v.note!.length, k).toBeLessThanOrEqual(40)
+    }
+    // 코드 동작과 맞는 값
+    expect(f.visibility.write).toBe('blocked')
+    expect(f.versioning_review.write).toBe('blocked')
+    expect(f.language_editions.site).toBe('no')
+    expect(teapotWorks.editions).toBeUndefined()
+    expect(f.cover.write).toBe('no')
+  })
+
+  it('숨은 설정은 짧은 값은 그대로, 목록은 개수로, 본문·주소는 싣지 않는다', async () => {
+    const raw = await rich()
+    const { extras, unsupported } = teapotWorks.normalize(raw)
+    expect(extras).toEqual({
+      genre: ['로맨스', '현대'],
+      hashtags: ['순애', '일상'],
+      target: '여성향',
+      is_nsfw: true,
+      has_cover_image: true,
+      template: 'custom',
+      prompt_mode: 'simple',
+      model: 'test-model-1',
+      conv_type: '',
+      max_output_tokens: 1200,
+      prompt_char_count: 5000,
+      has_prompt_template_overrides: false,
+      worldview_linked: false,
+      guideline_count: 2,
+      user_note_count: 0,
+      persona_count: 1,
+      example_dialogue_count: 1,
+      situation_image_count: 1,
+      start_recommended_answer_count: 2,
+      checkpoint_count: 5,
+      last_submitted_at: '1970-01-01T00:01:20.000Z',
+      last_review_status: 'ACCEPT'
+    })
+    const json = JSON.stringify(extras)
+    for (const leak of ['가이드 본문', '페르소나 본문', '예시 본문', 'firebasestorage', 'token=', UID])
+      expect(json).not.toContain(leak)
+    expect(unsupported!.length).toBeGreaterThan(0)
+    expect(unsupported).toContain('JSX 컴포넌트')
+  })
+
+  it('긴 글은 글자 수로, 길거나 많은 목록은 개수로 줄인다', async () => {
+    const raw = await rich()
+    Object.assign(raw.snapshot, {
+      target: '타'.repeat(81),
+      genre: Array.from({ length: 21 }, (_, i) => 'g' + i),
+      hash_tags: ['짧음', '길'.repeat(81)]
+    })
+    const { extras } = teapotWorks.normalize(raw)
+    expect(extras).toMatchObject({ target_length: 81, genre_count: 21, hashtags_count: 2 })
+    expect(extras).not.toHaveProperty('target')
+    expect(extras).not.toHaveProperty('genre')
+    expect(extras).not.toHaveProperty('hashtags')
+  })
+
+  it('원본에 없는 칸은 만들지 않는다', async () => {
+    const { extras } = teapotWorks.normalize(await load())
+    expect(Object.keys(extras!).sort()).toEqual(
+      [
+        'checkpoint_count',
+        'has_cover_image',
+        'prompt_mode',
+        'situation_image_count',
+        'start_recommended_answer_count'
+      ].sort()
+    )
+  })
+
+  it('숨은 설정은 읽을 때마다 같고, 글 칸을 고쳐도 계획 비교에 쓰이는 칸이 달라지지 않는다', async () => {
+    const a = teapotWorks.normalize(await rich())
+    const b = teapotWorks.normalize(await rich())
+    expect(a.extras).toEqual(b.extras)
+    const raw = await rich()
+    const next = teapotWorks.applyChanges!(raw, { fields: { main: '다른 프롬프트' } })
+    expect(teapotWorks.normalize(next).extras).toEqual(a.extras)
+    // 읽기 전용: 바뀐 것이 없으면 저장 본문은 그대로다
+    expect((next as TeapotRaw).snapshot.genre).toEqual(['로맨스', '현대'])
+  })
+
+  it('읽을 때마다 변하는 값(조회·대화 수, 시각)이 snapshot·저장 파일 목록에 있어도 extras는 같다', async () => {
+    const volatile = (raw: TeapotRaw, n: number): TeapotRaw => {
+      Object.assign(raw.snapshot, {
+        messages_last_1d: n,
+        messages_last_7d: n * 7,
+        view_count: n * 100,
+        like_count: n,
+        time_updated: { _seconds: 1000 + n, _nanoseconds: 0 },
+        time_created: { _seconds: 10 + n, _nanoseconds: 0 },
+        random_seed: n,
+        creator_handle: 'h' + n,
+        creator_name: '작가' + n,
+        creator_image: 'https://x/' + n + '.png?token=t' + n,
+        worldview_name: '세계' + n
+      })
+      raw.checkpoints = raw.checkpoints.map((c) => ({
+        ...c,
+        message_count: n,
+        time_updated: { _seconds: 2000 + n, _nanoseconds: 0 }
+      }))
+      return raw
+    }
+    const a = teapotWorks.normalize(volatile(await rich(), 1))
+    const b = teapotWorks.normalize(volatile(await rich(), 2))
+    expect(b.extras).toEqual(a.extras)
+    const json = JSON.stringify(a.extras)
+    for (const leak of ['view_count', 'messages_last', 'like_count', 'token=', '작가', 'creator'])
+      expect(json).not.toContain(leak)
+  })
+
+  it('전체 교체에 given이 있어도 티팟에 없는 칸은 건드리지 않고 옛 항목의 숨은 칸을 잇는다', async () => {
+    const raw = await load()
+    const books = raw.snapshot.keyword_books as Obj[]
+    books[0].hidden = 'h-학교'
+    const entry = (title: string, keys: string, content: string): LoreEntry => ({
+      title,
+      keys,
+      content,
+      mode: null,
+      offKeys: [],
+      turnRange: null,
+      offTurnRange: null,
+      given: ['title', 'keys', 'content', 'mode', 'offKeys', 'turnRange', 'offTurnRange']
+    })
+    const next = teapotWorks.applyChanges!(raw, {
+      lorebook: [entry('학교', '학교, 교실', '고친 설명')]
+    }) as TeapotRaw
+    expect(next.snapshot.keyword_books).toEqual([
+      { title: '학교', keys: ['학교', '교실'], info: '고친 설명', hidden: 'h-학교', indexLabel: 1 }
+    ])
+    // 값이 든 발동 칸은 given과 상관없이 여전히 막는다
+    expect(() =>
+      teapotWorks.applyChanges!(raw, {
+        lorebook: [{ ...entry('학교', '학교', '설명'), mode: 'always' }]
+      })
+    ).toThrow('BAD_CHANGES')
   })
 })

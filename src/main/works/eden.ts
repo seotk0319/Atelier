@@ -9,6 +9,7 @@
 // 이미지·표지는 eden-media.ts, 언어 판본 저장은 eden-editions.ts에 있다.
 import { randomUUID } from 'node:crypto'
 import { edenEditionBody, edenEditionView } from './eden-editions'
+import { matchOld } from './match-old'
 import {
   EDEN_COVER_RULES,
   EDEN_IMAGE_RULES,
@@ -25,6 +26,7 @@ import type {
   WorkAdapter,
   WorkBody,
   WorkDraft,
+  WorkFeature,
   WorkFetch,
   WorkListItem
 } from './types'
@@ -60,6 +62,88 @@ async function json(res: Response): Promise<unknown> {
 function workId(id: string): string {
   if (!UUID_RE.test(id)) throw new Error('BAD_WORK_ID')
   return id.toLowerCase()
+}
+
+const SHORT_TEXT = 80
+const SHORT_LIST = 20
+// 사이트에는 있는데 이 연결부가 읽지 못하는 것 (빈 칸으로 보여도 "없음"이 아니다)
+const UNSUPPORTED = [
+  '배경음',
+  '캐릭터 음성',
+  '댓글',
+  '통계(대화·좋아요 수)',
+  '추천 페르소나 내용(개수만)',
+  '프리셋 내용(개수만)',
+  '캐릭터별 로어북 내용(개수만)',
+  '캐릭터 감정 이미지 내용(개수만)',
+  '외부 이미지 내용(개수만)',
+  '캐릭터 설명 내용(유무만)'
+]
+
+/**
+ * 공통 칸에 들지 않는 원본 설정. 짧은 값은 그대로, 긴 글은 `_length`, 목록은 개수만 싣는다.
+ * 원본에 있는 칸만 싣고, 읽을 때마다 달라지는 통계(대화·좋아요 수 등)는 싣지 않는다(저장 계획이 낡은 것으로 보이게 된다).
+ */
+function edenExtras(work: Obj, characters: Obj[]): Obj {
+  const out: Obj = {}
+  const short = (key: string, from: string): void => {
+    if (!Object.hasOwn(work, from)) return
+    const v = work[from]
+    if (v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)))
+      out[key] = v
+    else if (typeof v === 'string') {
+      if (v.length <= SHORT_TEXT) out[key] = v
+      else out[key + '_length'] = v.length
+    }
+  }
+  const strings = (key: string): void => {
+    const v = work[key]
+    if (!Array.isArray(v)) return
+    const items = v.filter((s): s is string => typeof s === 'string')
+    if (items.length === v.length && items.length <= SHORT_LIST && items.every((s) => s.length <= SHORT_TEXT))
+      out[key] = items
+    else out[key + '_count'] = v.length
+  }
+  const count = (key: string, from: string): void => {
+    const v = work[from]
+    if (Array.isArray(v)) out[key] = v.length
+  }
+  const filled = (key: string, from: string): void => {
+    if (Object.hasOwn(work, from)) out[key] = text(work[from]).trim() !== ''
+  }
+
+  short('work_type', 'work_type')
+  for (const key of ['genre', 'tags', 'categories', 'hashtags']) strings(key)
+  short('is_adult', 'is_nsfw')
+  short('template_type', 'template_type')
+  short('prompt_version', 'prompt_version')
+  short('image_source_mode', 'image_source_mode')
+  filled('has_cover_image', 'cover_image_url')
+  filled('has_default_image', 'default_image_url')
+  short('selected_scenario_id', 'selected_scenario_id')
+  short('selected_preset_id', 'selected_preset_id')
+  count('recommended_persona_count', 'recommended_personas')
+  count('preset_count', 'character_presets')
+  count('external_image_count', 'external_images')
+  short('first_published_at', 'first_published_at')
+  short('created_at', 'created_at')
+  short('content_updated_at', 'content_updated_at')
+  short('update_announced_at', 'update_announced_at')
+
+  // 캐릭터별 부가칸은 값을 풀지 않고 얼마나 채워져 있는지만 센다
+  const sum = (key: string, name: string, of: (v: unknown) => number): void => {
+    if (characters.some((c) => Object.hasOwn(c, key)))
+      out[name] = characters.reduce((n, c) => n + of(c[key]), 0)
+  }
+  const size = (v: unknown): number => (Array.isArray(v) ? v.length : 0)
+  const has = (v: unknown): number => (text(v).trim() !== '' ? 1 : 0)
+  sum('lorebook', 'character_lorebook_entry_count', size)
+  sum('mood_images', 'character_mood_image_count', size)
+  sum('profile_image_asset_url', 'characters_with_profile_image', has)
+  sum('scenario_settings', 'characters_with_scenario_settings', has)
+  sum('character_description', 'characters_with_description', has)
+  sum('start_scenario', 'characters_with_start_scenario', (v) => (v === null || v === undefined || v === '' ? 0 : 1))
+  return out
 }
 
 const FIELDS: Record<string, string> = {
@@ -115,9 +199,44 @@ function body(work: Obj, characters: Obj[], images: Record<string, unknown>): Wo
   }
 }
 
+const feature = (
+  site: WorkFeature['site'],
+  read: WorkFeature['read'],
+  write: WorkFeature['write'],
+  verified: WorkFeature['verified'],
+  note: string
+): WorkFeature => ({ site, read, write, verified, note })
+
+// 분석 문서(platform-analysis/eden.md 9절)를 코드와 맞춰 옮긴 것. note는 40자 이내.
+const EDEN_FEATURES: Record<string, WorkFeature> = {
+  title: feature('yes', 'yes', 'yes', 'partial', '빈 값 거절, 한도는 모름'),
+  description: feature('yes', 'yes', 'yes', 'partial', 'HTML 소개, 8만자 넘게 읽음'),
+  main_prompt: feature('yes', 'yes', 'yes', 'yes', 'scenario_settings, 상한 없음, 빈 값 거절'),
+  first_message: feature('yes', 'yes', 'yes', 'partial', '시작 상황 content 칸'),
+  start_scenarios: feature('yes', 'yes', 'partial', 'yes', '기본 지정·이미지 연결·순서는 못 바꿈'),
+  lorebook: feature('yes', 'yes', 'yes', 'yes', '빈 항목·키 없는 키워드 항목 거절'),
+  characters: feature('yes', 'partial', 'partial', 'yes', '주연 삭제 불가, 부가칸·순서는 못 다룸'),
+  example_dialogue: feature('no', 'no', 'no', 'no', '전용 칸 못 찾음'),
+  user_persona: feature('yes', 'partial', 'no', 'no', '개수만 읽음, 수정은 사이트에서 직접'),
+  output_rules: feature('no', 'no', 'no', 'no', '전용 칸 없음, 메인에 포함'),
+  situation_images: feature('yes', 'yes', 'partial', 'yes', '올리기·삭제·순서만, 약 4.5MB 이하'),
+  cover: feature('yes', 'partial', 'yes', 'yes', 'webp·gif만, 현재 주소는 cover_plan'),
+  tags: feature('yes', 'yes', 'partial', 'no', '새 작품 때만 지정, 수정은 사이트에서 직접'),
+  visibility: feature('yes', 'yes', 'yes', 'partial', 'public 전환은 아직 확인 못 함'),
+  create_work: feature('yes', 'yes', 'yes', 'yes', '항상 비공개 초안으로 만듦'),
+  delete_work: feature('yes', 'yes', 'yes', 'yes', '제목 일치 필요, 되돌릴 수 없음'),
+  versioning_review: feature('unknown', 'partial', 'no', 'no', '버전·심사 못 찾음, 시각만 읽음'),
+  language_editions: feature('yes', 'yes', 'partial', 'partial', 'en만 저장 확인, 자동 번역은 막음'),
+  bgm_voice: feature('yes', 'no', 'no', 'no', '읽기 응답에 칸 없음, 사이트에서 직접'),
+  jsx_html: feature('yes', 'yes', 'yes', 'partial', '소개 HTML만, JSX 칸 없음'),
+  model_settings: feature('unknown', 'partial', 'no', 'no', '모델 선택 칸 못 찾음, 프롬프트 종류만 읽음'),
+  comments_stats: feature('yes', 'no', 'no', 'no', '작품 도구 밖, 사이트에서 직접')
+}
+
 export const edenWorks: WorkAdapter = {
   id: 'eden',
   label: '에덴',
+  features: EDEN_FEATURES,
   guide: {
     save: '작품 통째 저장이다. 공개 상태는 읽은 값 그대로 보내고, 같은 값을 보내도 수정 시각은 바뀐다.',
     manual: [],
@@ -217,7 +336,12 @@ export const edenWorks: WorkAdapter = {
 
   normalize(raw) {
     if (!isObj(raw) || !isObj(raw.work)) throw new Error('WORK_SHAPE')
-    return body(raw.work, list(raw.characters), isObj(raw.images) ? raw.images : {})
+    const characters = list(raw.characters)
+    return {
+      ...body(raw.work, characters, isObj(raw.images) ? raw.images : {}),
+      extras: edenExtras(raw.work, characters),
+      unsupported: [...UNSUPPORTED]
+    }
   },
 
   async editions(read, id): Promise<EditionInfo[]> {
@@ -288,18 +412,47 @@ export const edenWorks: WorkAdapter = {
     }
 
     for (const [name, value] of Object.entries(changes.fields ?? {})) {
-      const key = FIELDS[name]
+      // 'constructor' 같은 상속 속성 이름이 칸 이름으로 통과하지 않게 자기 칸만 본다
+      const key = Object.hasOwn(FIELDS, name) ? FIELDS[name] : undefined
       if (!key || typeof value !== 'string') throw new Error('BAD_FIELD')
       if ((name === 'main' || name === 'title') && !value.trim()) throw new Error('EMPTY_FIELD')
       // 편집기는 빈 제작자 코멘트를 null로 보낸다
       work[key] = name === 'creator_comment' && !value ? null : value
     }
 
-    if (changes.lorebook) work.lorebook = changes.lorebook.map((e) => loreRaw({}, e))
+    // 이번 저장에서 바뀌었거나 새로 생긴 로어북 항목과 그 항목의 옛 모습(새 항목은 undefined). 검사는 이 항목들만, 바뀐 칸에만 한다.
+    const touched = new Map<Obj, Obj | undefined>()
+    if (changes.lorebook) {
+      // 전체 교체: 제목이 같은 옛 항목의 발동 설정·숨은 칸을 물려받고, 짝이 없는 새 항목은 기본값으로 만든다
+      const old = list(work.lorebook)
+      const titles = changes.lorebook.map((e) => e.title)
+      const matched = matchOld(titles, old, (o) => text(o.title), {
+        contents: changes.lorebook.map((e) => e.content),
+        contentOf: (o) => text(o.value)
+      })
+      // 제목이 달라도 이어진 짝(제자리에서 제목만 고친 것)은 지워진 옛 항목이 없을 때만 믿는다.
+      // 안 이어진 옛 항목이 새 항목보다 많으면 어느 것이 지워졌는지 알 수 없어, 남의 발동 설정을 물려받지 않게 새 항목으로 만든다.
+      const same = (o: Obj | undefined, i: number): boolean => !!o && text(o.title) === titles[i]
+      const sure = matched.filter(same).length
+      const guessed = matched.filter((o, i) => o && !same(o, i)).length
+      const prev =
+        guessed && old.length - sure > titles.length - sure
+          ? matched.map((o, i) => (same(o, i) ? o : undefined))
+          : matched
+      work.lorebook = changes.lorebook.map((e, i) => {
+        const entry = loreRaw(prev[i], prev[i] ? carryOld(e) : e)
+        touched.set(entry, prev[i])
+        return entry
+      })
+    }
     if (changes.lorebookPatch?.length) {
       const entries = list(work.lorebook)
-      for (const patch of changes.lorebookPatch)
-        entries[at(patch.index, entries.length)] = loreRaw(entries[patch.index], patch)
+      for (const patch of changes.lorebookPatch) {
+        const base = entries[at(patch.index, entries.length)]
+        const entry = loreRaw(base, patch)
+        entries[patch.index] = entry
+        touched.set(entry, touched.has(base) ? touched.get(base) : base)
+      }
       work.lorebook = entries
     }
     if (changes.lorebookRemove?.length) {
@@ -307,12 +460,15 @@ export const edenWorks: WorkAdapter = {
       const gone = new Set(changes.lorebookRemove.map((i) => at(i, entries.length)))
       work.lorebook = entries.filter((_, i) => !gone.has(i))
     }
-    if (changes.lorebookAdd?.length)
-      work.lorebook = [...list(work.lorebook), ...changes.lorebookAdd.map((e) => loreRaw({}, e))]
+    if (changes.lorebookAdd?.length) {
+      const added = changes.lorebookAdd.map((e) => loreRaw(undefined, e))
+      for (const entry of added) touched.set(entry, undefined)
+      work.lorebook = [...list(work.lorebook), ...added]
+    }
     // 편집기는 내용이 빈 항목과 키워드 없는 키워드 항목을 저장할 때 버린다. 조용히 사라지지 않게 막는다.
+    // 손대지 않은 옛 항목과 옛 항목에서 바뀌지 않은 칸은 사이트가 받아 주던 값 그대로 보내므로 검사하지 않는다.
     for (const e of list(work.lorebook))
-      if (!text(e.value).trim() || (e.triggerMode !== 'always' && !text(e.key).trim()))
-        throw new Error('BAD_LOREBOOK')
+      if (touched.has(e) && loreInvalid(e, touched.get(e))) throw new Error('BAD_LOREBOOK')
 
     if (changes.startScenarios?.length) {
       const scenarios = list(work.start_scenarios)
@@ -360,6 +516,20 @@ export const edenWorks: WorkAdapter = {
       work.start_scenarios = scenarios
     }
 
+    // 번호는 고치기 전 기준이라 고치기 → 지우기 → 더하기 순서로 적용한다 (지운 뒤에 고치면 번호가 밀린다)
+    if (changes.characters?.length) {
+      const characters = list(next.characters)
+      for (const patch of changes.characters) {
+        const c = characters[at(patch.index, characters.length)]
+        if (patch.name !== undefined) {
+          if (!patch.name.trim()) throw new Error('EMPTY_FIELD')
+          c.character_name = patch.name
+        }
+        if (patch.details !== undefined) c.character_details = patch.details
+        if (patch.info !== undefined) c.character_info = patch.info
+      }
+      next.characters = characters
+    }
     if (changes.charactersRemove?.length) {
       const characters = list(next.characters)
       const gone = new Set(changes.charactersRemove.map((i) => at(i, characters.length)))
@@ -383,6 +553,7 @@ export const edenWorks: WorkAdapter = {
           character_info: draft.info ?? '',
           is_main_character: false,
           character_order: characters.length,
+          scenario_settings: '',
           start_scenario: null
         })
         images[id] = []
@@ -390,18 +561,11 @@ export const edenWorks: WorkAdapter = {
       next.characters = characters
       next.images = images
     }
-    if (changes.characters?.length) {
-      const characters = list(next.characters)
-      for (const patch of changes.characters) {
-        const c = characters[at(patch.index, characters.length)]
-        if (patch.name !== undefined) {
-          if (!patch.name.trim()) throw new Error('EMPTY_FIELD')
-          c.character_name = patch.name
-        }
-        if (patch.details !== undefined) c.character_details = patch.details
-        if (patch.info !== undefined) c.character_info = patch.info
-      }
-      next.characters = characters
+    // 판본 겹침(view)은 판본 저장 본문이 따로 정해지므로 손대지 않는다. 작품 저장은 아래 값을 채워 보내므로
+    // 보내려는 원본(next)에도 같은 값을 둔다 (저장 뒤 원본 견주기가 null → 빈 글을 차이로 보지 않게).
+    if (!('edition' in next)) {
+      next.work = settleWork(work)
+      if (Array.isArray(next.characters)) next.characters = list(next.characters).map(settleCharacter)
     }
     return next
   },
@@ -534,10 +698,8 @@ export function edenCreateBody(draft: WorkDraft): Obj {
     imageCodes: [],
     elementOrder: ['image', 'situation', 'dialogue']
   }))
-  const lorebook = (draft.lorebook ?? []).map((e) => loreRaw({}, e))
-  for (const e of lorebook)
-    if (!text(e.value).trim() || (e.triggerMode !== 'always' && !text(e.key).trim()))
-      throw new Error('BAD_LOREBOOK')
+  const lorebook = (draft.lorebook ?? []).map((e) => loreRaw(undefined, e))
+  for (const e of lorebook) if (loreInvalid(e)) throw new Error('BAD_LOREBOOK')
   const body = edenSaveBody({
     work: {
       title: draft.title,
@@ -569,6 +731,7 @@ export function edenCreateBody(draft: WorkDraft): Obj {
       character_details: c.details ?? '',
       character_info: c.info ?? '',
       is_main_character: i === 0,
+      scenario_settings: '',
       start_scenario: null
     })),
     images: {}
@@ -584,79 +747,171 @@ function at(index: unknown, length: number): number {
   return index
 }
 
-/** 공통 이름의 로어북 항목(일부여도 됨)을 에덴 원본 모양에 얹는다 */
+/**
+ * 편집기가 저장 때 버리는 항목: 내용이 비었거나, 키워드 모드인데 키워드가 없다.
+ * base(옛 항목)가 있으면 그 문제를 만든 칸이 옛 값에서 바뀌었을 때만 문제로 본다.
+ */
+function loreInvalid(e: Obj, base?: Obj): boolean {
+  const noContent = !text(e.value).trim() && (!base || e.value !== base.value)
+  const noKey =
+    e.triggerMode !== 'always' &&
+    !text(e.key).trim() &&
+    (!base || e.key !== base.key || e.triggerMode !== base.triggerMode)
+  return noContent || noKey
+}
+
+/**
+ * 짝지은 옛 항목이 있는 전체 교체 항목에서 "안 줬다"는 칸을 뺀다 (빼면 옛 값이 남는다).
+ * 호출한 쪽이 적어 준 칸(given)은 빈 값이어도 받은 값으로 바꾼다. given이 없는 옛 호출은
+ * 빈 끄는 키워드를 "안 줬다"로 보고 옛 값을 남긴다 (비우려면 lorebook_patch).
+ */
+function carryOld(e: LoreEntry): Partial<LoreEntry> {
+  const { given, mode, offKeys, turnRange, offTurnRange, keys, ...rest } = e
+  const sent = (name: string, value: unknown): boolean =>
+    given ? given.includes(name) : Array.isArray(value) ? value.length > 0 : value != null
+  return {
+    ...rest,
+    // 키워드도 적어 주지 않았으면 옛 키워드를 빈 값으로 덮지 않는다 (given이 없는 옛 호출은 늘 받은 값을 쓴다)
+    ...(!given || given.includes('keys') ? { keys } : {}),
+    ...(sent('mode', mode) ? { mode } : {}),
+    ...(sent('offKeys', offKeys) ? { offKeys } : {}),
+    ...(sent('turnRange', turnRange) ? { turnRange } : {}),
+    ...(sent('offTurnRange', offTurnRange) ? { offTurnRange } : {})
+  }
+}
+
+/**
+ * 공통 이름의 로어북 항목(일부여도 됨)을 에덴 원본 모양에 얹는다.
+ * base가 있으면 그 항목의 값(모르는 칸 포함)을 그대로 두고 준 칸만 바꾼다. 기본값(keyword·5·5)은
+ * base가 없는 새 항목에만 채운다. 발동 방식·턴 값이 null이면 "주지 않았다"는 뜻이다.
+ */
 function loreRaw(base: Obj | undefined, e: Partial<LoreEntry>): Obj {
   const out: Obj = { ...(base ?? {}) }
   if (e.title !== undefined) out.title = e.title
   if (e.keys !== undefined) out.key = e.keys
   if (e.content !== undefined) out.value = e.content
-  if (e.mode !== undefined) out.triggerMode = e.mode ?? 'keyword'
+  if (e.mode != null) out.triggerMode = e.mode
   if (e.offKeys !== undefined) out.offKeywords = e.offKeys
-  if (e.turnRange !== undefined) out.turnRange = e.turnRange ?? 5
-  if (e.offTurnRange !== undefined) out.offTurnRange = e.offTurnRange ?? 5
-  out.title ??= ''
-  out.key ??= ''
-  out.triggerMode ??= 'keyword'
-  out.offKeywords ??= []
-  out.turnRange ??= 5
-  out.offTurnRange ??= 5
+  if (e.turnRange != null) out.turnRange = e.turnRange
+  if (e.offTurnRange != null) out.offTurnRange = e.offTurnRange
+  if (!base) {
+    out.title ??= ''
+    out.key ??= ''
+    out.triggerMode ??= 'keyword'
+    out.offKeywords ??= []
+    out.turnRange ??= 5
+    out.offTurnRange ??= 5
+  }
   return out
 }
 
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+// 원본에 없거나 null이던 칸에 채워 보내는 값. 저장 본문이 예전부터 보내던 모양이다 (사이트가 받아 준 것으로 확인된 저장).
+// 원본에 값이 있으면 그 값을 그대로 보낸다. 새 작품의 기본값은 edenCreateBody가 따로 정한다.
+const WORK_DEFAULTS: Obj = {
+  description: '',
+  subtitle: '',
+  work_type: 'original',
+  genre: [],
+  tags: [],
+  categories: [],
+  hashtags: [],
+  template_type: 'default',
+  prompt_version: 'v1',
+  image_source_mode: 'mixed',
+  lorebook: [],
+  start_scenarios: [],
+  selected_scenario_id: null,
+  character_presets: [],
+  selected_preset_id: null,
+  recommended_personas: [],
+  is_nsfw: false,
+  cover_image_url: null
+}
+const CHARACTER_DEFAULTS: Obj = {
+  character_info: '',
+  character_details: '',
+  is_main_character: false,
+  scenario_settings: '',
+  start_scenario: null
+}
+
+/** 원본 칸을 그대로 두고, 없거나 null인 칸만 defaults 값으로 채운 사본 */
+function withDefaults(o: Obj, defaults: Obj): Obj {
+  const out: Obj = { ...o }
+  for (const [key, value] of Object.entries(defaults))
+    if (out[key] == null) out[key] = structuredClone(value)
+  return out
+}
+
+/** 저장으로 나갈 모양의 작품 칸. 편집기는 빈 제작자 코멘트를 null로 보낸다 */
+const settleWork = (w: Obj): Obj => ({
+  ...withDefaults(w, WORK_DEFAULTS),
+  creator_comment: text(w.creator_comment) || null
+})
+const settleCharacter = (c: Obj): Obj => withDefaults(c, CHARACTER_DEFAULTS)
 
 /**
  * 통째 저장(PUT /api/works/{id}) 본문. 편집기의 본문 조립 함수와 같은 모양이다
  * (2026-11-10 사이트 코드와 시험 작품 저장으로 확인). 공개 상태(visibility·status)는
  * 읽은 값 그대로 보내고, 캐릭터마다 이미지 목록을 같이 보낸다.
  * 작품·캐릭터의 bgm·character_voice는 읽기 응답에 없어 보내지 않는다.
+ * 칸 값은 원본에 있던 그대로 보낸다. 원본에 없거나 null이던 칸은 예전부터 보내던 기본값으로 채운다
+ * (WORK_DEFAULTS·CHARACTER_DEFAULTS: null로 오는 subtitle·캐릭터 scenario_settings는 빈 글).
+ * 이 밖의 변환은 편집기가 빈 제작자 코멘트를 null로 보낸다는 것뿐이다.
+ * 공개 상태는 기본값이 없다. 모르면 WORK_SHAPE로 멈춘다.
  */
 export function edenSaveBody(raw: unknown): Obj {
   if (!isObj(raw) || !isObj(raw.work)) throw new Error('WORK_SHAPE')
-  const w = raw.work
+  const w = settleWork(raw.work)
   const images = isObj(raw.images) ? raw.images : {}
   const visibility = strOrNull(w.visibility)
   const status = strOrNull(w.status)
-  if (!visibility || !status || typeof w.scenario_settings !== 'string')
+  if (
+    !visibility ||
+    !status ||
+    typeof w.scenario_settings !== 'string' ||
+    typeof w.title !== 'string'
+  )
     throw new Error('WORK_SHAPE')
-  const template = text(w.template_type) || 'default'
   return {
-    title: text(w.title),
-    description: text(w.description),
-    subtitle: text(w.subtitle),
-    work_type: text(w.work_type) || 'original',
-    genre: arr(w.genre),
-    tags: arr(w.tags),
-    categories: arr(w.categories),
-    hashtags: arr(w.hashtags),
+    title: w.title,
+    description: w.description,
+    subtitle: w.subtitle,
+    work_type: w.work_type,
+    genre: w.genre,
+    tags: w.tags,
+    categories: w.categories,
+    hashtags: w.hashtags,
     scenario_settings: w.scenario_settings,
-    template_type: template,
-    prompt_version: text(w.prompt_version) || 'v1',
-    lorebook: arr(w.lorebook),
-    start_scenarios: arr(w.start_scenarios),
-    selected_scenario_id: w.selected_scenario_id ?? null,
-    character_presets: arr(w.character_presets),
-    selected_preset_id: w.selected_preset_id ?? null,
-    recommended_personas: arr(w.recommended_personas),
-    image_source_mode: text(w.image_source_mode) || 'mixed',
-    creator_comment: text(w.creator_comment) || null,
-    is_nsfw: w.is_nsfw === true,
+    template_type: w.template_type,
+    prompt_version: w.prompt_version,
+    lorebook: w.lorebook,
+    start_scenarios: w.start_scenarios,
+    selected_scenario_id: w.selected_scenario_id,
+    character_presets: w.character_presets,
+    selected_preset_id: w.selected_preset_id,
+    recommended_personas: w.recommended_personas,
+    image_source_mode: w.image_source_mode,
+    creator_comment: w.creator_comment,
+    is_nsfw: w.is_nsfw,
     visibility,
     status,
-    cover_image_url: w.cover_image_url ?? null,
-    characters: list(raw.characters).map((c, order) => {
+    cover_image_url: w.cover_image_url,
+    characters: list(raw.characters).map((original, order) => {
+      const c = settleCharacter(original)
       const id = strOrNull(c.id)
-      if (!id) throw new Error('WORK_SHAPE')
+      if (!id || typeof c.character_name !== 'string') throw new Error('WORK_SHAPE')
       return {
         id,
-        character_name: text(c.character_name),
-        character_info: text(c.character_info),
-        character_details: text(c.character_details),
-        is_main_character: c.is_main_character === true,
-        template_type: template,
+        character_name: c.character_name,
+        character_info: c.character_info,
+        character_details: c.character_details,
+        is_main_character: c.is_main_character,
+        // 캐릭터에 따로 적힌 값이 있을 때만 그 값, 없으면 작품의 값을 따른다 (편집기 본문 모양)
+        template_type: c.template_type ?? w.template_type,
         character_order: order,
-        scenario_settings: text(c.scenario_settings),
-        start_scenario: c.start_scenario ?? null,
+        scenario_settings: c.scenario_settings,
+        start_scenario: c.start_scenario,
         images: list(images[id]).flatMap((image) => {
           const imageId = strOrNull(image.id)
           if (!imageId) return []

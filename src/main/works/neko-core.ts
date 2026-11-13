@@ -92,14 +92,18 @@ export function nekoRaw(raw: unknown): NekoRaw {
   return raw as unknown as NekoRaw
 }
 
-/** 편집 데이터(character) → 편집기 폼 (loadCharacterForEdit가 폼을 채우는 방식 그대로) */
+/** 원본에 값이 있으면(null 아님) 그대로, 없음·null이면 예전부터 보내던 기본값 */
+const orElse = (v: unknown, fallback: unknown): unknown =>
+  v === undefined || v === null ? fallback : v
+
+/** 편집 데이터(character) → 저장 본문의 뼈대. 설정값은 원본 값을 그대로 싣고, 원본에 없음·null일 때만 예전부터 보내던 기본값을 채운다 */
 export function nekoForm(n: Obj): Obj {
   const greeting = Array.isArray(n.greeting) ? strings(n.greeting) : [text(n.greeting)]
   return {
     displayName: text(n.displayName),
     description: text(n.description),
     shortDescription: text(n.shortDescription),
-    narrationMode: text(n.narrationMode) || 'narrator',
+    narrationMode: orElse(n.narrationMode, 'narrator'),
     systemPrompt: text(n.systemPrompt),
     persistentContext: text(n.persistentContext),
     auxiliaryPrompts: list(n.auxiliaryPrompts),
@@ -107,27 +111,27 @@ export function nekoForm(n: Obj): Obj {
     greetingSettings: greetingSettings(n.greetingSettings, greeting.length),
     categoryIds: strings(n.categoryIds),
     tags: strings(n.tags),
-    characterAudience: text(n.characterAudience),
-    isIncentiveEnabled:
-      n.isIncentiveEnabled === undefined || n.isIncentiveEnabled === null || !!n.isIncentiveEnabled,
-    isPublic: !!n.isPublic,
+    characterAudience: orElse(n.characterAudience, ''),
+    isIncentiveEnabled: orElse(n.isIncentiveEnabled, true),
+    isPublic: n.isPublic,
     showCreatorHandle: n.showCreatorHandle !== false,
-    isMarketingConsent: !!n.isMarketingConsent,
-    isLinkShareOnly: !!n.isLinkShareOnly,
+    isMarketingConsent: orElse(n.isMarketingConsent, false),
+    isLinkShareOnly: orElse(n.isLinkShareOnly, false),
     isNsfw: n.isNsfw,
-    isShared: !!n.isShared,
+    isShared: orElse(n.isShared, false),
     language: n.language,
     lorebook: list(n.lorebook),
     loreBudget: typeof n.loreBudget === 'number' ? n.loreBudget : 100_000,
     lorebookImportCharacterIds: strings(n.lorebookImportCharacterIds),
-    imageSlots: list(n.imageSlots).map((e) => ({
-      ...e,
-      isVisible: e.isVisible === undefined || e.isVisible === null || !!e.isVisible,
-      isAlwaysVisible: !!e.isAlwaysVisible
+    imageSlots: list(n.imageSlots).map((s) => ({
+      ...s,
+      isVisible: orElse(s.isVisible, true),
+      isAlwaysVisible: orElse(s.isAlwaysVisible, false)
     })),
     imageSlotFolders: list(n.imageSlotFolders),
     personaTemplates: n.personaTemplates || undefined,
     slashCommands: n.slashCommands || undefined,
+    // 편집기 폼 채우기가 항상 false로 둔다 (loadCharacterForEdit의 isDraftMode:!1)
     isDraftMode: false
   }
 }
@@ -147,6 +151,8 @@ export async function nekoPut(
   character: Obj,
   uploaded: string[] = []
 ): Promise<Obj> {
+  // 공개 여부를 모르는 채로는 보내지 않는다 (없는 값을 임의로 채우면 공개 범위가 바뀔 수 있다)
+  if (typeof character.isPublic !== 'boolean') throw new Error('UNKNOWN_VISIBILITY')
   const form = nekoForm(character)
   delete form.avatar
   const url = avatarUrl(character)
@@ -178,3 +184,86 @@ export async function nekoReadRaw(
   if (!isObj(got) || !isObj(got.character)) throw new Error('WORK_SHAPE')
   return { id: wid, character: got.character }
 }
+
+const EXTRA_TEXT_MAX = 80
+const EXTRA_LIST_MAX = 20
+/**
+ * 공통 칸에 들지 않는 원본 설정 (work_read의 extras, 읽기 전용). 원본에 실제로 있는 칸만 싣고,
+ * 짧은 값은 그대로, 목록은 개수로 줄인다. 작품 본문·주소·계정 번호와, 읽을 때마다 달라지는 통계
+ * (popularity·likeCount·isLiked)는 싣지 않는다 (계획 뒤 변화 감지가 깨진다).
+ */
+export function nekoExtras(c: Obj): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  const flag = (key: string, v: unknown): void => {
+    if (typeof v === 'boolean') out[key] = v
+  }
+  const word = (key: string, v: unknown): void => {
+    if (typeof v === 'string' && v && v.length <= EXTRA_TEXT_MAX) out[key] = v
+  }
+  const num = (key: string, v: unknown): void => {
+    if (typeof v === 'number' && Number.isFinite(v)) out[key] = v
+  }
+  const count = (key: string, v: unknown, keep?: (e: Obj) => boolean): void => {
+    if (Array.isArray(v)) out[key] = keep ? list(v).filter(keep).length : v.length
+  }
+  // 짧은 글 목록은 그대로, 아니면 개수 (이름_count)
+  const words = (key: string, countKey: string, v: unknown): void => {
+    if (!Array.isArray(v)) return
+    const items = strings(v)
+    if (
+      items.length === v.length &&
+      items.length <= EXTRA_LIST_MAX &&
+      items.every((s) => s.length <= EXTRA_TEXT_MAX)
+    )
+      out[key] = items
+    else out[countKey] = v.length
+  }
+
+  words('tags', 'tag_count', c.tags)
+  words('category_ids', 'category_count', c.categoryIds)
+  words('curation_tags', 'curation_tag_count', c.curationTags)
+  word('character_audience', c.characterAudience)
+  word('narration_mode', c.narrationMode)
+  word('language', c.language)
+  flag('is_nsfw', c.isNsfw)
+  flag('is_shared', c.isShared)
+  flag('is_active', c.isActive)
+  flag('is_incentive_enabled', c.isIncentiveEnabled)
+  flag('is_marketing_consent', c.isMarketingConsent)
+  flag('show_creator_handle', c.showCreatorHandle)
+  flag('show_creator_profile', c.showCreatorProfile)
+  num('version', c.version)
+  word('created_at', c.createdAt)
+  out.has_cover_image = !!avatarUrl(c).trim()
+  num('lore_budget', c.loreBudget)
+  count('lore_disabled_count', c.lorebook, (e) => e.isEnabled === false)
+  count('lore_exported_count', c.lorebook, (e) => e.isExported === true)
+  count('lorebook_import_count', c.lorebookImportCharacterIds)
+  count('auxiliary_prompt_count', c.auxiliaryPrompts)
+  count('persona_template_count', c.personaTemplates)
+  count('slash_command_count', c.slashCommands)
+  count('image_slot_count', c.imageSlots)
+  count('image_slot_hidden_count', c.imageSlots, (e) => e.isVisible === false)
+  count(
+    'image_slot_trigger_count',
+    c.imageSlots,
+    (e) => Array.isArray(e.triggerKeywords) && e.triggerKeywords.length > 0
+  )
+  count('image_slot_folder_count', c.imageSlotFolders)
+  count('start_scenario_lorebook_count', c.greetingSettings, (e) => e.includeLorebook === true)
+  count('start_scenario_locked_count', c.greetingSettings, (e) => e.isEditable === false)
+  return out
+}
+
+/** 사이트에는 있는데 이 연결부가 읽지 못하는 것 (비어 보여도 "없음"이 아니다) */
+export const NEKO_UNSUPPORTED = [
+  '보조 프롬프트 내용',
+  '로어북 항목별 켬끔·순서',
+  '이미지 슬롯 트리거·폴더',
+  '유저 페르소나 템플릿 내용',
+  '슬래시 명령 내용',
+  'JSX 렌더러',
+  '네코 모바일 설정',
+  '댓글·좋아요 통계',
+  '시트 검수 결과'
+]

@@ -136,8 +136,14 @@ export function arrangeLorebooks(lorebooks: Obj[], folders: Obj[]): Obj[] {
   )
 }
 
-const num = (v: unknown, fallback: number): number =>
-  typeof v === 'number' && Number.isFinite(v) ? v : fallback
+// 원본에 값이 있으면 그대로 보낸다. 칸이 없거나 null일 때만 예전에 보내던 기본값을 쓴다(flagOr·missing).
+// 값을 모를 때 공개로 보내게 되는 칸(이미지 isPublic)은 기본값 없이 생략한다(flag).
+const flag = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined)
+const flagOr = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback)
+const missing = (v: unknown): boolean => v === undefined || v === null
+const finite = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined
+const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const opt = <T>(v: T | null | undefined): T | undefined => (v === null ? undefined : v)
 
 /**
@@ -145,11 +151,13 @@ const opt = <T>(v: T | null | undefined): T | undefined => (v === null ? undefin
  * 폼에서만 쓰는 값(임시 번호·미리보기 상태)은 본문에 나가지 않으므로 옮기지 않았다.
  * jsx는 편집기가 저장할 때마다 브라우저에서 다시 컴파일한다. 여기서는 스냅샷에 든 compiledCode를 그대로 보낸다
  * (스냅샷 규격 CreatorWorkDraftItem에 compiledCode·components가 있다). 그 값이 없으면 저장하지 않는다.
+ * 원본에 없거나 null인 칸에는 기본값을 채우지 않는다(없으면 보내지 않는다). 글·목록 칸만 빈 글·빈 목록으로 맞춘다.
  */
 export function uumaiSaveBody(w: Obj, opts: { isPublish: boolean; workId?: string }): Obj {
-  const intros = list(w.intros).length
-    ? list(w.intros)
-    : [{ name: '인트로', content: '', prompt: '', promptMaxTurn: null, recommends: [] }]
+  // 인트로가 하나도 없는 원본에 내용을 지어 넣지 않는다. 성인 여부도 모르면 거짓으로 보내지 않는다
+  const intros = list(w.intros)
+  if (!intros.length) throw new Error('WORK_SHAPE intros')
+  if (typeof w.isAdult !== 'boolean') throw new Error('WORK_SHAPE isAdult')
   const allIntros = intros.map((_, i) => i)
   const folders = list(w.lorebookFolders)
   const lores = arrangeLorebooks(list(w.lorebooks), folders)
@@ -165,7 +173,8 @@ export function uumaiSaveBody(w: Obj, opts: { isPublish: boolean; workId?: strin
         description: a.description,
         imageId: a.imageId,
         isHidden: a.isHidden,
-        hint: a.isHidden ? (a.hint ?? null) : null,
+        // 힌트가 없는 업적만 예전처럼 숨김이 아니면 null (있는 값은 그대로)
+        hint: a.hint === undefined && a.isHidden !== true ? null : a.hint,
         rewardAmount: a.rewardAmount,
         conditionType: a.conditionType,
         threshold: a.threshold
@@ -183,25 +192,26 @@ export function uumaiSaveBody(w: Obj, opts: { isPublish: boolean; workId?: strin
       name: text(e.name),
       content: text(e.content),
       prompt: text(e.prompt),
+      // 칸이 없는 인트로만 편집기 기본값(5턴·BGM 없음)을 쓴다. 있는 값(null 포함)은 그대로
       promptMaxTurn: e.promptMaxTurn === undefined ? 5 : e.promptMaxTurn,
-      bgmAudioId: e.bgmAudioId ?? null,
+      bgmAudioId: e.bgmAudioId === undefined ? null : e.bgmAudioId,
       recommends: strings(e.recommends).filter((r) => r.trim() !== '')
     })),
-    isAdult: w.isAdult === true,
+    isAdult: w.isAdult,
     publishStatus: opt(w.publishStatus as number | null | undefined),
     genderTendency: opt(w.genderTendency as number | null | undefined),
-    allowComment: w.allowComment !== false,
-    imagePromptEnabled: w.imagePromptEnabled !== false,
-    creatorStyleEnabled: w.creatorStyleEnabled === true,
+    allowComment: flagOr(w.allowComment, true),
+    imagePromptEnabled: flagOr(w.imagePromptEnabled, true),
+    creatorStyleEnabled: flagOr(w.creatorStyleEnabled, false),
     playGuide: text(w.playGuide),
     recommendedLlmModelId: opt(w.recommendedLlmModelId as number | null | undefined),
-    isDerivativeWork: w.isDerivativeWork === true,
+    isDerivativeWork: flagOr(w.isDerivativeWork, false),
     hashtags: strings(w.hashtags),
     thumbnail: thumb ? { imageId: thumb } : undefined,
     bgmCover: cover ? { imageId: cover } : undefined,
     images: list(w.images).map((e) => ({
       imageId: e.imageId,
-      isPublic: e.isPublic !== false,
+      isPublic: flag(e.isPublic),
       keyword: text(e.keyword),
       slug: text(e.slug)
     })),
@@ -220,17 +230,17 @@ export function uumaiSaveBody(w: Obj, opts: { isPublish: boolean; workId?: strin
         introSequences: seq.length ? seq : undefined,
         keywords: strings(l.keywords).filter((k) => k.trim() !== ''),
         content: text(l.content),
-        activateOnIntro: l.activateOnIntro === true,
-        isConstant: l.isConstant === true,
+        activateOnIntro: flagOr(l.activateOnIntro, false),
+        isConstant: flagOr(l.isConstant, false),
         andKeywords: strings(l.andKeywords).filter((k) => k.trim() !== ''),
         notKeywords: strings(l.notKeywords).filter((k) => k.trim() !== ''),
         scanTurns: opt(l.scanTurns as number | null | undefined),
         dependsOnIds: strings(l.dependsOnIds).filter((d) => loreIds.has(d)),
-        group: text(l.group),
-        priority: num(l.priority, 0),
+        group: str(l.group) ?? '',
+        priority: finite(l.priority) ?? 0,
         effect: opt(l.effect as number | null | undefined),
         bgmAudioId: opt(l.bgmAudioId as string | null | undefined),
-        bgmStop: l.bgmStop === true || undefined,
+        bgmStop: flag(l.bgmStop),
         folderId: l.folderId ?? null
       }
     }),
@@ -243,9 +253,9 @@ export function uumaiSaveBody(w: Obj, opts: { isPublish: boolean; workId?: strin
     achievements,
     dice: list(w.dice).map((d) => ({
       id: d.id,
-      name: text(d.name).trim(),
-      count: num(d.count, 1),
-      sides: num(d.sides, 20),
+      name: missing(d.name) ? '' : d.name,
+      count: missing(d.count) ? 1 : d.count,
+      sides: missing(d.sides) ? 20 : d.sides,
       bands: list(d.bands).map((b) => ({
         min: b.min,
         max: b.max,

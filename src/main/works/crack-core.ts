@@ -327,6 +327,7 @@ export function crackForm(story: Obj): CrackForm {
     _situationImages,
     _keywordBook,
     shortcutCommands: list(story.shortcutCommands).map((e) => ({
+      id: e.id,
       shortcutId: e.shortcutId,
       name: e.name,
       description: e.description,
@@ -376,6 +377,138 @@ export function crackForm(story: Obj): CrackForm {
         ? 'v1'
         : 'v2'
   }
+}
+
+// ───────────── 읽기 전용 설정 (extras·unsupported) ─────────────
+
+const EXTRA_TEXT_MAX = 80
+const EXTRA_LIST_MAX = 20
+const shortText = (v: unknown): string | undefined =>
+  typeof v === 'string' && v && v.length <= EXTRA_TEXT_MAX ? v : undefined
+const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined)
+const sum = (sets: Obj[], pick: (set: Obj) => number): number =>
+  sets.reduce((n, set) => n + pick(set), 0)
+
+/**
+ * 공통 칸에 들지 않는 크랙 설정. 원본에 실제로 있는 칸만, 짧은 값은 그대로·긴 글은 글자 수·목록은 개수로 싣는다.
+ * 조회·좋아요·댓글 수 같은 통계와 서버가 따로 바꾸는 값(검수 결과·배지·공개 시각)은 계획 뒤 변화 검사(PLAN_STALE)를 깨므로 싣지 않는다.
+ * 작품 본문·표지 주소·제작자 계정 정보도 싣지 않는다.
+ */
+export function crackExtras(
+  story: Obj,
+  form: CrackForm
+): { extras: Record<string, unknown>; unsupported: string[] } {
+  const extras: Record<string, unknown> = {}
+  const put = (key: string, value: unknown): void => {
+    if (value !== undefined) extras[key] = value
+  }
+  const rawSets = list(story.startingSets)
+
+  // 분류·대상·모델
+  if (isObj(story.genre)) {
+    put('genre_name', shortText(story.genre.name))
+    put('genre_type', shortText(story.genre.type))
+  }
+  put('genre_id', shortText(story.genreId))
+  put('target', shortText(story.target))
+  put('chat_type', shortText(story.chatType))
+  put('is_adult', bool(story.isAdult))
+  put('is_converted_to_adult', bool(story.isConvertedToAdult))
+  put(
+    'prompt_template',
+    shortText(isObj(story.promptTemplate) ? story.promptTemplate.template : story.promptTemplate)
+  )
+  put('default_cracker_model', shortText(story.defaultCrackerModel))
+  put('chat_model_id', shortText(story.chatModelId))
+  put('model', shortText(story.model))
+  if (isObj(story.creatorRecommendedMaxOutput)) {
+    const max = story.creatorRecommendedMaxOutput
+    put('max_output_type', shortText(max.type))
+    if (max.type === 'PER_MODEL')
+      put(
+        'max_output_model_count',
+        Array.isArray(max.modelMultipliers) ? max.modelMultipliers.length : 0
+      )
+    else put('max_output_multiplier', shortText(max.totalMultiplier))
+  }
+  put('country_code', shortText(story.countryCode))
+
+  // 태그
+  if (Array.isArray(story.tags)) {
+    const tags = strings(story.tags)
+    if (tags.length <= EXTRA_LIST_MAX && tags.every((t) => t.length <= EXTRA_TEXT_MAX))
+      put('tags', tags)
+    else put('tag_count', tags.length)
+  }
+
+  // 표지·화면 설정
+  if (isObj(story.portraitImage)) put('has_cover', !!form.portraitImageUrl)
+  put('cover_is_moving', bool(story.isMovingPortraitImage))
+  put('is_comment_blocked', bool(story.isCommentBlocked))
+  put('situation_image_version', shortText(story.situationImageVersion))
+
+  // 버전 (저장으로만 바뀐다). 공개 시각·검수 결과·배지는 서버가 검수 뒤 따로 바꿀 수 있어 싣지 않는다
+  // (계획과 저장 사이에 바뀌면 PLAN_STALE이 거짓으로 난다)
+  if (isObj(story.updateInfo)) {
+    const version = story.updateInfo.version
+    put('version', typeof version === 'number' ? version : undefined)
+  }
+  put('created_at', shortText(story.createdAt))
+  const images = rawSets.flatMap((s) => list(s.situationImages))
+
+  // 독점·2차 창작
+  if (isObj(story.original)) {
+    put('is_original', bool(story.original.isOriginal))
+    put('is_edit_blocked', bool(story.original.isEditBlocked))
+    put('is_fanfic_enabled', bool(story.original.isFanficEnabled))
+  }
+  if (isObj(story.onlyContent)) {
+    put('only_content', bool(story.onlyContent.isOnlyContent))
+    put('only_content_locked', bool(story.onlyContent.isLocked))
+  }
+  if (isObj(story.fanfic)) put('fanfic_source_linked', !!story.fanfic.sourceSeriesId)
+  put('origin_content_title', shortText(story.originContentTitle))
+  put('fanfic_agreement', bool(story.fanficAgreement))
+
+  // 개수 (내용은 싣지 않는다)
+  const replies = sum(rawSets, (s) => strings(s.replySuggestions).length)
+  const stats = sum(rawSets, (s) => list(s.parameters).length)
+  const endings = sum(rawSets, (s) => (isObj(s.ending) ? list(s.ending.endings).length : 0))
+  const shortcuts = list(story.shortcutCommands).length
+  const addonCategories = list(story.addonCategories)
+  const addonCount = addonCategories.reduce((n, c) => n + list(c.addons).length, 0)
+  const examples = list(story.chatExamples).length
+  if (rawSets.length) {
+    put('situation_image_count', images.length)
+    put('reply_suggestion_count', replies)
+    put('stat_count', stats)
+    put('ending_count', endings)
+  }
+  if (Array.isArray(story.shortcutCommands)) put('shortcut_count', shortcuts)
+  if (Array.isArray(story.addonCategories)) {
+    put('addon_category_count', addonCategories.length)
+    put('addon_count', addonCount)
+  }
+  if (Array.isArray(story.chatExamples)) put('chat_example_count', examples)
+  if (form.startingSets.length > 1 && form._keywordBook.length)
+    put(
+      'keyword_notes_limited_to_some_sets',
+      form._keywordBook.filter((k) => k.startingSetId.length < form.startingSets.length).length
+    )
+
+  // 사이트에는 있는데 읽지 못하는 것 (개수만 싣거나 아예 싣지 않은 것)
+  const unsupported = ['제작자 노트', '대화·좋아요·댓글 수']
+  if (replies) unsupported.push('추천 답변 내용')
+  if (stats) unsupported.push('스탯 내용')
+  if (endings) unsupported.push('엔딩 내용')
+  if (shortcuts) unsupported.push('단축어 내용')
+  if (addonCount) unsupported.push('애드온 내용')
+  if (examples) unsupported.push('대화 예시 내용')
+  if (form.startingSets.length > 1 && form._keywordBook.length)
+    unsupported.push('키워드 노트 적용 시작 설정')
+  if (rawSets.some((s) => strings(s.initialMessages).length > 1))
+    unsupported.push('두 번째 이후 프롤로그')
+  return { extras, unsupported }
 }
 
 /** 엔딩 조건: 편집기 z()가 규칙마다 폼 번호를 붙인다 (서버 값에 번호가 있으면 그 값) */
@@ -573,10 +706,23 @@ export function publishDeclaration(
 }
 
 /**
+ * 수정 등록 본문을 지을 수 있는 원본인지. 읽기 모양(crackForm)은 공개 상태·템플릿이 없으면 비공개·기본 템플릿으로
+ * 채운다. 원본에 없는 값을 지어 보내지 않고 멈춘다. 계획 단계·이미지 올리기 전에도 불러 저장 때 뒤늦게 걸리지 않게 한다.
+ */
+export function crackShapeCheck(story: Obj): void {
+  if (!text(story.visibility)) throw new Error('WORK_SHAPE visibility')
+  if (
+    !(isObj(story.promptTemplate) ? text(story.promptTemplate.template) : text(story.promptTemplate))
+  )
+    throw new Error('WORK_SHAPE promptTemplate')
+}
+
+/**
  * 수정 등록 본문 (편집기 publish의 수정 경로, PATCH /stories/{id}/v2).
  * 업데이트 노트(releaseNote)는 공개 글이라 보내지 않는다. expectedBaseSnapshotId로 다른 곳 수정과 겹치면 서버가 422로 막는다.
  */
 export function crackPatchBody(story: Obj): Obj {
+  crackShapeCheck(story)
   const form = crackForm(story)
   const fanficTemplate = form.promptTemplate === 'fanfic'
   return {
@@ -604,7 +750,8 @@ export function crackPatchBody(story: Obj): Obj {
     situationImageVersion: form.situationImageVersion,
     shortcutCommands: form.shortcutCommands.length
       ? form.shortcutCommands.map((e) => ({
-          id: nanoid(),
+          // 원본에 번호가 있으면 그대로 돌려보낸다 (없을 때만 새로 붙인다)
+          id: typeof e.id === 'string' && e.id ? e.id : nanoid(),
           shortcutId: e.shortcutId,
           name: e.name,
           description: e.description,

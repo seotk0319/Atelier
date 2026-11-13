@@ -154,7 +154,10 @@ describe('젠잇·루나 요청 통로', () => {
     expect(call.init.method).toBe('POST')
     expect(call.init.body).toBe(lunaListBody(0))
     expect(call.headers['content-type']).toBe('application/x-www-form-urlencoded')
-    expect(call.init.credentials).toBe('include')
+    // POST 읽기는 쿠키를 직접 실어 보낸다 (SameSite=Lax 자동 로그인 쿠키가 앱의 POST에는 안 실리기 때문)
+    expect(call.init.credentials).toBe('omit')
+    expect(call.headers.origin).toBe('https://lunatalk.chat')
+    expect(typeof call.headers.cookie).toBe('string')
 
     for (const init of [
       {
