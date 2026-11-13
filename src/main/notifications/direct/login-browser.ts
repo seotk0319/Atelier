@@ -1,5 +1,5 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { closeSync, existsSync, openSync } from 'node:fs'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { closeSync, existsSync, openSync, readlinkSync } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { connectCdp, type CdpConnection } from './cdp'
@@ -11,7 +11,17 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 // refuses a browser started for remote control ("this browser or app may not be secure"),
 // so the window a person signs in on is an ordinary one; only after it closes does NAIS3
 // reopen the same profile under DevTools to read the sessions.
-export function browserCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+export function browserCandidates(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): string[] {
+  if (platform === 'darwin') {
+    const roots = ['/Applications', ...(env['HOME'] ? [join(env['HOME'], 'Applications')] : [])]
+    return [
+      ...roots.map((root) => root + '/Google Chrome.app/Contents/MacOS/Google Chrome'),
+      ...roots.map((root) => root + '/Microsoft Edge.app/Contents/MacOS/Microsoft Edge')
+    ]
+  }
   const roots = [env['PROGRAMFILES'], env['PROGRAMFILES(X86)'], env['LOCALAPPDATA']].filter(
     (root): root is string => !!root
   )
@@ -31,7 +41,8 @@ function findBrowser(): string {
  * Whether a browser is running on this profile. Chrome holds the profile's lockfile open
  * while it runs and removes it on exit, so this sees windows NAIS3 did not start itself.
  */
-export function profileInUse(profileDir: string): boolean {
+export function profileInUse(profileDir: string, platform: NodeJS.Platform = process.platform): boolean {
+  if (platform !== 'win32') return singletonLockHeld(profileDir)
   try {
     closeSync(openSync(join(profileDir, 'lockfile'), 'r+'))
     return false
@@ -39,6 +50,78 @@ export function profileInUse(profileDir: string): boolean {
     const code = (error as NodeJS.ErrnoException).code
     return code === 'EBUSY' || code === 'EPERM' || code === 'EACCES'
   }
+}
+
+/**
+ * macOS and Linux: Chrome keeps no open lockfile there. It leaves a `SingletonLock` symlink
+ * in the profile whose target is "<hostname>-<pid>" and removes it on exit. A crash leaves
+ * the link behind, so the process it names is checked as well.
+ */
+export function singletonLockHeld(profileDir: string): boolean {
+  let target: string
+  try {
+    target = readlinkSync(join(profileDir, 'SingletonLock'))
+  } catch {
+    return false
+  }
+  const pid = Number(target.slice(target.lastIndexOf('-') + 1))
+  if (!Number.isInteger(pid) || pid <= 0) return true
+  try {
+    process.kill(pid, 0)
+  } catch (error) {
+    // EPERM: the process exists but belongs to someone else. ESRCH: it is gone.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+  // On macOS closing the last window leaves the browser running, so the lock stays although
+  // the person is done. A browser with no page left is asked to quit, which frees the profile.
+  if (process.platform === 'darwin' && windowless(pid)) {
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {
+      /* It quit on its own in the meantime. */
+    }
+    return false
+  }
+  return true
+}
+
+/** Seconds a process has been running, from `ps` etime ([[dd-]hh:]mm:ss). */
+export function elapsedSeconds(etime: string): number {
+  const [rest, days] = etime.trim().split('-').reverse()
+  const parts = rest.split(':').map(Number)
+  if (parts.some((part) => !Number.isFinite(part))) return 0
+  const [seconds = 0, minutes = 0, hours = 0] = parts.reverse()
+  return (Number(days) || 0) * 86_400 + hours * 3_600 + minutes * 60 + seconds
+}
+
+// Counts the on-screen windows of one process through CoreGraphics (JavaScript for Automation).
+// It sends no Apple Events, so macOS asks for no permission.
+const WINDOW_COUNT_SCRIPT = [
+  "ObjC.import('CoreGraphics')",
+  'function run(argv) {',
+  '  const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(',
+  '    $.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, 0)))',
+  '  let count = 0',
+  '  for (const w of list)',
+  '    if (Number(w.kCGWindowLayer) === 0 && Number(w.kCGWindowOwnerPID) === Number(argv[0])) count += 1',
+  '  return String(count)',
+  '}'
+].join('\n')
+
+/**
+ * Whether the browser `pid` has been up for a while and shows no window. A browser younger
+ * than 20 seconds counts as still opening its first window, and any failure to tell counts
+ * as "has a window", so a sign-in in progress is never closed by mistake.
+ */
+function windowless(pid: number): boolean {
+  const age = spawnSync('ps', ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8' })
+  if (age.status !== 0 || elapsedSeconds(age.stdout) < 20) return false
+  const count = spawnSync(
+    'osascript',
+    ['-l', 'JavaScript', '-e', WINDOW_COUNT_SCRIPT, String(pid)],
+    { encoding: 'utf8', timeout: 5_000 }
+  )
+  return count.status === 0 && count.stdout.trim() === '0'
 }
 
 /** Waits until no browser holds the profile, so the next start owns it. */
