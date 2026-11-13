@@ -202,6 +202,17 @@ import sharp from 'sharp'
 import { verifyToken } from './nai/client'
 import { APP_TITLE, PROFILE } from './profile'
 import { mcpActivity, mcpEditions, mcpStatus, onMcpActivity } from './mcp/service'
+import { platformSource, remotePort, viewClient } from './remote/source'
+import { REMOTE_DOWN } from './remote/view-client'
+import type { RemoteStamp } from '../shared/remote-view'
+import type {
+  InboxReplyResult,
+  InboxReplyTarget,
+  InboxResult,
+  InboxWorksResult
+} from '../shared/inbox'
+import type { AiLogEntry, AiReplyStatus } from '../shared/ai-reply'
+import type { McpActivity } from '../shared/types'
 import type { GenerationQueue } from './queue/generation-queue'
 import {
   assignLibraryEntries,
@@ -241,8 +252,24 @@ export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcE
 
 export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQueue }): void {
   if (PROFILE === 1) {
-    handle('inbox:query', (query) => getInbox(query || {}))
+    const remote = (): boolean => platformSource() === 'macmini'
+    const view = viewClient()
+    /** 맥미니에서 받은 답에 받은 시각을 붙인다 */
+    const stamped = async <T extends object>(
+      channel: string,
+      req?: unknown,
+      options?: { cacheAs?: unknown }
+    ): Promise<T & { remote: RemoteStamp }> => {
+      const { res, stamp } = await view.read<T>(channel, req, options)
+      return { ...res, remote: stamp }
+    }
+    handle('inbox:query', (query) =>
+      remote() ? stamped<InboxResult>('inbox:query', query || {}) : getInbox(query || {})
+    )
     handle('inbox:works', async (req) => {
+      // 받은 것은 요청 모양과 상관없이 한 자리에 둔다 (끊겼을 때 작품 탭·알림 탭이 같은 것을 본다)
+      if (remote())
+        return stamped<InboxWorksResult>('inbox:works', req || {}, { cacheAs: { cached: true } })
       const [works, saved] = await Promise.all([
         getInboxWorks(!!req?.refresh, !!req?.cached),
         mcpEditions()
@@ -254,44 +281,117 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
       clipboard.writeText(text)
       return { ok: true }
     })
-    handle('inbox:control', ({ enabled }) => controlInbox(enabled))
-    handle('inbox:setInterval', ({ minutes }) => setInboxInterval(minutes))
-    handle('inbox:openSource', ({ id }) => openInboxSource(id))
-    handle('inbox:connect', ({ platform }) => connectInboxPlatform(platform))
-    handle('inbox:reply', ({ id, content }) => replyInbox(String(id || ''), String(content || '')))
-    handle('inbox:replyTarget', ({ id }) => previewReply(String(id || '')))
-    handle('inbox:disconnect', ({ platform }) => disconnectInboxPlatform(platform))
-    handle('inbox:select', ({ platform, selected }) => selectInboxPlatform(platform, selected))
+    handle('inbox:control', (req) =>
+      remote() ? view.act('inbox:control', req) : controlInbox(req.enabled)
+    )
+    handle('inbox:setInterval', (req) =>
+      remote() ? view.act('inbox:setInterval', req) : setInboxInterval(req.minutes)
+    )
+    handle('inbox:openSource', async ({ id }) => {
+      if (!remote()) return openInboxSource(id)
+      const { url } = await view.act<{ url: string }>('inbox:sourceUrl', { id })
+      if (!url.startsWith('https://')) throw new Error('원문 주소를 열 수 없어요.')
+      await shell.openExternal(url)
+    })
+    handle('inbox:connect', ({ platform }) =>
+      remote()
+        ? { state: 'error' as const, message: '로그인은 맥미니의 아틀리에에서 해요.' }
+        : connectInboxPlatform(platform)
+    )
+    handle('inbox:reply', async (req) => {
+      if (!remote()) return replyInbox(String(req.id || ''), String(req.content || ''))
+      try {
+        return await view.act<InboxReplyResult>('inbox:reply', req)
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : REMOTE_DOWN }
+      }
+    })
+    handle('inbox:replyTarget', async (req) => {
+      if (!remote()) return previewReply(String(req.id || ''))
+      try {
+        return await view.act<InboxReplyTarget>('inbox:replyTarget', req)
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : REMOTE_DOWN }
+      }
+    })
+    handle('inbox:disconnect', ({ platform }) => {
+      if (remote()) throw new Error('연결 끊기는 맥미니의 아틀리에에서 해요.')
+      return disconnectInboxPlatform(platform)
+    })
+    handle('inbox:select', (req) =>
+      remote() ? view.act('inbox:select', req) : selectInboxPlatform(req.platform, req.selected)
+    )
     handle('translate:status', () => translateStatus())
     handle('translate:setEngine', ({ engine }) => setTranslateEngine(engine))
     handle('translate:usage', () => translateUsage())
     handle('translate:setKey', ({ key }) => saveTranslateKey(String(key || '')))
     handle('translate:deleteKey', () => removeTranslateKey())
     handle('translate:run', ({ text, target }) => translateText(String(text || ''), target))
-    handle('aiReply:status', () => aiStatus())
-    handle('aiReply:setKey', ({ key }) => saveAiKey(String(key || '')))
-    handle('aiReply:deleteKey', () => removeAiKey())
-    handle('aiReply:setConfig', (patch) => setAiConfig(patch || {}))
-    handle('aiReply:setEngine', ({ engine }) => setAiEngine(engine))
-    handle('aiReply:draft', async ({ id }) => {
-      const result = await draftReply(String(id || ''))
+    handle('aiReply:status', async () =>
+      remote() ? (await view.read<AiReplyStatus>('aiReply:status')).res : aiStatus()
+    )
+    handle('aiReply:setKey', ({ key }) =>
+      remote()
+        ? { ok: false, message: 'AI 답글 키는 맥미니의 아틀리에에서 넣어요.' }
+        : saveAiKey(String(key || ''))
+    )
+    handle('aiReply:deleteKey', () => {
+      if (remote()) throw new Error('AI 답글 키는 맥미니의 아틀리에에서 지워요.')
+      return removeAiKey()
+    })
+    handle('aiReply:setConfig', (patch) =>
+      remote() ? view.act('aiReply:setConfig', patch || {}) : setAiConfig(patch || {})
+    )
+    handle('aiReply:setEngine', (req) =>
+      remote() ? view.act('aiReply:setEngine', req) : setAiEngine(req.engine)
+    )
+    handle('aiReply:draft', async (req) => {
+      if (remote()) return view.act('aiReply:draft', req)
+      const result = await draftReply(String(req.id || ''))
       delete result.code
       return result
     })
-    handle('aiReply:entry', ({ id }) => aiEntry(String(id || '')))
-    handle('aiReply:log', (req) => aiLog(Number(req?.limit) || 30))
-    handle('aiReply:backlogPreview', ({ days }) => previewBacklog(Number(days) || 0))
-    handle('aiReply:backlogStart', (request) => startBacklog(request))
-    handle('aiReply:backlogStop', () => stopBacklog())
+    handle('aiReply:entry', async (req) =>
+      remote()
+        ? (await view.read<AiLogEntry | null>('aiReply:entry', req)).res
+        : aiEntry(String(req.id || ''))
+    )
+    handle('aiReply:log', async (req) =>
+      remote()
+        ? (await view.read<AiLogEntry[]>('aiReply:log', req || {})).res
+        : aiLog(Number(req?.limit) || 30)
+    )
+    handle('aiReply:backlogPreview', (req) =>
+      remote() ? view.act('aiReply:backlogPreview', req) : previewBacklog(Number(req.days) || 0)
+    )
+    handle('aiReply:backlogStart', (request) =>
+      remote() ? view.act('aiReply:backlogStart', request) : startBacklog(request)
+    )
+    handle('aiReply:backlogStop', () =>
+      remote() ? view.act('aiReply:backlogStop') : stopBacklog()
+    )
     onMcpActivity((item) => broadcast('mcp:activityAdded', item))
   }
   // 작품 MCP는 Custom 1에서만 열리지만, 화면이 "No handler"를 받지 않게 처리기는 늘 둔다
-  handle('mcp:status', () =>
-    PROFILE === 1 ? mcpStatus() : { running: false, port: 0, url: '', error: null }
-  )
-  handle('mcp:activity', (req) =>
-    PROFILE === 1 ? mcpActivity(Number(req?.limit) || undefined) : { items: [] }
-  )
+  handle('mcp:status', async () => {
+    if (PROFILE !== 1) return { running: false, port: 0, url: '', error: null }
+    if (platformSource() !== 'macmini') return mcpStatus()
+    const up = await viewClient().reachable()
+    return { running: false, port: remotePort(), url: '', error: null, remote: up ? 'up' : 'down' }
+  })
+  handle('mcp:activity', async (req) => {
+    if (PROFILE !== 1) return { items: [] }
+    if (platformSource() !== 'macmini') return mcpActivity(Number(req?.limit) || undefined)
+    try {
+      const { res, stamp } = await viewClient().read<{ items: McpActivity[] }>(
+        'mcp:activity',
+        req || {}
+      )
+      return { items: res.items, remote: stamp }
+    } catch {
+      return { items: [] }
+    }
+  })
   const censorFolderFiles = new Set<string>()
   const censorPathKey = (filePath: string): string => resolve(filePath).toLowerCase()
   handle('db:status', () => ({ version: ctx.dbVersion, path: getDbPath() }))

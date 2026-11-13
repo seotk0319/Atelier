@@ -17,6 +17,7 @@ import type {
   TranslateTarget,
   TranslateUsage
 } from './translate'
+import type { RemoteStamp } from './remote-view'
 import type { OpenRouterKeyResult, OpenRouterStatus } from './llm'
 import type { AssistantContext, AssistantModel, AssistantReply, AssistantStatus } from './assistant'
 import type { TagHelperImageRequest, TagHelperResult, TagHelperTextRequest } from './tag-helper'
@@ -555,7 +556,10 @@ export interface IpcInvokeMap {
   /** 작품 MCP 창구 상태 (Atelier 화면용) */
   'mcp:status': { req: void; res: McpStatus }
   /** 작품 MCP가 한 일 — 최근 것부터 */
-  'mcp:activity': { req: { limit?: number }; res: { items: McpActivity[] } }
+  'mcp:activity': {
+    req: { limit?: number }
+    res: { items: McpActivity[]; remote?: RemoteStamp }
+  }
   'acceleration:set': { req: { enabled: boolean }; res: QueueStatus }
   'acceleration:setAccount': {
     req: { id: string; enabled: boolean }

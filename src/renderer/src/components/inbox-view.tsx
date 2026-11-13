@@ -34,6 +34,7 @@ import type {
 import { cn } from '../lib/utils'
 import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
 import { Switch } from './ui/switch'
+import { RemoteMark } from './remote-mark'
 import { useAiReplyStore } from '../stores/ai-reply-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { useTranslateStore } from '../stores/translate-store'
@@ -284,6 +285,17 @@ export function InboxView(): React.JSX.Element {
   }
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [settings, setSettings] = useState(false)
+  // 플랫폼 내용을 이 PC가 직접 모을지, 맥미니에서 받을지 (설정 platform_source)
+  const [source, setSource] = useState<'direct' | 'macmini'>('direct')
+  useEffect(() => {
+    void window.nais
+      .invoke('settings:get', { key: 'platform_source' })
+      .then(({ value }) => setSource(value === 'macmini' ? 'macmini' : 'direct'))
+  }, [])
+  const chooseSource = (next: 'direct' | 'macmini'): void => {
+    setSource(next)
+    void window.nais.invoke('settings:set', { key: 'platform_source', value: next })
+  }
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -818,6 +830,23 @@ export function InboxView(): React.JSX.Element {
                 <X size={15} />
               </button>
             </div>
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-muted">가져오는 곳</span>
+              <Segmented
+                value={source}
+                onValueChange={(v) => chooseSource(v === 'macmini' ? 'macmini' : 'direct')}
+              >
+                <SegmentedItem value="direct" className="px-3 text-[12px]">
+                  직접 수집
+                </SegmentedItem>
+                <SegmentedItem value="macmini" className="px-3 text-[12px]">
+                  맥미니에서 받기
+                </SegmentedItem>
+              </Segmented>
+              {source === 'macmini' && (
+                <span className="text-muted">로그인·연결 끊기는 맥미니의 아틀리에에서 해요.</span>
+              )}
+            </div>
             <p className="leading-relaxed text-muted">
               플랫폼마다 한 번 로그인하면 NAIS3가 직접 알림을 모아요. 로그인 창은 크롬(없으면
               엣지)으로 열리고, NAIS3 전용 프로필이라 평소 쓰는 크롬과 섞이지 않아요. 로그인한 뒤 그
@@ -1043,6 +1072,7 @@ export function InboxView(): React.JSX.Element {
                 {(data?.filtered || 0).toLocaleString()}건
                 {data?.unread && !unreadOnly ? ` · 안 읽음 ${data.unread.toLocaleString()}` : ''}
               </span>
+              <RemoteMark stamp={data?.remote} now={now} />
               <span className="tabular-nums text-faint">
                 {data?.collectorOnline
                   ? data.enabled

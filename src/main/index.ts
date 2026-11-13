@@ -36,6 +36,7 @@ import { GenerationQueue } from './queue/generation-queue'
 import { getPresetName, getScene } from './scenes/repo'
 import { startInbox, closeInbox } from './notifications/service'
 import { startMcp, stopMcp } from './mcp/service'
+import { platformSource, viewClient } from './remote/source'
 import { startAiReplies, stopAiReplies } from './ai-reply/service'
 import { initGpt } from './gpt/service'
 
@@ -117,6 +118,13 @@ app.whenReady().then(() => {
   protocol.handle('nais-thumb', async (request) => {
     try {
       const image = new URL(request.url).searchParams.get('u') ?? ''
+      if (platformSource() === 'macmini') {
+        const got = /^https:\/\//.test(image) ? await viewClient().thumb(image) : null
+        if (!got) return new Response(null, { status: 404 })
+        return new Response(Buffer.from(got.bytes), {
+          headers: { 'Content-Type': got.type, 'Cache-Control': 'private, max-age=86400' }
+        })
+      }
       if (!thumbAllowed(image)) return new Response(null, { status: 404 })
       const response = await net.fetch(image, { redirect: 'error' })
       if (!response.ok) return new Response(null, { status: 404 })

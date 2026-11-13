@@ -19,6 +19,7 @@ import { useLayoutStore } from '../stores/layout-store'
 import { toast } from '../stores/toast-store'
 import { Button } from './ui/button'
 import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
+import { RemoteMark } from './remote-mark'
 
 const FOCUS =
   'outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50'
@@ -30,11 +31,17 @@ const TD = 'h-11 whitespace-nowrap border-b border-line p-0 text-center text-[13
  * 작품 MCP 기록과 상태. 기록은 표의 「최근 작업」을 찾으려고 넉넉히(500개) 읽고,
  * 아래 「작업 기록」에는 최근 50개만 보인다. 본체가 기록을 못 주면 빈 목록.
  */
-function useMcp(): { items: McpActivity[]; status: McpStatus | null; known: boolean } {
+function useMcp(active: boolean): {
+  items: McpActivity[]
+  status: McpStatus | null
+  known: boolean
+} {
   const [items, setItems] = useState<McpActivity[]>([])
   const [status, setStatus] = useState<McpStatus | null>(null)
   const [known, setKnown] = useState(true)
+  // 탭을 열 때마다 다시 읽는다 (맥미니에서 받는 기록은 새 기록 알림이 오지 않는다)
   useEffect(() => {
+    if (!active) return
     let alive = true
     window.nais
       .invoke('mcp:activity', { limit: 500 })
@@ -57,7 +64,7 @@ function useMcp(): { items: McpActivity[]; status: McpStatus | null; known: bool
       alive = false
       off()
     }
-  }, [])
+  }, [active])
   return { items, status, known }
 }
 
@@ -183,9 +190,9 @@ export function WorksView(): React.JSX.Element {
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<WorksFilter>('all')
   const [now, setNow] = useState(0)
-  const mcp = useMcp()
-  const activity = mcp.items
   const active = useLayoutStore((s) => s.centerMode === 'works')
+  const mcp = useMcp(active)
+  const activity = mcp.items
 
   // 「새로고침」: 연결된 플랫폼에 다시 묻는다. 누를 때만 부른다.
   const refresh = async (): Promise<void> => {
@@ -299,6 +306,7 @@ export function WorksView(): React.JSX.Element {
           </SegmentedItem>
         </Segmented>
         <span className="min-w-2 flex-1" />
+        <RemoteMark stamp={data?.remote} now={now} />
         <span
           className="text-[12px] tabular-nums text-faint"
           title={data?.fetchedAt ? workDateTime(data.fetchedAt) : undefined}

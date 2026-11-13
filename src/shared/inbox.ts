@@ -1,3 +1,4 @@
+import type { RemoteStamp } from './remote-view'
 import type { EditionRecord } from './work-freshness'
 
 export const INBOX_PLATFORMS = {
@@ -103,6 +104,8 @@ export interface InboxQuery {
   topic?: string
 }
 export interface InboxResult {
+  /** 맥미니에서 받아 온 것이면 받은 시각과, 끊겨서 마지막 것을 보여 주는 중인지 */
+  remote?: RemoteStamp
   intervalMinutes: number
   collecting: boolean
   nextCollectionAt: string | null
@@ -210,4 +213,6 @@ export interface InboxWorksResult {
   loginLost?: string[]
   /** MCP 저장 도구가 남긴 작품별 마지막 저장 기록 (낡음 판정에 수집기 시각과 함께 쓴다) */
   saved?: EditionRecord[]
+  /** 맥미니에서 받아 온 것이면 받은 시각과, 끊겨서 마지막 것을 보여 주는 중인지 */
+  remote?: RemoteStamp
 }
