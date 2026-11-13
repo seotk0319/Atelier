@@ -973,6 +973,11 @@ export interface McpStatus {
   url: string
   /** 시작하지 못했을 때의 이유 (없으면 null) */
   error: string | null
+  /**
+   * 이 PC의 MCP를 설정으로 껐을 때만 있다. 같은 포트에 이어 둔 맥미니의 작품 MCP가
+   * 답하면 'up', 통로가 내려가 있으면 'down'.
+   */
+  remote?: 'up' | 'down'
 }
 
 /** 작품 MCP 도구 호출 한 건의 기록. 본문·토큰은 담지 않는다 */

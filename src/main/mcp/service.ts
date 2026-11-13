@@ -11,6 +11,7 @@ import type { McpActivity, McpStatus } from '../../shared/types'
 import type { EditionRecord } from '../../shared/work-freshness'
 import { createActivityLog, withActivity, type ActivityLog } from './activity'
 import { createEditionStore, type EditionStore } from './editions'
+import { probeRemoteMcp } from './remote-probe'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
 
 let running: ReturnType<typeof createMcpServer> | null = null
@@ -54,7 +55,14 @@ export async function mcpEditions(): Promise<EditionRecord[]> {
   }
 }
 
-export function mcpStatus(): McpStatus {
+export async function mcpStatus(): Promise<McpStatus> {
+  // 이 PC의 MCP를 설정으로 껐으면 같은 포트의 통로 너머(맥미니의 작품 MCP)가 답하는지 본다
+  if (!running && getSetting('mcp_enabled') === '0') {
+    const saved = Number(getSetting('mcp_port'))
+    const port =
+      Number.isInteger(saved) && saved >= 1024 && saved <= 65535 ? saved : MCP_DEFAULT_PORT
+    return { running: false, port, url: '', error: null, remote: await probeRemoteMcp(port) }
+  }
   return {
     running: !!running,
     port: lastPort,

@@ -100,6 +100,12 @@ function ActivitySection({
         <span className="text-[12px] tabular-nums text-muted" title={status?.error ?? status?.url}>
           {!known || !status ? (
             'MCP 모름'
+          ) : status.remote === 'up' ? (
+            <>
+              <span className="font-semibold text-good">맥미니 연결됨</span> · 포트 {status.port}
+            </>
+          ) : status.remote === 'down' ? (
+            <span className="font-semibold text-bad">맥미니 끊김</span>
           ) : status.running ? (
             <>
               <span className="font-semibold text-good">MCP 켜짐</span> · 포트 {status.port}
