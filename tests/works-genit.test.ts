@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { LoreEntry } from '../src/main/works/types'
 import { workAdapter, workReadAllowed, workSendRule } from '../src/main/works/adapters'
 import { genitWorks } from '../src/main/works/genit'
 import { genitForm } from '../src/main/works/genit-form'
@@ -569,7 +570,12 @@ describe('젠잇 작품', () => {
   })
 })
 
-const entry = (title: string, content: string, keys: string, mode: string | null = null) => ({
+const entry = (
+  title: string,
+  content: string,
+  keys: string,
+  mode: string | null = null
+): LoreEntry => ({
   title,
   keys,
   content,

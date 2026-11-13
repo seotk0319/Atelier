@@ -16,6 +16,7 @@ import type {
   SendRule,
   WorkSend
 } from './types'
+import { at, isObj, list, text } from './shared'
 
 const SITE = 'https://babechat.ai'
 const UPLOAD = SITE + '/api/upload'
@@ -43,15 +44,6 @@ export const BABE_IMAGE_RULES: FileRules = {
 }
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 
 /** 이미지 올리기에 쓰는 세 주소의 허용 규칙. 베이비챗 API(api.babechatapi.com)는 JSON 통로를 쓴다 */
 export function babeSendRule(method: string, url: string): SendRule | null {

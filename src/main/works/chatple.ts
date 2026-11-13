@@ -15,14 +15,10 @@
 // 공개 콘텐츠(flag_use 0)를 저장하면 사이트가 수정본을 다시 심사한다(pending_edit). 심사 중이면 저장하지 않는다.
 import { matchOld } from './match-old'
 import type { LoreEntry, WorkAdapter, WorkBody, WorkFetch, WorkListItem, WorkWrite } from './types'
+import { at, isObj, keyList, list, strings, text } from './shared'
 
 const API = 'https://api.chatple.live'
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 const idText = (v: unknown): string | null =>
   typeof v === 'number' && Number.isInteger(v) && v > 0
     ? String(v)
@@ -30,11 +26,6 @@ const idText = (v: unknown): string | null =>
       ? v
       : null
 
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 function workId(id: string): string {
   if (!/^\d{1,12}$/.test(id) || Number(id) <= 0) throw new Error('BAD_WORK_ID')
   return id
@@ -119,17 +110,17 @@ const keywordsOf = (m: Obj): string[] =>
 const characterId = (c: Obj): string | null => idText(c.character_idx ?? c.id)
 
 /** 공개 범위 값(0·1·2). 칸이 없거나 모르는 값이면 null — 모르는 값을 공개(0)로 보지 않는다 */
-function useOf(c: Obj): number | null {
+function usageOf(c: Obj): number | null {
   const v = typeof c.flag_use === 'string' && c.flag_use.trim() ? Number(c.flag_use) : c.flag_use
   return typeof v === 'number' && VISIBILITY[v] !== undefined ? v : null
 }
 function visibilityOf(c: Obj): string | null {
-  const use = useOf(c)
+  const use = usageOf(c)
   return use === null ? null : VISIBILITY[use]
 }
 /** CyBwIHaa 표시와 같은 기준: 비공개·링크는 그대로, 공개는 심사 상태 */
 function statusOf(c: Obj, pending: Obj | null): string | null {
-  const use = useOf(c)
+  const use = usageOf(c)
   if (use === null) return null
   if (use === 1) return 'private'
   if (use === 2) return 'link'
@@ -303,7 +294,7 @@ export function chatpleBody(c: Obj): Obj {
         .filter(Boolean)
     : []
   // 공개 범위를 모르면 공개(0)로 보내지 않고 멈춘다
-  const use = useOf(c)
+  const use = usageOf(c)
   if (use === null) throw new Error('UNKNOWN_VISIBILITY')
   // 0·4·5만 보낸다 (편집 화면 lr()). 칸이 없거나 null이면 예전 기본값 0, 0·4·5가 아닌 값은 칸을 뺀다
   const contentType =
@@ -453,11 +444,6 @@ function check(c: Obj, base: Baseline): void {
   }
 }
 
-const keyList = (keys: string): string[] =>
-  keys
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean)
 /** 공통 로어북 → 메모리북. 챗플 메모리북은 제목·키워드·내용뿐이다 (발동 방식·턴·제외 키워드 없음) */
 function memoryFrom(entry: Partial<LoreEntry>, base: Obj | undefined): Obj {
   if (
@@ -814,7 +800,7 @@ export const chatpleWorks: WorkAdapter = {
     // 저장 본문과 같은 모양으로 한 번 더 맞춘다 (메모 삭제·빈 줄 정리)
     canon(c)
     // 저장 본문에서 공개 범위를 모르는 채로 보내지 않게 여기서 먼저 멈춘다
-    if (useOf(c) === null) throw new Error('UNKNOWN_VISIBILITY')
+    if (usageOf(c) === null) throw new Error('UNKNOWN_VISIBILITY')
     check(c, baseline)
     // 저장 본문이 모르는 값(도입부 공개 여부)으로 멈추는 일은 쓰기 전에 알려야 한다:
     // save()는 캐릭터를 먼저 저장하므로 거기서 터지면 작품이 일부만 저장된다

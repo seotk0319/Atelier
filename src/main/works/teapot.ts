@@ -61,6 +61,7 @@ import type {
   WorkListItem,
   WorkWrite
 } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX } from './shared'
 
 export type { TeapotAccount } from './teapot-core'
 
@@ -133,20 +134,15 @@ function newest(checkpoints: Obj[]): Obj | null {
 
 const status = (cp: Obj): string => cpStatus(cp.cp_status) ?? 'DRAFT'
 
-// ── 숨은 설정(extras) ──
-// 짧은 값은 그대로, 긴 글은 <이름>_length, 목록은 개수만 싣는다. 작품 본문·계정 정보·주소는 싣지 않는다.
-// 조회 수 같은 통계는 읽을 때마다 달라져 계획이 낡은 것으로 보이므로 싣지 않는다.
-const SHORT_TEXT = 80
-const SHORT_LIST = 20
 function putText(out: Obj, name: string, v: unknown): void {
   if (typeof v !== 'string') return
-  if (v.length <= SHORT_TEXT) out[name] = v
+  if (v.length <= EXTRA_TEXT_MAX) out[name] = v
   else out[name + '_length'] = v.length
 }
 function putStrings(out: Obj, name: string, v: unknown): void {
   if (!Array.isArray(v)) return
   const items = strings(v)
-  if (items.length === v.length && items.length <= SHORT_LIST && items.every((t) => t.length <= SHORT_TEXT))
+  if (items.length === v.length && items.length <= EXTRA_LIST_MAX && items.every((t) => t.length <= EXTRA_TEXT_MAX))
     out[name] = items
   else out[name + '_count'] = v.length
 }

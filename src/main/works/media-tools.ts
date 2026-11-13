@@ -15,12 +15,11 @@ import type {
   WorkImage,
   WorkIo
 } from './types'
+import { isObj, str } from './shared'
 
 const PLAN_TTL = 30 * 60_000
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 const MIME: Record<string, string> = {
   webp: 'image/webp',

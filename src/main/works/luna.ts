@@ -17,6 +17,7 @@ import type {
   WorkListItem,
   WorkReadInit
 } from './types'
+import { feature, isObj, list, strOrNull, text } from './shared'
 
 const ORIGIN = 'https://lunatalk.chat'
 const LIST_URL = ORIGIN + '/member/mypage_api'
@@ -25,12 +26,6 @@ const FORM = 'application/x-www-form-urlencoded'
 const PAGE = 20
 const MAX_PAGES = 30
 const TITLE_SUFFIX = / \| LUNATALK - AI 캐릭터 채팅$/
-
-type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
 
 function workId(id: string): string {
   if (!/^\d{1,10}$/.test(id)) throw new Error('BAD_WORK_ID')
@@ -187,14 +182,6 @@ const UNSUPPORTED = [
   '공개 범위(상세 읽기)',
   '모델·엔진 설정'
 ]
-
-const feature = (
-  site: WorkFeature['site'],
-  read: WorkFeature['read'],
-  write: WorkFeature['write'],
-  verified: WorkFeature['verified'],
-  note: string
-): WorkFeature => ({ site, read, write, verified, note })
 
 // 근거: docs/platform-analysis/luna.md 9절. 저장은 전부 막혀 있어 저장 경로가 있는 칸의 쓰기는 blocked, 도구 밖 기능은 no
 const FEATURES: Record<string, WorkFeature> = {

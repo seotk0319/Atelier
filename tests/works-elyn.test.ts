@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { LoreEntry } from '../src/main/works/types'
 import { elynWorks } from '../src/main/works/elyn'
 import { elynJsonData, list } from '../src/main/works/elyn-core'
 import type {
@@ -671,7 +672,7 @@ const loreOf = (name: string, over: Obj = {}): Obj => ({
   requires: [],
   ...over
 })
-const loreInput = (title: string, keys: string, content: string) => ({
+const loreInput = (title: string, keys: string, content: string): LoreEntry => ({
   title,
   keys,
   content,

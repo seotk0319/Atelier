@@ -50,6 +50,7 @@ import type {
   WorkListItem,
   WorkRequest
 } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX, at, feature } from './shared'
 
 const CHARACTERS = GENIT_API + '/api/characters/'
 const ME = GENIT_API + '/api/auth/user/?lang=ko'
@@ -61,14 +62,6 @@ const CSRF = { domain: 'genit.ai', name: 'wavechat_csrftoken', header: 'x-csrfto
 const SEND_HEADERS = ['origin', 'referer', 'accept', 'x-request-id']
 const VISIBILITY_CODES: Record<string, number> = { public: 1, link: 2, private: 3 }
 const LORE_DEFAULT_CATEGORY = '설정'
-
-const feature = (
-  site: WorkFeature['site'],
-  read: WorkFeature['read'],
-  write: WorkFeature['write'],
-  verified: WorkFeature['verified'],
-  note: string
-): WorkFeature => ({ site, read, write, verified, note })
 
 /** 기능별로 이 연결부가 어디까지 되는지 (분석 문서 9절). 노트는 40자 이내 */
 const GENIT_FEATURES: Record<string, WorkFeature> = {
@@ -113,9 +106,6 @@ const GENIT_UNSUPPORTED = [
   '댓글·통계'
 ]
 
-const SHORT_TEXT = 80
-const SHORT_LIST = 20
-
 /**
  * 공통 칸에 들지 않는 설정. 원본에 있는 칸만 싣고, 긴 글은 글자 수로, 목록은 개수로 줄인다.
  * 조회·좋아요·댓글 수처럼 읽을 때마다 달라지는 값은 싣지 않는다(계획 뒤 변화 검사가 깨진다).
@@ -132,7 +122,7 @@ export function genitExtras(c: Obj): Record<string, unknown> {
   }
   const word = (name: string, o: Obj, key: string): void => {
     const s = o[key]
-    if (typeof s === 'string' && s.length <= SHORT_TEXT) out[name] = s
+    if (typeof s === 'string' && s.length <= EXTRA_TEXT_MAX) out[name] = s
   }
   const size = (name: string, o: Obj, key: string): void => {
     const s = o[key]
@@ -158,7 +148,7 @@ export function genitExtras(c: Obj): Record<string, unknown> {
       const s = typeof e === 'string' ? e : isObj(e) ? text(e.name_ko) || text(e.name) : ''
       return s.trim() ? [s] : []
     })
-    if (found.length && found.length <= SHORT_LIST && found.every((s) => s.length <= SHORT_TEXT))
+    if (found.length && found.length <= EXTRA_LIST_MAX && found.every((s) => s.length <= EXTRA_TEXT_MAX))
       out[listName] = found
   }
 
@@ -300,11 +290,6 @@ async function sendOrThrow(
   return res
 }
 
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 const keywords = (keys: string): string[] =>
   keys
     .split(',')

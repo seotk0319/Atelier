@@ -8,6 +8,7 @@ import { createMediaTools } from './media-tools'
 import { createSaveTools } from './save-tools'
 import { createStatusTool, type WorksStatusSource } from './status-tool'
 import { textLength, type WorkBody, type WorkFetch, type WorkSend, type WorkWrite } from './types'
+import { str } from './shared'
 
 export interface WorkToolDeps {
   /** 그 플랫폼의 로그인 통로 */
@@ -253,7 +254,6 @@ export function toolMessage(error: unknown): string {
   return '요청을 처리하지 못했어요. (' + code.slice(0, 80) + ')'
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 function indexes(v: unknown, length: number): number[] | null {
   if (v == null) return null
   if (!Array.isArray(v)) throw new Error('BAD_INDEX')

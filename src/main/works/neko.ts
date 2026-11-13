@@ -54,6 +54,7 @@ import type {
   WorkListItem,
   WorkWrite
 } from './types'
+import { keyList } from './shared'
 
 const READ_PATHS = [
   /^\/api\/users\/me\/characters$/,
@@ -141,11 +142,6 @@ function checkLorebook(lores: Obj[], isChanged: (e: Obj) => boolean, before: num
 
 const sameList = (a: string[], b: string[]): boolean =>
   a.length === b.length && a.every((v, i) => v === b[i])
-const keyList = (keys: string): string[] =>
-  keys
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean)
 // 편집기의 로어 추가 버튼과 같은 번호 모양
 const base36 = (n: number): string =>
   Array.from({ length: n }, () => '0123456789abcdefghijklmnopqrstuvwxyz'[randomInt(36)]).join('')

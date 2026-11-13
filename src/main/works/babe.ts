@@ -26,11 +26,10 @@ import type {
   WorkFetch,
   WorkListItem
 } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX, UUID, UUID_RE, at, feature, isObj, list, strOrNull, strings, text } from './shared'
 
 const ORIGIN = 'https://api.babechatapi.com'
 const BASE = ORIGIN + '/ko/api/characters/'
-const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-const UUID_RE = new RegExp('^' + UUID + '$', 'i')
 const READ_PATHS = [
   /^\/ko\/api\/characters\/my$/,
   new RegExp('^/ko/api/characters/' + UUID + '/edit$', 'i')
@@ -47,12 +46,6 @@ const WRITE_PATHS: Record<string, RegExp[]> = {
 const VISIBILITIES = ['public', 'private']
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 
 async function json(res: Response): Promise<unknown> {
   if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
@@ -126,23 +119,11 @@ function checkLength(where: string, value: unknown, min: number, max: number): v
     throw new Error('BAD_LENGTH ' + where + ' ' + min + '~' + max + '자')
 }
 
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 const edit = (raw: unknown): Obj => {
   if (!isObj(raw) || !isObj(raw.edit) || !strOrNull(raw.id)) throw new Error('WORK_SHAPE')
   return raw.edit
 }
 
-const feature = (
-  site: WorkFeature['site'],
-  read: WorkFeature['read'],
-  write: WorkFeature['write'],
-  verified: WorkFeature['verified'],
-  note?: string
-): WorkFeature => ({ site, read, write, verified, ...(note ? { note } : {}) })
 const NONE = (note: string): WorkFeature => feature('no', 'no', 'no', 'no', note)
 
 const FEATURES: Record<string, WorkFeature> = {
@@ -170,9 +151,6 @@ const FEATURES: Record<string, WorkFeature> = {
   comments_stats: feature('yes', 'no', 'no', 'no', '댓글 답글은 알림쪽만')
 }
 
-// extras에 그대로 싣는 짧은 값의 한도. 넘으면 글자 수·개수만 싣는다
-const SHORT_TEXT = 80
-const SHORT_LIST = 20
 /**
  * 원본 칸 하나를 extras에 얹는다. 짧은 값은 그대로, 긴 글은 `<이름>_length`, 긴 목록은 `<이름>_count`.
  * `sizeOnly`(작품 설정 글)는 짧아도 값을 싣지 않고 글자 수·개수만 싣는다.
@@ -187,10 +165,10 @@ function putExtra(out: Obj, e: Obj, from: string, name: string, sizeOnly = false
     else if (Array.isArray(v)) out[name + '_count'] = v.length
   } else if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) out[name] = v
   else if (typeof v === 'string') {
-    if (v.length <= SHORT_TEXT) out[name] = v
+    if (v.length <= EXTRA_TEXT_MAX) out[name] = v
     else out[name + '_length'] = v.length
   } else if (Array.isArray(v)) {
-    if (v.length <= SHORT_LIST && v.every((s) => typeof s === 'string' && s.length <= SHORT_TEXT))
+    if (v.length <= EXTRA_LIST_MAX && v.every((s) => typeof s === 'string' && s.length <= EXTRA_TEXT_MAX))
       out[name] = v
     else out[name + '_count'] = v.length
   }

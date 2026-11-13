@@ -1,3 +1,4 @@
+import { isObj, list } from './shared'
 // 에덴 언어 판본 저장. 2026-11-10 편집기 코드(40265 묶음)에서 읽은 흐름 그대로다.
 //   PUT /api/works/{id}/translations/{lang}   본문 {work, characters} → {item}   ('번역 저장' 버튼)
 // 편집기는 판본을 열 때 원문 위에 판본 값을 겹쳐 보여 주고(판본에 값이 있는 칸만), 저장할 때
@@ -5,8 +6,6 @@
 // 자동 번역(POST …/translations/{lang}, POST …/translation-drafts)은 돈이 드는 다른 길이라 부르지 않는다.
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
 const strOrUndef = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const strings = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : undefined

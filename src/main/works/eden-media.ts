@@ -21,13 +21,12 @@ import type {
   WorkIo,
   WorkSend
 } from './types'
+import { UUID, UUID_RE, at, isObj, list, text } from './shared'
 
 const ORIGIN = 'https://www.eden-chat.com'
 // 에덴의 파일 저장소 (편집기 코드에 적힌 Supabase 주소)
 const STORAGE = 'https://jhbfalszdxacwjnrrvms.supabase.co'
 const COVER_PREFIX = '/storage/v1/object/upload/sign/work-covers/'
-const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-const UUID_RE = new RegExp('^' + UUID + '$', 'i')
 const IMAGES_PATH = new RegExp('^/api/works/' + UUID + '/characters/' + UUID + '/images$', 'i')
 
 // 편집기는 올리기 전에 4,493,168바이트 이하로 줄인다. 그보다 크면 플랫폼이 413으로 거절한다.
@@ -40,15 +39,6 @@ export const EDEN_COVER_RULES: FileRules = { extensions: ['webp', 'gif'], maxByt
 const VISIBILITIES = ['public', 'private']
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 
 /** JSON이 아닌 요청(파일 묶음·삭제 쿼리·저장소)의 허용 규칙 */
 export function edenSendRule(method: string, url: string): SendRule | null {

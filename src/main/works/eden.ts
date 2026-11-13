@@ -30,10 +30,9 @@ import type {
   WorkFetch,
   WorkListItem
 } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX, UUID, UUID_RE, at, feature, isObj, list, strOrNull, text } from './shared'
 
 const ORIGIN = 'https://www.eden-chat.com'
-const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-const UUID_RE = new RegExp('^' + UUID + '$', 'i')
 const LANG_RE = /^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$/
 const READ_PATHS = [
   /^\/api\/user\/works$/,
@@ -45,10 +44,6 @@ const READ_PATHS = [
 ]
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
 const numOrNull = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null
 
@@ -64,8 +59,6 @@ function workId(id: string): string {
   return id.toLowerCase()
 }
 
-const SHORT_TEXT = 80
-const SHORT_LIST = 20
 // 사이트에는 있는데 이 연결부가 읽지 못하는 것 (빈 칸으로 보여도 "없음"이 아니다)
 const UNSUPPORTED = [
   '배경음',
@@ -92,7 +85,7 @@ function edenExtras(work: Obj, characters: Obj[]): Obj {
     if (v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)))
       out[key] = v
     else if (typeof v === 'string') {
-      if (v.length <= SHORT_TEXT) out[key] = v
+      if (v.length <= EXTRA_TEXT_MAX) out[key] = v
       else out[key + '_length'] = v.length
     }
   }
@@ -100,7 +93,7 @@ function edenExtras(work: Obj, characters: Obj[]): Obj {
     const v = work[key]
     if (!Array.isArray(v)) return
     const items = v.filter((s): s is string => typeof s === 'string')
-    if (items.length === v.length && items.length <= SHORT_LIST && items.every((s) => s.length <= SHORT_TEXT))
+    if (items.length === v.length && items.length <= EXTRA_LIST_MAX && items.every((s) => s.length <= EXTRA_TEXT_MAX))
       out[key] = items
     else out[key + '_count'] = v.length
   }
@@ -198,14 +191,6 @@ function body(work: Obj, characters: Obj[], images: Record<string, unknown>): Wo
     })
   }
 }
-
-const feature = (
-  site: WorkFeature['site'],
-  read: WorkFeature['read'],
-  write: WorkFeature['write'],
-  verified: WorkFeature['verified'],
-  note: string
-): WorkFeature => ({ site, read, write, verified, note })
 
 // 분석 문서(platform-analysis/eden.md 9절)를 코드와 맞춰 옮긴 것. note는 40자 이내.
 const EDEN_FEATURES: Record<string, WorkFeature> = {
@@ -739,12 +724,6 @@ export function edenCreateBody(draft: WorkDraft): Obj {
   // 편집기는 표지가 없으면 이 칸을 아예 보내지 않는다
   delete body.cover_image_url
   return body
-}
-
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
 }
 
 /**

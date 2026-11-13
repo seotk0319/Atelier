@@ -59,6 +59,7 @@ import type {
   WorkSend,
   WorkWrite
 } from './types'
+import { feature, keyList } from './shared'
 
 const READ_ONE = new RegExp(C_PATH + UUID + '$', 'i')
 const READ_PATHS = [
@@ -187,11 +188,6 @@ const FIELDS: Record<string, string> = {
   description: 'creatorNotes',
   main: 'description'
 }
-const keyList = (keys: string): string[] =>
-  keys
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean)
 const CONDITIONS = ['on_match', 'until_match']
 /** 공통 로어북 항목 → 엘린 lore. mode = condition, turnRange = scan_turns */
 function loreFrom(entry: Partial<LoreEntry>, base?: Obj): Obj {
@@ -265,13 +261,6 @@ const exclusiveLocked = (form: Obj): boolean => {
   return !until || Date.parse(until) > Date.now()
 }
 
-const feature = (
-  site: WorkFeature['site'],
-  read: WorkFeature['read'],
-  write: WorkFeature['write'],
-  verified: WorkFeature['verified'],
-  note: string
-): WorkFeature => ({ site, read, write, verified, note })
 const NOT_ON_SITE = (note: string): WorkFeature => feature('no', 'no', 'no', 'no', note)
 
 const FEATURES: Record<string, WorkFeature> = {

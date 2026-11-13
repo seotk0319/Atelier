@@ -13,6 +13,8 @@
 //     POST …/documents/users/{uid}:runQuery  {structuredQuery:{select, from:[{collectionId}], where is_deleted==false,
 //     orderBy time_created DESC}}  collectionId = OC_draft / OC_buffer / OC (여기서는 앞의 둘만)
 import type { FileRules, WorkFetch, WorkWrite } from './types'
+import { at, isObj, list, strOrNull, strings, text } from './shared'
+export { at, isObj, list, strOrNull, strings, text }
 
 export const PROJECT = 'chat-ai-7a275'
 export const FUNCTIONS = 'https://asia-northeast3-' + PROJECT + '.cloudfunctions.net/'
@@ -43,21 +45,10 @@ export const TEAPOT_IMAGE_RULES: FileRules = {
 }
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 
 export function teapotWorkId(id: string): string {
   if (!ID_RE.test(id)) throw new Error('BAD_WORK_ID')
   return id
-}
-export function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
 }
 
 /** 로그인한 계정 (Firebase ID 토큰의 sub). 목록은 계정 번호가 주소에 들어가 이것 없이는 못 읽는다 */

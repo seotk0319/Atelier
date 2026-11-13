@@ -686,7 +686,7 @@ describe('챗플 작품 연결부 — 기능 표·숨은 설정·못 읽는 칸'
     withStats.like_count = 777
     const b = chatpleWorks.normalize(await rawOf(withStats))
     expect(JSON.stringify(b)).toBe(JSON.stringify(a))
-    const { extras: _e, unsupported: _u, ...rest } = plain
+    const rest = plain
     expect(rest.visibility).toBe('private')
     expect(rest.lorebook.map((l) => l.keys)).toEqual(['성', '가, 나'])
   })

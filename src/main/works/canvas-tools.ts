@@ -8,13 +8,13 @@ import { createHash, randomBytes } from 'node:crypto'
 import { platformNote, workAdapter, workKey } from './adapters'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type { CanvasFile, CanvasImportOptions, CanvasSummary, WorkAdapter, WorkIo } from './types'
+import { str } from './shared'
 
 const PLAN_TTL = 30 * 60_000
 /** 캔버스 파일 한도. 실제 내보내기 파일은 0.5MB 안팎이다 */
 export const CANVAS_FILE_MAX = 20_000_000
 
 type Obj = Record<string, unknown>
-const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? ''
 
 interface CanvasPlan {

@@ -54,6 +54,7 @@ import type {
   WorkFeature,
   WorkListItem
 } from './types'
+import { feature, keyList } from './shared'
 
 const READ_PATHS = [
   /^\/v1\/creator\/work$/,
@@ -112,11 +113,6 @@ function checkFields(w: Obj, before?: Obj): void {
     if (text(w[key]).length > max) throw new Error('BAD_FIELD ' + name + ' ~' + max + '자')
   }
 }
-const keyList = (keys: string): string[] =>
-  keys
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean)
 
 /**
  * 공통 로어북 항목 → 우마이 로어북. mode: keyword(키워드로 발동) / always(상시 활성화 isConstant).
@@ -262,13 +258,6 @@ function checkPublishable(w: Obj): void {
   if (missing.length) throw new Error('PUBLISH_REQUIREMENTS ' + missing.join(','))
 }
 
-const feature = (
-  site: WorkFeature['site'],
-  read: WorkFeature['read'],
-  write: WorkFeature['write'],
-  verified: WorkFeature['verified'],
-  note?: string
-): WorkFeature => ({ site, read, write, verified, ...(note ? { note } : {}) })
 const NONE = (note: string): WorkFeature => feature('no', 'no', 'no', 'no', note)
 
 const FEATURES: Record<string, WorkFeature> = {

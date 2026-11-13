@@ -12,6 +12,7 @@ import {
   type GenitFormParts
 } from './genit-form'
 import type { FileRules, ImageChanges, ImageGroup, ImagePlanLine } from './types'
+import { at } from './shared'
 
 // 편집기는 webp가 아니면 브라우저에서 webp로 바꿔 올린다. 앱에는 바꾸는 기능이 없어 webp만 받는다.
 // 크기 한도는 편집기 설정 REQUEST_SIZE_LIMITS.IMAGE_UPLOAD (5,242,880바이트).
@@ -19,12 +20,6 @@ export const GENIT_IMAGE_RULES: FileRules = { extensions: ['webp'], maxBytes: 5_
 
 export const ASSET_GROUP = 0
 export const PROFILE_GROUP = 1
-
-function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 
 export function genitImageGroups(raw: unknown): ImageGroup[] {
   const c = character(raw)

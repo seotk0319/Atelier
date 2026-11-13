@@ -17,25 +17,14 @@
 //     images ≤1,000 {imageId(uuid), isPublic, keyword ≤30, slug /^[a-z0-9]{5}$/}, jsx {fileName, sourceCode, compiledCode, components}
 //   공개 여부 enum PublishStatus: Public 1 / Private 2 / LinkOnly 3
 import type { WorkWrite } from './types'
+import { UUID, UUID_RE, at, isObj, list, strOrNull, strings, text } from './shared'
+export { UUID, UUID_RE, at, isObj, list, strOrNull, strings, text }
 
 export const UUMAI_API = 'https://api.uumm.ai/v1'
 export const UUMAI_SITE = 'https://uumm.ai'
-export const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-export const UUID_RE = new RegExp('^' + UUID + '$', 'i')
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 
-export function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
-}
 export function uumaiWorkId(id: string): string {
   if (!UUID_RE.test(id)) throw new Error('BAD_WORK_ID')
   return id

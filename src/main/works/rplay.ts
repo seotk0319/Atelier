@@ -68,6 +68,7 @@ import type {
   WorkListItem,
   WorkWrite
 } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX } from './shared'
 
 const VISIBILITIES = ['public', 'private']
 // 간단 소개 글자 한도 (편집 화면 Js 표, 언어별)
@@ -157,8 +158,6 @@ function loreOf(r: RplayRaw): LoreEntry[] {
 
 // ───────────── 공통 칸에 안 드는 설정 (읽기 전용) ─────────────
 
-const EXTRA_TEXT_MAX = 80
-const EXTRA_LIST_MAX = 20
 /** 사이트에는 있는데 이 연결부가 읽지 못하는 것 (extras로 읽는 것은 넣지 않는다) */
 const UNSUPPORTED = [
   '댓글',

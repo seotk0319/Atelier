@@ -6,6 +6,8 @@
 // 응답은 모두 {result:"SUCCESS", data} 모양이고, 사이트의 axios는 본문(result·data)을 그대로 돌려준다.
 import { randomInt } from 'node:crypto'
 import type { FileRules } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX, at, isObj, list, strOrNull, strings, text } from './shared'
+export { at, isObj, list, strOrNull, strings, text }
 
 export const CRACK_ORIGIN = 'https://crack-api.wrtn.ai'
 export const CRACK_API = CRACK_ORIGIN + '/crack-api'
@@ -20,21 +22,10 @@ export const CRACK_IMAGE_RULES: FileRules = {
 }
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 
 export function crackWorkId(id: string): string {
   if (!OID_RE.test(id)) throw new Error('BAD_WORK_ID')
   return id
-}
-export function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
 }
 
 /** 크랙 API 주소이고 경로가 맞는지. query를 주면 쿼리도 그 검사로 본다 (주지 않으면 쿼리가 없어야 한다) */
@@ -381,8 +372,6 @@ export function crackForm(story: Obj): CrackForm {
 
 // ───────────── 읽기 전용 설정 (extras·unsupported) ─────────────
 
-const EXTRA_TEXT_MAX = 80
-const EXTRA_LIST_MAX = 20
 const shortText = (v: unknown): string | undefined =>
   typeof v === 'string' && v && v.length <= EXTRA_TEXT_MAX ? v : undefined
 const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined)

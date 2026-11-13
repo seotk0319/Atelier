@@ -2,11 +2,11 @@
 // 근거: 2026-11-10 엘린 편집기 공개 스크립트(characterToFormSchema / normalizeLorebookForForm /
 // normalizeDraftForm / buildCharacterFormData / buildJsonData, charactersApi.saveCharacterDraft·submitCharacterRevision).
 import type { FileRules, LocalImage, WorkFetch, WorkSend, WorkWrite } from './types'
+import { UUID, UUID_RE, at, isObj, list, strOrNull, strings, text } from './shared'
+export { UUID, UUID_RE, at, isObj, list, strOrNull, strings, text }
 
 export const ELYN_ORIGIN = 'https://api.elyn.ai'
 export const ELYN_BASE = ELYN_ORIGIN + '/api/v1/characters/'
-export const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-export const UUID_RE = new RegExp('^' + UUID + '$', 'i')
 // 판(revision) 번호 모양은 코드에 없다. uuid 또는 정수만 받는다.
 export const REV = '(?:' + UUID + '|[0-9]{1,18})'
 export const REV_RE = new RegExp('^' + REV + '$', 'i')
@@ -25,12 +25,6 @@ export const ELYN_BATCH_FILES = 10
 export const ELYN_BATCH_BYTES = 20 * 1024 * 1024
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 export const bytes = (s: string): number => new TextEncoder().encode(s).length
 
 export async function elynJson(res: Response): Promise<unknown> {
@@ -62,11 +56,6 @@ export function elynPlain(
   } catch {
     return false
   }
-}
-export function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
 }
 
 // ── 편집기 폼 모양 ──

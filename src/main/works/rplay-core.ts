@@ -5,6 +5,8 @@
 //   axios 0.x 쿼리 규칙: 배열은 key[]=값 반복, 객체는 JSON 글, null·undefined 값은 빠진다.
 // storyengine.live 빌드는 API가 https://api.storyengine.live 로 다르다(로그인도 따로). 여기서는 rplay.live만 쓴다.
 import type { WorkFetch } from './types'
+import { at, isObj, list, strOrNull, strings, text } from './shared'
+export { at, isObj, list, strOrNull, strings, text }
 
 export const RPLAY_API = 'https://api.rplay.live'
 export const RPLAY_CHAT_ORIGIN = 'https://chat-api.rplay.live'
@@ -15,12 +17,6 @@ export const HEX_RE = new RegExp('^' + HEX + '$')
 const LOGIN_TYPE_RE = /^[a-z][a-z0-9-]{0,20}$/
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 /** 몽고 ObjectId는 문자열이거나 {$oid}로 올 수 있다 */
 export const oidOf = (v: unknown): string => {
   const s = typeof v === 'string' ? v : isObj(v) ? text(v.$oid) : ''
@@ -30,11 +26,6 @@ export const oidOf = (v: unknown): string => {
 export function rplayWorkId(id: string): string {
   if (!HEX_RE.test(id)) throw new Error('BAD_WORK_ID')
   return id
-}
-export function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
 }
 
 // ───────────── 로그인 계정 ─────────────

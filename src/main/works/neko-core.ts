@@ -5,6 +5,8 @@
 //   저장 → PUT /api/characters  JSON {…폼, characterId, notifyFollowers, avatar:{url, alt}, uploadedImageUrls?}
 // 네코챗은 사이트 쿠키로 로그인을 확인한다 (알림 통로도 쿠키만 쓴다).
 import type { FileRules, WorkWrite } from './types'
+import { EXTRA_LIST_MAX, EXTRA_TEXT_MAX, at, isObj, list, strOrNull, strings, text } from './shared'
+export { at, isObj, list, strOrNull, strings, text }
 
 export const NEKO_ORIGIN = 'https://www.nekochat.xyz'
 export const NEKO_CHARACTERS = NEKO_ORIGIN + '/api/characters'
@@ -20,12 +22,6 @@ export const NEKO_IMAGE_RULES: FileRules = {
 }
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 
 export async function nekoJson(res: Response): Promise<unknown> {
   if (res.status === 401 || res.status === 403) throw new Error('LOGIN_REQUIRED')
@@ -36,11 +32,6 @@ export async function nekoJson(res: Response): Promise<unknown> {
 export function nekoWorkId(id: string): string {
   if (!CHAR_RE.test(id)) throw new Error('BAD_WORK_ID')
   return id
-}
-export function at(index: unknown, length: number): number {
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length)
-    throw new Error('BAD_INDEX')
-  return index
 }
 /** 네코챗 주소이고 경로가 맞는지. query를 주면 쿼리도 그 검사로 본다 (주지 않으면 쿼리가 없어야 한다) */
 export function nekoPlain(
@@ -185,8 +176,6 @@ export async function nekoReadRaw(
   return { id: wid, character: got.character }
 }
 
-const EXTRA_TEXT_MAX = 80
-const EXTRA_LIST_MAX = 20
 /**
  * 공통 칸에 들지 않는 원본 설정 (work_read의 extras, 읽기 전용). 원본에 실제로 있는 칸만 싣고,
  * 짧은 값은 그대로, 목록은 개수로 줄인다. 작품 본문·주소·계정 번호와, 읽을 때마다 달라지는 통계

@@ -8,6 +8,8 @@
 // 본문(시작 상황·로어북·캐릭터·프롬프트·상태 변수·템플릿)이 달라졌을 때만 본문 묶음을 통째로 같이 보낸다.
 // 태그·장르·설명 이미지·대표 이미지 썸네일은 우리가 바꾸지 않으므로 보내지 않는다(PATCH에 없는 칸).
 import type { FormField, LocalImage } from './types'
+import { isObj, list, strings, text } from './shared'
+export { isObj, list, strings, text }
 
 export const GENIT_API = 'https://api.genit.ai'
 export const GENIT_SITE = 'https://genit.ai'
@@ -21,11 +23,6 @@ export const LORE_CATEGORIES = ['지역', '세력', '물건', '설정', '사건'
 export const LORE_UNSET = '미설정'
 
 export type Obj = Record<string, unknown>
-export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
-export const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
-export const text = (v: unknown): string => (typeof v === 'string' ? v : '')
-export const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []
 const lf = (v: unknown): string => text(v).replace(/\r\n?/g, '\n')
 
 /** 작품 원본(GET /api/characters/{id}/ 응답)인지 본다 */

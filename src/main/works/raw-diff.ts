@@ -1,3 +1,4 @@
+import { isObj } from './shared'
 // 플랫폼 원본 두 개를 통째로 견준다. 저장 뒤 검증(work_save의 raw_check)에 쓴다.
 // 공통 모양(WorkBody)만 견주면 연결부가 모르는 칸이 바뀌거나 사라져도 드러나지 않는다.
 // 결과에는 경로와 값의 모양(종류·길이)만 싣고 내용은 싣지 않는다.
@@ -12,7 +13,6 @@ export interface RawChange {
 }
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
 
 function shape(v: unknown): string {
   if (v === null) return 'null'

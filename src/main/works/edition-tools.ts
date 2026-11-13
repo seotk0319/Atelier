@@ -7,8 +7,7 @@ import { platformNote, workAdapter, workKey } from './adapters'
 import { CHANGE_PROPERTIES, diffBodies, parseChanges, PLAN_TTL } from './save-tools'
 import type { ToolDef, WorkToolDeps } from './tools'
 import type { WorkAdapter, WorkBody, WorkChanges, WorkFetch } from './types'
-
-const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+import { str } from './shared'
 
 interface EditionPlan {
   site: string
