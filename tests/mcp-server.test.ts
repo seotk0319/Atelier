@@ -141,6 +141,76 @@ describe('MCP 창구 (HTTP)', () => {
     expect(((await batch.json()) as unknown[]).length).toBe(2)
   })
 
+  describe('화면용 읽기 창구 /view', () => {
+    const openView = async (): Promise<void> => {
+      server = createMcpServer({
+        port: PORT,
+        token: TOKEN,
+        info: INFO,
+        tools: TOOLS,
+        view: async (channel, req) => {
+          if (channel === 'inbox:reply') throw new Error('LOGIN_REQUIRED')
+          return { channel, req }
+        },
+        thumb: async (url) =>
+          url === 'https://img.example/a.png'
+            ? { type: 'image/png', bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }
+            : null
+      })
+      await server.start()
+    }
+    const view = (body: unknown, headers: Record<string, string> = {}): Promise<Response> =>
+      fetch('http://127.0.0.1:' + PORT + '/view', {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + TOKEN, ...headers },
+        body: JSON.stringify(body)
+      })
+
+    it('아는 채널은 답과 만든 시각을 돌려준다', async () => {
+      await openView()
+      const res = await view({ channel: 'inbox:works', req: { cached: true } })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { ok: boolean; at: string; res: unknown }
+      expect(body.ok).toBe(true)
+      expect(Number.isNaN(Date.parse(body.at))).toBe(false)
+      expect(body.res).toEqual({ channel: 'inbox:works', req: { cached: true } })
+    })
+
+    it('모르는 채널·로그인 채널은 404, 비밀값이 틀리면 401', async () => {
+      await openView()
+      expect((await view({ channel: 'inbox:connect', req: { platform: 'eden' } })).status).toBe(404)
+      expect((await view({ channel: 'aiReply:setKey', req: { key: 'x' } })).status).toBe(404)
+      expect((await view({ channel: 'inbox:query' }, { authorization: '' })).status).toBe(401)
+    })
+
+    it('처리 중 오류는 ok: false 로 알린다', async () => {
+      await openView()
+      const body = (await (await view({ channel: 'inbox:reply', req: {} })).json()) as {
+        ok: boolean
+        error: string
+      }
+      expect(body).toMatchObject({ ok: false, error: 'LOGIN_REQUIRED' })
+    })
+
+    it('썸네일: 허용된 주소만 그림으로 답한다', async () => {
+      await openView()
+      const get = (u: string): Promise<Response> =>
+        fetch('http://127.0.0.1:' + PORT + '/view/thumb?u=' + encodeURIComponent(u), {
+          headers: { authorization: 'Bearer ' + TOKEN }
+        })
+      const ok = await get('https://img.example/a.png')
+      expect(ok.status).toBe(200)
+      expect(ok.headers.get('content-type')).toBe('image/png')
+      expect((await ok.arrayBuffer()).byteLength).toBe(4)
+      expect((await get('https://other.example/a.png')).status).toBe(404)
+    })
+
+    it('창구를 안 준 서버에는 /view 가 없다', async () => {
+      await open()
+      expect((await view({ channel: 'inbox:query' })).status).toBe(404)
+    })
+  })
+
   it('연결 정보 파일: 비밀값을 한 번 만들면 포트가 바뀌어도 그대로 둔다', async () => {
     dir = await mkdtemp(join(tmpdir(), 'nais3-mcp-'))
     const file = join(dir, 'mcp', 'connection.json')

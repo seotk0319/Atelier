@@ -13,6 +13,7 @@ import { createActivityLog, withActivity, type ActivityLog } from './activity'
 import { createEditionStore, type EditionStore } from './editions'
 import { probeRemoteMcp } from './remote-probe'
 import { createMcpServer, loadConnection, MCP_DEFAULT_PORT } from './server'
+import { createViewHost } from '../remote/view-host'
 
 let running: ReturnType<typeof createMcpServer> | null = null
 /** 마지막으로 열려고 한 포트와, 열지 못했을 때의 이유 (화면 표시용) */
@@ -99,9 +100,12 @@ export async function startMcp(): Promise<void> {
   lastError = null
   try {
     const { token } = await loadConnection(join(root, 'connection.json'), port)
+    const host = createViewHost({ mcpStatus, mcpActivity, mcpEditions })
     const server = createMcpServer({
       port,
       token,
+      view: host.view,
+      thumb: host.thumb,
       info: { name: 'atelier-works', version: app.getVersion() },
       tools: withActivity(
         createWorkTools({

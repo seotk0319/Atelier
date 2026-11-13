@@ -515,6 +515,12 @@ export async function openInboxSource(id: string): Promise<void> {
   if (!item) throw new Error('알림을 찾을 수 없어요.')
   await shell.openExternal(sourceUrl(item))
 }
+/** 알림 원문 주소. 집 PC 아틀리에가 받아서 자기 브라우저로 연다. */
+export async function inboxSourceUrl(id: string): Promise<{ url: string }> {
+  const item = (await (await ready()).view()).items.find((item) => item.id === id)
+  if (!item) throw new Error('알림을 찾을 수 없어요.')
+  return { url: sourceUrl(item) }
+}
 export async function closeInbox(): Promise<void> {
   if (start) await start
   if (direct) await direct.stop()

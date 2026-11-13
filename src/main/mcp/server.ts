@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { createMcpHandler, type McpInfo } from './protocol'
 import type { ToolDef } from '../works/tools'
+import { isViewChannel, type ViewReply } from '../../shared/remote-view'
 
 export const MCP_DEFAULT_PORT = 39317
 const MAX_BODY = 1_000_000
@@ -60,6 +61,10 @@ export function createMcpServer(options: {
   token: string
   info: McpInfo
   tools: ToolDef[]
+  /** 화면용 읽기 창구(/view). 집 PC 아틀리에가 받아 간다. 없으면 열지 않는다 */
+  view?: (channel: string, req: unknown) => Promise<unknown>
+  /** 작품 썸네일 대신 받아 주기(/view/thumb?u=). 허용되지 않는 주소면 null */
+  thumb?: (url: string) => Promise<{ type: string; bytes: Uint8Array } | null>
 }): { start(): Promise<void>; stop(): Promise<void> } {
   const handle = createMcpHandler(options.info, options.tools)
   const hosts = new Set(['127.0.0.1:' + options.port, 'localhost:' + options.port])
@@ -74,11 +79,51 @@ export function createMcpServer(options: {
     res.end(JSON.stringify(body))
   }
 
+  async function onThumb(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { allow: 'GET' }).end()
+      return
+    }
+    const target = new URL(req.url || '', 'http://127.0.0.1').searchParams.get('u') ?? ''
+    const image = await options.thumb?.(target).catch(() => null)
+    if (!image) return send(res, 404)
+    res.writeHead(200, { 'content-type': image.type, 'content-length': image.bytes.length })
+    res.end(image.bytes)
+  }
+
+  async function onView(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { allow: 'POST' }).end()
+      return
+    }
+    let message: { channel?: unknown; req?: unknown }
+    try {
+      message = JSON.parse(await readBody(req)) as typeof message
+    } catch {
+      return send(res, 400)
+    }
+    const channel = typeof message?.channel === 'string' ? message.channel : ''
+    if (!isViewChannel(channel)) return send(res, 404)
+    const at = new Date().toISOString()
+    let reply: ViewReply
+    try {
+      reply = { ok: true, at, res: (await options.view!(channel, message.req)) ?? null }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error)
+      reply = { ok: false, at, error: text.slice(0, 300) }
+    }
+    return send(res, 200, reply)
+  }
+
   async function onRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!hosts.has(String(req.headers.host || ''))) return send(res, 403)
     if (req.headers.origin !== undefined) return send(res, 403)
-    if ((req.url || '').split('?')[0] !== '/mcp') return send(res, 404)
+    const path = (req.url || '').split('?')[0]
+    if (path !== '/mcp' && !(options.view && (path === '/view' || path === '/view/thumb')))
+      return send(res, 404)
     if (!sameToken(req.headers.authorization, options.token)) return send(res, 401)
+    if (path === '/view/thumb') return onThumb(req, res)
+    if (path === '/view') return onView(req, res)
     if (req.method !== 'POST') {
       res.writeHead(405, { allow: 'POST' }).end()
       return
