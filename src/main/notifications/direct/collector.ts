@@ -169,6 +169,8 @@ export function createDirectCollector(options: {
 } {
   const { store, version } = options
   const vault = createVault(join(options.directory, 'direct-sessions.bin'))
+  const ACCEPT_LANGUAGE = 'ko-KR,ko;q=0.9'
+
   const ses: Session = electronSession.fromPartition('persist:moa-direct')
   let state: DirectState | null = null,
     loading: Promise<DirectState> | null = null,
@@ -191,7 +193,8 @@ export function createDirectCollector(options: {
       loading = vault.load().then(
         (value) => {
           state = value
-          if (value.userAgent) ses.setUserAgent(value.userAgent)
+          // 접속 언어는 기기 언어와 상관없이 한국어로 둔다 (에덴은 접속 언어에 맞춘 판본 제목을 준다)
+          if (value.userAgent) ses.setUserAgent(value.userAgent, ACCEPT_LANGUAGE)
           return value
         },
         (error: Error) => {
@@ -595,7 +598,7 @@ export function createDirectCollector(options: {
         if (profile) {
           await importCookies(platform, await open.cookies())
           s.userAgent = open.userAgent
-          ses.setUserAgent(open.userAgent)
+          ses.setUserAgent(open.userAgent, ACCEPT_LANGUAGE)
           s.platforms[platform] = { profile, connectedAt: new Date().toISOString() }
           delete s.checkpoints[platform]
           delete s.lastRun[platform]
@@ -808,15 +811,26 @@ export function createDirectCollector(options: {
       const read: WorkRead = async (url, init) => {
         if (!myWorksReadAllowed(platform, url)) throw new Error('UNAPPROVED_READ_ROUTE')
         const origin = new URL(url).origin
-        const call = (): Promise<Response> =>
+        // POST 읽기(루나 작품 목록)는 workRead와 같은 이유로 쿠키와 Origin을 직접 싣는다 (SameSite=Lax
+        // 자동 로그인 쿠키가 앱의 POST에는 빠진다).
+        const post = init?.method === 'POST'
+        const jar = async (): Promise<Record<string, string>> => {
+          if (!post) return {}
+          const cookies = await ses.cookies.get({ url })
+          return { cookie: cookies.map((c) => c.name + '=' + c.value).join('; '), origin }
+        }
+        const call = async (): Promise<Response> =>
           ses.fetch(url, {
             method: init?.method ?? 'GET',
             headers: {
               ...(holder.profile.headersByOrigin?.[origin] || holder.profile.headers || {}),
-              ...(init?.contentType ? { 'content-type': init.contentType } : {})
+              ...(init?.contentType ? { 'content-type': init.contentType } : {}),
+              // 제목을 접속 언어에 맞춰 주는 곳(에덴)이 있다. 기기 언어와 상관없이 한국어 원제를 받는다
+              'accept-language': ACCEPT_LANGUAGE,
+              ...(await jar())
             },
             body: init?.body,
-            credentials: 'include',
+            credentials: post ? 'omit' : 'include',
             redirect: 'error',
             signal: AbortSignal.timeout(20_000)
           })
