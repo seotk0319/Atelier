@@ -29,6 +29,7 @@ import { openCensorBatch } from '../stores/censor-store'
 import { useGenerationStore } from '../stores/generation-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { cn } from '../lib/utils'
+import { droppedInternalPath } from '../lib/image-drag'
 import { isLeavingDropZone, useDragEndCleanup } from '../lib/drop-zone'
 import { DropOverlay } from './drop-overlay'
 import { MosaicEditor } from './mosaic-editor'
@@ -199,7 +200,7 @@ export function DirectorMode(): React.JSX.Element {
         onDrop={(e) => {
           e.preventDefault()
           setDragOver(false)
-          const internalPath = e.dataTransfer.getData('nais/file-path')
+          const internalPath = e.dataTransfer.getData('nais/file-path') || droppedInternalPath(e)
           if (internalPath) {
             void openInDirector(internalPath)
             return

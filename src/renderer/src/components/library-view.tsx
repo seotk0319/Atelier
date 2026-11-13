@@ -24,7 +24,7 @@ import { imageUrl } from '../lib/constants'
 import { cn } from '../lib/utils'
 import { olderWindow, recentWindowStart } from '../lib/library-window'
 import {
-  LIBRARY_ENTRY_MIME,
+  hasLibraryEntryDrag,
   LIBRARY_FOLDER_MIME,
   readLibraryEntry,
   setImagePathDrag,
@@ -581,7 +581,7 @@ function LibrarySidebar({
           <div
             onDragOver={(e) => {
               if (
-                e.dataTransfer.types.includes(LIBRARY_ENTRY_MIME) ||
+                hasLibraryEntryDrag(e) ||
                 e.dataTransfer.types.includes(LIBRARY_FOLDER_MIME)
               ) {
                 e.preventDefault()
@@ -669,7 +669,7 @@ function VirtualFolderRow({
         }}
         onDragOver={(e) => {
           if (
-            e.dataTransfer.types.includes(LIBRARY_ENTRY_MIME) ||
+            hasLibraryEntryDrag(e) ||
             e.dataTransfer.types.includes(LIBRARY_FOLDER_MIME)
           ) {
             e.preventDefault()
@@ -793,8 +793,7 @@ function ImageCardSquare({
       <button
         draggable
         onDragStart={(e) => {
-          setImagePathDrag(e, item.filePath)
-          setLibraryEntryDrag(e, { type: 'image', id: item.id })
+          setImagePathDrag(e, item.filePath, { type: 'image', id: item.id })
         }}
         className="relative aspect-square overflow-hidden rounded-lg border border-line bg-paper transition-all hover:ring-2 hover:ring-accent/60"
         title={`seed ${item.seed ?? '?'} · 레퍼런스/가상 폴더로 드래그 가능`}
@@ -841,8 +840,7 @@ function ImageCardNatural({
       <button
         draggable
         onDragStart={(e) => {
-          setImagePathDrag(e, item.filePath)
-          setLibraryEntryDrag(e, { type: 'image', id: item.id })
+          setImagePathDrag(e, item.filePath, { type: 'image', id: item.id })
         }}
         className="mb-2 block w-full overflow-hidden rounded-lg border border-line bg-paper transition-all [break-inside:avoid] hover:ring-2 hover:ring-accent/60"
         title={`seed ${item.seed ?? '?'} · 레퍼런스/가상 폴더로 드래그 가능`}

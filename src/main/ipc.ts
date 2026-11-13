@@ -803,12 +803,37 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     return { saved: true }
   })
 
-  handle('images:copy', ({ filePath }) => {
-    const img = nativeImage.createFromPath(filePath)
+  handle('images:copy', async ({ filePath }) => {
+    // nativeImage는 Windows에서 PNG·JPEG만 읽는다. webp 등은 sharp로 풀어서 넣는다.
+    let img = nativeImage.createFromPath(filePath)
+    if (img.isEmpty()) {
+      try {
+        img = nativeImage.createFromBuffer(await sharp(filePath).png().toBuffer())
+      } catch {
+        return { copied: false }
+      }
+    }
     if (img.isEmpty()) return { copied: false }
     clipboard.writeImage(img)
     return { copied: true }
   })
+
+  // 진짜 파일을 싣는 OS 끌기. 끄는 동안 반환하지 않으므로 느린 곳 기록(handle)을 거치지 않는다.
+  ipcMain.handle(
+    'images:startDrag',
+    async (event, { filePath }: IpcInvokeMap['images:startDrag']['req']) => {
+      if (!existsSync(filePath)) return { started: false }
+      try {
+        const icon = nativeImage.createFromBuffer(
+          await sharp(filePath).resize(128, 128, { fit: 'inside' }).png().toBuffer()
+        )
+        event.sender.startDrag({ file: filePath, icon })
+        return { started: true }
+      } catch {
+        return { started: false }
+      }
+    }
+  )
 
   const saveDirKey = (target?: 'main' | 'scene'): string =>
     target === 'scene' ? 'scene_save_dir' : 'save_dir'

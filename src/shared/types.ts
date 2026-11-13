@@ -662,6 +662,7 @@ export interface IpcInvokeMap {
   'images:saveAs': { req: { filePath: string }; res: { saved: boolean } }
   /** 이미지를 클립보드로 복사 */
   'images:copy': { req: { filePath: string }; res: { copied: boolean } }
+  'images:startDrag': { req: { filePath: string }; res: { started: boolean } }
   /** 저장 폴더: 현재 경로 조회 / 폴더 선택 / 기본값으로 초기화 */
   /** target 생략 = main(메인 모드). 'scene' = 씬 모드 저장 폴더 */
   'settings:getSaveDir': {

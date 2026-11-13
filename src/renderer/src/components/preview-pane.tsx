@@ -5,7 +5,7 @@ import { useGenerationStore } from '../stores/generation-store'
 import { useMetadataStore } from '../stores/metadata-store'
 import { cn } from '../lib/utils'
 import { isLeavingDropZone, useDragEndCleanup } from '../lib/drop-zone'
-import { setImagePathDrag } from '../lib/image-drag'
+import { droppedInternalPath, setImagePathDrag } from '../lib/image-drag'
 import { DropOverlay } from './drop-overlay'
 import { ImageContextMenu } from './image-context-menu'
 
@@ -86,7 +86,7 @@ export function PreviewPane(): React.JSX.Element {
         e.preventDefault()
         setDragOver(false)
         // 히스토리 썸네일 드래그 → 해당 이미지 메타데이터
-        const internalPath = e.dataTransfer.getData('nais/file-path')
+        const internalPath = e.dataTransfer.getData('nais/file-path') || droppedInternalPath(e)
         if (internalPath) {
           void showMeta({ filePath: internalPath })
           return
