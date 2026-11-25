@@ -8,7 +8,7 @@ import type {
 } from '@shared/types'
 import { NAI_MODEL_V45_FULL } from '@shared/nai-models'
 import { queueDoneAlert } from '../lib/completion-alert'
-import { enabledCharacters, setCharacterModelSource } from './characters-store'
+import { characterLimit, enabledCharacters, setCharacterModelSource } from './characters-store'
 import { useVibesStore } from './refs-store'
 import { toast } from './toast-store'
 
@@ -213,6 +213,15 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     // 3분할 꺼진 상태로 뽑은 이미지에 promptParts 메타데이터가 담기면 안 됨
     if (!promptSplitEnabled) delete baseRequest.promptParts
     // 캐릭터는 라이브러리의 enabled 카드에서 구성 (리스트 순서 = v4 use_order 순서)
+    // V5에서 켠 캐릭터가 V4.5 상한(6명)을 넘은 채 모델을 바꾸면 그대로 보내져 NAI가 거절했다
+    const limit = characterLimit()
+    if (enabledCharacters().length > limit) {
+      toast(
+        `이 모델은 캐릭터를 ${limit}명까지 보낼 수 있어요. 캐릭터 창에서 ${enabledCharacters().length - limit}명을 꺼 주세요`,
+        'error'
+      )
+      return false
+    }
     const characterPrompts = enabledCharacters().map((c) => ({
       prompt: c.prompt,
       negativePrompt: c.negativePrompt,
