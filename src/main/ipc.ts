@@ -542,8 +542,11 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     renamePreset(id, name)
   })
   handle('scenePresets:delete', ({ id }) => {
-    // 지워지는 씬 번호는 다른 씬이 다시 받을 수 있다 — 큐에 남은 그 씬 예약 출처를 잊는다
-    ctx.queue.forgetReservations(
+    // 마지막 프리셋은 지우지 않는다(deletePreset이 그냥 돌아간다) — 그때는 큐도 건드리지 않는다
+    if (listPresets().length <= 1) return
+    // 씬 하나 지울 때처럼 그 프리셋 씬의 대기·생성 중 항목을 취소한다 (주인 없는 그림에 Anlas를 쓰지 않게).
+    // cancelScenes는 예약 출처도 잊는다 — 지워진 씬 번호를 다른 씬이 다시 받아도 예약이 붙지 않는다.
+    ctx.queue.cancelScenes(
       getDb().prepare('SELECT id FROM gen_scenes WHERE preset_id = ?').pluck().all(id) as number[]
     )
     deletePreset(id)
