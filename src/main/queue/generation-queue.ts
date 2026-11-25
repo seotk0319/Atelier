@@ -368,15 +368,11 @@ export class GenerationQueue extends EventEmitter {
   private nextDispatchable(): { item: InternalQueueItem; account: GenerationAccount } | undefined {
     const accounts = this.getAccounts().filter((account) => account.id && account.token.trim())
     if (accounts.length === 0) return undefined
-    // 대기 중인 작업도 가속에서 뺀 계정은 새로 쓰지 않는다. 그 작업이 쓸 수 있는 계정이
-    // 전부 빠졌을 때만 원래 계정 그대로 둔다 (영원히 대기하지 않게).
-    const excluded = new Set(this.getAccelerationExcluded())
     // 바로 뽑기(priority)를 먼저, 그다음 예약 순서대로.
     const pending = [...this.items.values()].filter((item) => item.state === 'pending')
     const ordered = [...pending.filter((i) => i.priority), ...pending.filter((i) => !i.priority)]
     for (const item of ordered) {
-      const preferred = item.allowedAccountIds.filter((id) => !excluded.has(id))
-      const allowed = preferred.length ? preferred : item.allowedAccountIds
+      const allowed = this.effectiveAllowed(item)
       for (let offset = 0; offset < accounts.length; offset++) {
         const index = (this.roundRobinIndex + offset) % accounts.length
         const account = accounts[index]
@@ -472,13 +468,24 @@ export class GenerationQueue extends EventEmitter {
     }
   }
 
+  /**
+   * 이 항목을 지금 맡길 수 있는 계정 id. 대기 중인 작업도 가속에서 뺀 계정은 새로 쓰지 않는다.
+   * 그 작업이 쓸 수 있는 계정이 전부 빠졌을 때만 원래 계정 그대로 둔다 (영원히 대기하지 않게).
+   * 넘기기·고아 판정도 같은 집합을 봐야 한다 — 다르면 뺀 계정을 기다리며 영원히 대기한다.
+   */
+  private effectiveAllowed(item: InternalQueueItem): string[] {
+    const excluded = new Set(this.getAccelerationExcluded())
+    const preferred = item.allowedAccountIds.filter((id) => !excluded.has(id))
+    return preferred.length ? preferred : item.allowedAccountIds
+  }
+
   /** 이 항목이 쓸 수 있는 계정 가운데 막히지 않은 다른 계정이 있는지 */
   private hasOtherUsableAccount(item: InternalQueueItem, failedId: string): boolean {
     return this.getAccounts().some(
       (account) =>
         account.id !== failedId &&
         account.token.trim() &&
-        item.allowedAccountIds.includes(account.id) &&
+        this.effectiveAllowed(item).includes(account.id) &&
         !this.blockedAccounts.has(account.id)
     )
   }
@@ -503,7 +510,7 @@ export class GenerationQueue extends EventEmitter {
     let changed = false
     for (const item of this.items.values()) {
       if (item.state !== 'pending') continue
-      if (item.allowedAccountIds.some((id) => usableIds.has(id))) continue
+      if (this.effectiveAllowed(item).some((id) => usableIds.has(id))) continue
       item.error = '사용 가능한 NAI 계정이 없어 생성이 중단됐습니다'
       this.markTerminal(item, 'failed')
       this.releaseHeavyFields(item)

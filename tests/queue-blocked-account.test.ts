@@ -85,3 +85,33 @@ describe('account blocked by an auth error', () => {
     expect(queue.status().counts).toMatchObject({ failed: 1, cancelled: 0 })
   })
 })
+
+describe('auth failure with an account left out of acceleration', () => {
+  it('fails the image instead of waiting forever for the unchecked account', async () => {
+    const accounts: GenerationAccount[] = [
+      { id: 'a1', name: '계정 1', token: 'bad' },
+      { id: 'a2', name: '계정 2', token: 'good' }
+    ]
+    const excluded: string[] = []
+    let rejectA1: (e: unknown) => void = () => undefined
+    const queue = new GenerationQueue(
+      (_r, _id, _signal, acc) =>
+        new Promise<string>((_resolve, reject) => {
+          if (acc.id === 'a1') rejectA1 = reject
+        }),
+      {
+        getAccounts: () => accounts,
+        accelerationAvailable: true,
+        isAccelerationEnabled: () => true,
+        getAccelerationExcluded: () => excluded
+      }
+    )
+    queue.setDelayMs(0)
+    queue.enqueue(request, 1) // a1·a2 둘 다 쓸 수 있게 받았고 a1이 가져갔다
+    await tick()
+    excluded.push('a2') // 그 사이 a2를 가속에서 뺐다
+    rejectA1(Object.assign(new Error('생성 실패 401'), { status: 401 }))
+    for (let i = 0; i < 5; i++) await tick()
+    expect(queue.status().counts).toMatchObject({ pending: 0, failed: 1 })
+  })
+})
