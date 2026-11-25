@@ -542,8 +542,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     renamePreset(id, name)
   })
   handle('scenePresets:delete', ({ id }) => {
-    // 지워지는 씬 번호는 다른 씬이 다시 받을 수 있다 — 큐에 남은 그 씬 예약 출처를 잊는다
-    ctx.queue.forgetReservations(
+    // 지워지는 씬으로 가던 생성(대기·진행 중)을 멈춘다 — 돌게 두면 Anlas를 쓰고, 지워진 씬 번호를
+    // 새 씬이 다시 받으면 그 씬에 엉뚱한 그림이 붙는다 (upstream NAIS3 e7d0483). 예약 출처도 같이 잊는다.
+    ctx.queue.cancelScenes(
       getDb().prepare('SELECT id FROM gen_scenes WHERE preset_id = ?').pluck().all(id) as number[]
     )
     deletePreset(id)
