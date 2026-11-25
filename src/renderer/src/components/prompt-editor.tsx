@@ -442,6 +442,8 @@ export function PromptEditor({
             e.preventDefault()
             complete(suggestions[selected])
           } else if (e.key === 'Escape') {
+            // 추천 목록만 닫는다 — 씬 상세의 Esc(목록으로 돌아가기)까지 가지 않게
+            e.preventDefault()
             setSuggestions([])
           }
         }}
