@@ -648,7 +648,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
         // 씬 표가 통째로 바뀐다 — 큐의 예약 출처가 엉뚱한 씬을 가리키지 않게 먼저 잊는다
         ctx.queue.forgetReservations()
         const { imported } = importAll(data)
-        return { summary: `NAIS3 백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
+        return { summary: `백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
       }
       if (Object.keys(data).some((k) => k.startsWith('nais2-'))) {
         const r = importNais2(data)

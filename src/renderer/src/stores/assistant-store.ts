@@ -416,7 +416,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({
         items: [
           ...get().items,
-          { id: nextId(), kind: 'error', text: '본체와 연결이 끊겼어요. 다시 말해 주세요.' }
+          {
+            id: nextId(),
+            kind: 'error',
+            text: '앱 안에서 요청을 전하지 못했어요. 다시 말해 주세요.'
+          }
         ]
       })
     } finally {
