@@ -166,7 +166,11 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     if (sceneIdRef.current !== id || version !== reloadVersion.current) return
     loadedSceneId.current = id
     setImages(items)
-    setIndex((i) => (resetIndex ? 0 : Math.min(i, Math.max(0, items.length - 1))))
+    // 새 그림은 목록 맨 앞에 붙는다 — 위치 숫자만 지키면 보던 그림이 옆 그림으로 바뀌어
+    // 즐겨찾기·검열이 엉뚱한 그림에 갔다. 보던 파일을 다시 찾아 그 자리로 간다.
+    const keep = resetIndex ? null : (currentRef.current?.filePath ?? null)
+    const at = keep ? items.findIndex((it) => it.filePath === keep) : -1
+    setIndex((i) => (resetIndex ? 0 : at >= 0 ? at : Math.min(i, Math.max(0, items.length - 1))))
     setLoading(false)
   }, [])
 
