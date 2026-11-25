@@ -25,7 +25,10 @@ export function resetSequentialCounters(): void {
 
 function normalizePath(path: string): string {
   // 슬래시 주변 공백 허용: <폴더 / 이름> → 폴더/이름
-  return path.trim().toLowerCase().replace(/\s*\/\s*/g, '/')
+  return path
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, '/')
 }
 
 function processFileWildcards(
@@ -98,17 +101,22 @@ function processSimpleWildcards(prompt: string, rng: () => number): string {
         .split(',')
         .map((tag) => {
           const trimmed = tag.trim()
+          // 가중치·괄호(1.2::red/blue::, {a/b})는 떼어 두고 가운데만 고른다 — 통째로 나누면 ::·} 짝이 깨진다
+          const [, prefix, core, suffix] = /^((?:-?\d*\.?\d+::)?[{[]*)(.*?)([}\]]*(?:::)?)$/.exec(
+            trimmed
+          ) ?? ['', '', trimmed, '']
           if (
-            trimmed.includes('/') &&
-            !trimmed.startsWith('http') &&
-            !trimmed.includes('://') &&
-            !trimmed.includes(' ')
+            core.includes('/') &&
+            !core.startsWith('http') &&
+            !core.includes('://') &&
+            !core.includes(' ')
           ) {
-            const options = trimmed
+            const options = core
               .split('/')
               .map((o) => o.trim())
               .filter((o) => o.length > 0)
-            if (options.length > 1) return options[Math.floor(rng() * options.length)]
+            if (options.length > 1)
+              return prefix + options[Math.floor(rng() * options.length)] + suffix
           }
           return trimmed
         })
