@@ -292,13 +292,13 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     const favorite = !img.favorite
     setImages((list) => list.map((i) => (i.id === img.id ? { ...i, favorite } : i)))
     await window.nais.invoke('images:setFavorite', { id: img.id, favorite })
+    void useScenesStore.getState().load() // 씬 카드 썸네일은 즐겨찾기 우선이라 다시 읽는다
   }
 
   /** 선별 외 삭제 — 선별(즐겨찾기)이 하나도 없으면 절대 삭제하지 않는다. 확인창 없이 즉시 수행 */
   async function deleteUnselected(): Promise<boolean> {
     if (sceneId == null) return false
     const favorites = images.filter((i) => i.favorite)
-    void useScenesStore.getState().load() // 씬 카드 썸네일은 즐겨찾기 우선이라 다시 읽는다
     if (favorites.length === 0) {
       toast('선별하지 못했어요.', 'error')
       return false
