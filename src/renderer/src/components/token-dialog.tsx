@@ -888,6 +888,9 @@ function AccountSection(): React.JSX.Element {
               ? `등록한 계정은 OS 키체인으로 암호화해요. 가속 모드에서는 체크한 계정이 각각 한 장씩 생성해요${accelerationEnabled ? '' : ' (지금은 가속 모드가 꺼져 있어 계정 1만 써요)'}.`
               : '등록한 계정은 OS 키체인으로 암호화해요.'}
           </p>
+          <p className="mt-1 text-[12px] text-faint">
+            토큰은 NovelAI 웹 → Account Settings → Get Persistent API Token에서 받아요(pst-로 시작).
+          </p>
         </div>
         <Button
           size="sm"

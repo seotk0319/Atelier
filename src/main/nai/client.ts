@@ -47,6 +47,15 @@ function headers(token: string): Record<string, string> {
 export async function verifyToken(
   token: string
 ): Promise<{ valid: boolean; subscription?: SubscriptionInfo; error?: string }> {
+  const value = token.trim()
+  if (/^bearer\s/i.test(value))
+    return { valid: false, error: '앞의 Bearer는 빼고 pst-로 시작하는 부분만 넣어 주세요.' }
+  if (/[^!-~]/.test(value))
+    return {
+      valid: false,
+      error:
+        '토큰에 공백·줄바꿈이나 다른 글자가 섞여 있어요. pst-로 시작하는 토큰만 다시 붙여넣어 주세요.'
+    }
   let res: Response
   try {
     // 처음 토큰을 넣는 사람이 오프라인·방화벽이면 확인 중에서 멈추지 않게 시간을 둔다
