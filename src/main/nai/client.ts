@@ -3,6 +3,7 @@ import type { GenerationRequest, SubscriptionInfo, V5UsageStatus } from '../../s
 import { ENDPOINTS } from './endpoints'
 import { buildGenerateImagePayload, type BuildOptions } from './payload'
 import { readImageStream } from './stream'
+import { friendlyNaiStatus, networkError } from './errors'
 
 /**
  * NAI HTTP 클라이언트. 메인 프로세스 전용 (CORS/CSP 무관).
@@ -67,9 +68,7 @@ export async function verifyToken(
 }
 
 /** 현재 Anlas 잔액(fixed + purchased)과 구독 tier. 실패 시 둘 다 null */
-export async function fetchAnlasBalance(
-  token: string
-): Promise<{
+export async function fetchAnlasBalance(token: string): Promise<{
   anlas: number | null
   tier: string | null
   v5Usage: V5UsageStatus | null
@@ -128,11 +127,13 @@ export async function generateImageStream(
     headers: { ...headers(token), Accept: 'application/x-msgpack' },
     body: sentPayload,
     signal
+  }).catch((e: unknown) => {
+    throw networkError('생성', e)
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new NaiHttpError(
-      `생성 실패 ${res.status}: ${text.slice(0, 300)}`,
+      friendlyNaiStatus('생성', res.status, text),
       res.status,
       parseRetryAfterMs(res)
     )
@@ -171,11 +172,13 @@ export async function augmentImage(
     method: 'POST',
     headers: headers(token),
     body: JSON.stringify(body)
+  }).catch((e: unknown) => {
+    throw networkError('디렉터 툴', e)
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new NaiHttpError(
-      `디렉터 툴 실패 ${res.status}: ${text.slice(0, 300)}`,
+      friendlyNaiStatus('디렉터 툴', res.status, text),
       res.status,
       parseRetryAfterMs(res)
     )
@@ -203,11 +206,13 @@ export async function upscaleImage(
       height: opts.height,
       scale: opts.scale
     })
+  }).catch((e: unknown) => {
+    throw networkError('업스케일', e)
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new NaiHttpError(
-      `업스케일 실패 ${res.status}: ${text.slice(0, 300)}`,
+      friendlyNaiStatus('업스케일', res.status, text),
       res.status,
       parseRetryAfterMs(res)
     )
@@ -237,11 +242,13 @@ export async function generateImageZip(
     headers: headers(token),
     body: sentPayload,
     signal
+  }).catch((e: unknown) => {
+    throw networkError('생성', e)
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new NaiHttpError(
-      `생성 실패 ${res.status}: ${text.slice(0, 300)}`,
+      friendlyNaiStatus('생성', res.status, text),
       res.status,
       parseRetryAfterMs(res)
     )

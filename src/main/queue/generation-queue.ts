@@ -624,6 +624,8 @@ function isAbortError(error: unknown): boolean {
 }
 
 function isRetryableError(error: unknown): boolean {
+  // 연결 단계에서 끊긴 오류(서버에 닿지 않음 — nai/errors.ts)는 다시 보내도 두 번 과금되지 않는다
+  if ((error as { retryable?: unknown })?.retryable === true) return true
   const status = (error as { status?: number })?.status
   return typeof status === 'number' && RETRYABLE_STATUS.has(status)
 }
