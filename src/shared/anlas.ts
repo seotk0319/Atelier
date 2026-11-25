@@ -56,6 +56,13 @@ const VIBE_ENCODE_COST = 2
 const CHARREF_COST = 5
 
 /**
+ * 업스케일(V5 업스케일러, 2배 고정) 비용 — 크기와 상관없이 1 Anlas.
+ * 실측 2026-11-25: Opus, 512×512 → 1, 832×1216 → 1.
+ */
+export const UPSCALE_ANLAS_COST = 1
+export const UPSCALE_SCALE = 2
+
+/**
  * 디렉터 툴(배경제거·색칠 등)·업스케일 비용 — 웹 번들 픽셀 버킷 테이블.
  * [[262144,1],[409600,2],[524288,3],[786432,5],[1048576,7]] — Opus는 409600px 이하 무료.
  * (실사용 검증: 768×1024 업스케일 = 5 Anlas)

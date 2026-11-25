@@ -21,7 +21,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { directorAugmentCost, directorToolCost } from '@shared/anlas'
+import { directorAugmentCost, UPSCALE_ANLAS_COST, UPSCALE_SCALE } from '@shared/anlas'
 import { EMOTIONS, type DirectorMethod } from '@shared/types'
 import { useArtistTagsStore } from '../stores/artist-tags-store'
 import { openInDirector, useDirectorStore } from '../stores/director-store'
@@ -35,7 +35,6 @@ import { DropOverlay } from './drop-overlay'
 import { MosaicEditor } from './mosaic-editor'
 import { StyleRestoreCard } from './style-restore-card'
 import { Button } from './ui/button'
-import { Segmented, SegmentedItem } from './ui/segmented'
 import { Input } from './ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Slider } from './ui/slider'
@@ -133,7 +132,7 @@ export function DirectorMode(): React.JSX.Element {
       if (!alive) return
       const isOpus = tier === 'opus'
       setToolCosts({
-        upscale: directorToolCost(width, height, isOpus),
+        upscale: UPSCALE_ANLAS_COST,
         backgroundRemoval: directorAugmentCost('bg-removal', width, height, isOpus),
         standardAugment: directorAugmentCost('lineart', width, height, isOpus)
       })
@@ -508,7 +507,7 @@ function ToolCard({
   )
 }
 
-/** 업스케일 카드 — 2x/4x 선택 후 클릭 실행 (결과 자동 체이닝) */
+/** 업스케일 카드 — 누르면 2배로 키운다 (NAI의 V5 업스케일러는 2배 고정, 결과 자동 체이닝) */
 function UpscaleCard({
   disabled,
   cost
@@ -517,42 +516,27 @@ function UpscaleCard({
   cost: number | null
 }): React.JSX.Element {
   const upscale = useDirectorStore((s) => s.upscale)
-  const [scale, setScale] = useState(2)
   return (
     <div
       role="button"
       aria-disabled={disabled}
-      onClick={() => !disabled && void upscale(scale)}
+      onClick={() => !disabled && void upscale(UPSCALE_SCALE)}
       className={cn(
         'group rounded-lg bg-paper p-3 transition-colors',
         disabled ? 'opacity-60' : 'cursor-pointer hover:bg-surface-2'
       )}
     >
-      <div className="mb-2 flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5">
         <ToolIcon icon={Maximize2} />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">업스케일</p>
-          <p className="truncate text-[11px] text-faint">해상도를 배수로 키움</p>
+          <p className="truncate text-[11px] text-faint">가로세로를 2배로 키워요</p>
         </div>
         <CostChip cost={cost} />
         <ChevronRight
           size={16}
           className="shrink-0 text-faint transition-colors group-hover:text-accent"
         />
-      </div>
-      {/* 배율 선택 — 클릭이 카드 실행으로 전파되지 않게 */}
-      <div onClick={(e) => e.stopPropagation()}>
-        <Segmented
-          className="flex w-full"
-          value={String(scale)}
-          onValueChange={(v) => v && setScale(Number(v))}
-        >
-          {[2, 4].map((n) => (
-            <SegmentedItem key={n} value={String(n)} className="flex-1">
-              {n}배
-            </SegmentedItem>
-          ))}
-        </Segmented>
       </div>
     </div>
   )

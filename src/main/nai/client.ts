@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import type { GenerationRequest, SubscriptionInfo, V5UsageStatus } from '../../shared/types'
 import { ENDPOINTS } from './endpoints'
+import { upscaleRequest } from './upscale-request'
 import { buildGenerateImagePayload, type BuildOptions } from './payload'
 import { readImageStream } from './stream'
 import { friendlyNaiStatus, networkError } from './errors'
@@ -213,24 +214,14 @@ export async function augmentImage(
 }
 
 /**
- * 업스케일. 주의: api.novelai.net 호스트(예외). ZIP 응답에서 PNG 추출.
+ * 업스케일 — V5 업스케일러(2배 고정, multipart). ZIP 응답에서 PNG 추출.
  */
-export async function upscaleImage(
-  token: string,
-  opts: { imageBase64: string; width: number; height: number; scale: number }
-): Promise<Buffer> {
-  const res = await fetch(ENDPOINTS.upscale, {
-    method: 'POST',
-    headers: headers(token),
-    body: JSON.stringify({
-      image: opts.imageBase64,
-      width: opts.width,
-      height: opts.height,
-      scale: opts.scale
-    })
-  }).catch((e: unknown) => {
-    throw networkError('업스케일', e)
-  })
+export async function upscaleImage(token: string, imageBase64: string): Promise<Buffer> {
+  const res = await fetch(ENDPOINTS.upscale, upscaleRequest(token, imageBase64)).catch(
+    (e: unknown) => {
+      throw networkError('업스케일', e)
+    }
+  )
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new NaiHttpError(
@@ -241,8 +232,8 @@ export async function upscaleImage(
   }
   const zip = await JSZip.loadAsync(await res.arrayBuffer())
   const names = Object.keys(zip.files)
-  const entry = names[names.length - 1]
-  if (!entry) throw new Error('업스케일 응답에 이미지가 없음')
+  const entry = names.find((name) => /^image.*\.png$/i.test(name)) ?? names[names.length - 1]
+  if (!entry) throw new Error('업스케일 응답에 그림이 없어요')
   return Buffer.from(await zip.file(entry)!.async('nodebuffer'))
 }
 

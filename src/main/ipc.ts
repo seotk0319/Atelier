@@ -96,6 +96,7 @@ import {
   saveGeneratedImage
 } from './images/storage'
 import { augmentImage, upscaleImage } from './nai/client'
+import { UPSCALE_SCALE } from './nai/upscale-request'
 import {
   listPresets,
   manageScenePresets,
@@ -999,21 +1000,17 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     }
   })
 
-  handle('images:upscale', async ({ imageBase64, scale }) => {
+  handle('images:upscale', async ({ imageBase64 }) => {
     const token = getNaiToken()
     if (!token) return { error: 'NAI 토큰이 설정되지 않았습니다' }
     try {
       const input = Buffer.from(imageBase64.replace(/^data:[^,]+,/, ''), 'base64')
-      const meta = await sharp(input).metadata()
-      const png = await upscaleImage(token, {
-        imageBase64: input.toString('base64'),
-        width: meta.width ?? 0,
-        height: meta.height ?? 0,
-        scale
-      })
+      // 새 업스케일러는 PNG를 받고 2배 고정이다 (예전 4배 요청이 와도 2배로 한다)
+      const source = await sharp(input).png().toBuffer()
+      const png = await upscaleImage(token, source.toString('base64'))
       const saved = await saveGeneratedImage({
         png,
-        sentPayload: JSON.stringify({ upscale: scale }),
+        sentPayload: JSON.stringify({ upscale: UPSCALE_SCALE }),
         seed: 0,
         kind: 'upscale'
       })
