@@ -233,19 +233,21 @@ export const KEEP_IMPORT_BACKUPS = 3
 
 /**
  * 가져오기(백업 복원·NAIS2)가 표를 비우고 다시 채우기 직전에 지금 DB를 backups/pre-import/에 뜬다
- * (upstream NAIS3 3724ef5). 실패하면 던진다 — 호출 쪽은 가져오기를 하지 않는다.
+ * (upstream NAIS3 3724ef5). 백업으로 되돌리기 직전에는 backups/pre-restore/에 뜬다.
+ * 실패하면 던진다 — 호출 쪽은 가져오기·되돌리기를 하지 않는다.
  */
 export function snapshotBeforeImport(
   db: Database.Database,
   backupDir: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  kind: 'pre-import' | 'pre-restore' = 'pre-import'
 ): string {
-  const folder = join(backupDir, 'pre-import')
+  const folder = join(backupDir, kind)
   mkdirSync(folder, { recursive: true })
   removeSnapshotTemps(folder)
   const stamp = now.toISOString().replace(/[:.]/g, '-')
-  const destination = join(folder, `pre-import-${stamp}.db`)
+  const destination = join(folder, `${kind}-${stamp}.db`)
   writeSnapshot(db, destination)
-  pruneBackups(folder, KEEP_IMPORT_BACKUPS, 'pre-import-')
+  pruneBackups(folder, KEEP_IMPORT_BACKUPS, `${kind}-`)
   return destination
 }

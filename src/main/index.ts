@@ -5,6 +5,7 @@ import sharp from 'sharp'
 import icon from '../../resources/icon.png?asset'
 import iconInverted from '../../resources/icon-inverted.png?asset'
 import { closeDb, getDb, initDb } from './db'
+import { offerRecovery } from './backup/recovery-prompt'
 import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settings'
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
@@ -108,7 +109,7 @@ function createWindow(): void {
 
 const previewGate = createPreviewGate()
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // app.quit()은 비동기라 두 번째 실행도 ready까지 온다 — 여기서 멈추지 않으면 첫 실행이 쓰는
   // DB를 같이 열어 백업·마이그레이션을 중복 실행한다. 기존 창은 첫 실행의 second-instance가 앞으로 가져온다.
   if (!hasSingleInstanceLock) return
@@ -164,6 +165,9 @@ app.whenReady().then(() => {
     app.quit()
     return
   }
+  // 작업 공간이 비었는데 앱이 남긴 백업에는 데이터가 있으면 창을 띄우기 전에 되돌릴지 묻는다
+  // (upstream NAIS3 56299a5). 되돌리면 앱이 다시 시작된다.
+  if (await offerRecovery()) return
 
   // 생성 파이프라인: 큐 → 조각/와일드카드 치환 → 바이브/캐릭레퍼 준비 → 스트리밍 생성 → 저장
   const queue = new GenerationQueue(

@@ -4,6 +4,7 @@ import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { migrateDatabase, snapshotBeforeImport } from './migrate'
 import { migrations } from './migrations'
+import type { RecoveryPaths } from '../backup/recovery'
 
 let db: Database.Database | null = null
 
@@ -57,6 +58,27 @@ export function initDb(): { version: number; path: string } {
 /** 가져오기 직전 스냅샷 (userData\backups\pre-import\, 최근 3개) — 만든 파일 경로 */
 export function backupBeforeImport(): string {
   return snapshotBeforeImport(getDb(), join(app.getPath('userData'), 'backups'))
+}
+
+/** 백업으로 되돌리기 직전 스냅샷 (userData\backups\pre-restore\, 최근 3개) */
+export function backupBeforeRestore(): string {
+  return snapshotBeforeImport(
+    getDb(),
+    join(app.getPath('userData'), 'backups'),
+    new Date(),
+    'pre-restore'
+  )
+}
+
+/** 앱이 스스로 남기는 DB 백업 자리 (backup/recovery.ts가 찾는다) */
+export function recoveryPaths(): RecoveryPaths {
+  const root = app.getPath('userData')
+  return {
+    root,
+    dbPath: getDbPath(),
+    backupDir: join(root, 'backups'),
+    upgradeBackupDir: join(root, 'upgrade-backups')
+  }
 }
 
 export function closeDb(): void {
