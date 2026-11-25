@@ -360,7 +360,7 @@ function Composer(): React.JSX.Element {
           }
         }}
         placeholder={
-          hasItems ? '이어서 말하기…' : '무엇을 할까요? 예) 오프파코 씬들 캐릭터별로 폴더 나눠줘'
+          hasItems ? '이어서 말하기…' : '무엇을 할까요? 예) 씬 프리셋을 캐릭터별로 폴더 나눠줘'
         }
         className="block max-h-40 min-h-[44px] w-full resize-none bg-transparent px-4 pb-1 pt-3 text-[13.5px] leading-relaxed text-ink outline-none placeholder:text-faint"
       />
