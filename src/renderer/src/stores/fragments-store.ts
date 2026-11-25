@@ -46,7 +46,9 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
 
   update: (id, patch) => {
     set({ items: get().items.map((f) => (f.id === id ? { ...f, ...patch } : f)) })
-    void window.nais.invoke('frags:update', { id, patch })
+    const saved = window.nais.invoke('frags:update', { id, patch })
+    // 다른 조각과 겹치는 이름은 메인이 name-2로 바꿔 저장한다 — 화면이 실제 이름(<이름> 호출명)을 보이게 다시 읽는다
+    if (patch.name !== undefined) void saved.then(() => get().load())
   },
 
   remove: (id) => {
@@ -67,7 +69,9 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
   toggleCollapse: (id) => {
     const folder = get().folders.find((f) => f.id === id)
     if (!folder) return
-    set({ folders: get().folders.map((f) => (f.id === id ? { ...f, collapsed: !f.collapsed } : f)) })
+    set({
+      folders: get().folders.map((f) => (f.id === id ? { ...f, collapsed: !f.collapsed } : f))
+    })
     void window.nais.invoke('frags:folderCollapse', { id, collapsed: !folder.collapsed })
   },
 
