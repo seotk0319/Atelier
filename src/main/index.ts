@@ -11,7 +11,8 @@ import { removeComments } from '../shared/nai-presets'
 import { applyCharSections } from '../shared/char-sections'
 import { composeWeakened, GENERAL_WEIGHT_KEY, parseGeneralWeight } from '../shared/general-weight'
 import { isV5Model, maxCharactersForModel, supportsVibes } from '../shared/nai-models'
-import { effortForRefs, refsForModel } from '../shared/char-refs'
+import { effortForRefs, refsForModel, sentRefCount } from '../shared/char-refs'
+import type { CharRefType } from '../shared/types'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
@@ -168,7 +169,14 @@ app.whenReady().then(() => {
   const queue = new GenerationQueue(
     async (queuedRequest, id, signal, account) => {
       // V5 Medium은 레퍼런스를 못 쓴다 — 레퍼런스가 켜져 있으면 High로 보낸다 (NAI 웹과 같음).
-      const crefCount = enabledCharRefRows().length + (queuedRequest.extraCharRefs?.length ?? 0)
+      // 실제로 보내는 수로 센다 — V4.5는 의상 레퍼런스를 빼고 보낸다 (무료 확인이 빠지는 레퍼로 거절하지 않게).
+      const crefCount = sentRefCount(
+        [
+          ...enabledCharRefRows().map((r) => r.refType as CharRefType),
+          ...(queuedRequest.extraCharRefs ?? []).map((r) => r.refType)
+        ],
+        queuedRequest.model
+      )
       // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
       const rawRequest = withFixedSettings({
         ...queuedRequest,
