@@ -526,7 +526,11 @@ export interface IpcInvokeMap {
   /** 앱 버전 */
   'app:version': { req: void; res: { version: string } }
   /** Custom 프로필 (0=기본, 1/2=Custom N). title은 표시용 앱 이름 */
-  'app:profile': { req: void; res: { profile: number; title: string } }
+  'app:profile': {
+    req: void
+    /** remoteView: 작품·알림 화면을 받을 맥미니 연결이 설정돼 있는지 (본 프로필 + 연결 정보 파일) */
+    res: { profile: number; title: string; remoteView: boolean }
+  }
   'nai:verifyToken': {
     req: { token: string }
     res: { valid: boolean; subscription?: SubscriptionInfo; error?: string }

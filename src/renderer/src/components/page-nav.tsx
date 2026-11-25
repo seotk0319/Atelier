@@ -28,14 +28,14 @@ export function PageNav(): React.JSX.Element {
   const centerMode = useLayoutStore((s) => s.centerMode)
   const setCenterMode = useLayoutStore((s) => s.setCenterMode)
   const hiddenPages = useLayoutStore((s) => s.hiddenPages)
-  const [profile, setProfile] = useState(0)
+  const [remoteView, setRemoteView] = useState(false)
   useEffect(() => {
-    void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
+    void window.nais.invoke('app:profile', undefined).then((v) => setRemoteView(v.remoteView))
   }, [])
   const visible = PAGES.filter(
     (p) =>
-      // 작품·알림 탭은 Custom 1에만 있다
-      ((p.id !== 'inbox' && p.id !== 'works') || profile === 1) &&
+      // 작품·알림 탭은 맥미니 연결이 설정된 본 프로필에만 있다
+      ((p.id !== 'inbox' && p.id !== 'works') || remoteView) &&
       (p.id === 'main' || !hiddenPages.includes(p.id))
   )
   const activePage: Page = centerMode

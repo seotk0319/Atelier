@@ -78,7 +78,7 @@ const NAV: { id: SectionId; label: string; icon: typeof Info }[] = [
   { id: 'generation', label: '생성', icon: ImageIcon },
   { id: 'storage', label: '저장', icon: FolderOpen },
   { id: 'privacy', label: '프라이버시', icon: Lock },
-  // 알림 모아보기(댓글 답글)에서만 쓰므로 알림 탭이 있는 Custom 1에만 보인다.
+  // 알림 모아보기(댓글 답글)에서만 쓰므로 알림 탭이 있을 때만 보인다.
   { id: 'translate', label: '번역', icon: Languages },
   // OpenRouter 키 — 댓글 번역과 태그 도우미가 같이 쓰므로 모든 프로필에 보인다
   { id: 'ai-helper', label: 'AI 도우미', icon: Wand2 },
@@ -280,12 +280,12 @@ const TOGGLABLE_PAGES: { id: CenterMode; label: string }[] = [
 function PageToggles(): React.JSX.Element {
   const hiddenPages = useLayoutStore((s) => s.hiddenPages)
   const setPageHidden = useLayoutStore((s) => s.setPageHidden)
-  // 작품 탭은 Custom 1에만 있다
-  const [profile, setProfile] = useState<number | null>(null)
+  // 작품 탭은 맥미니 연결이 설정된 본 프로필에만 있다
+  const [remoteView, setRemoteView] = useState(false)
   useEffect(() => {
-    void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
+    void window.nais.invoke('app:profile', undefined).then((v) => setRemoteView(v.remoteView))
   }, [])
-  const pages = TOGGLABLE_PAGES.filter((p) => p.id !== 'works' || profile === 1)
+  const pages = TOGGLABLE_PAGES.filter((p) => p.id !== 'works' || remoteView)
   return (
     <div className="mt-2 divide-y divide-line rounded-lg bg-paper px-3">
       {pages.map((p) => {
@@ -1208,11 +1208,12 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void
 }): React.JSX.Element {
   const [section, setSection] = useState<SectionId>('appearance')
-  const [profile, setProfile] = useState<number | null>(null)
+  // 번역·AI 답글은 알림 화면에서만 쓴다. 알림 화면이 없으면(맥미니 연결 없음) 숨긴다
+  const [remoteView, setRemoteView] = useState(false)
   useEffect(() => {
-    void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
+    void window.nais.invoke('app:profile', undefined).then((v) => setRemoteView(v.remoteView))
   }, [])
-  const nav = NAV.filter((n) => (n.id !== 'translate' && n.id !== 'ai') || profile === 1)
+  const nav = NAV.filter((n) => (n.id !== 'translate' && n.id !== 'ai') || remoteView)
   // 다른 화면이 특정 섹션으로 열어 달라고 했으면 그 섹션을 먼저 보여준다.
   const requested = useLayoutStore((s) => s.settingsSection) as SectionId | null
   const clearRequested = useLayoutStore((s) => s.clearSettingsSection)

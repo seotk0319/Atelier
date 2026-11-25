@@ -96,9 +96,9 @@ export default function App(): React.JSX.Element {
     let cancelled = false
     let timer = 0
     const order: CenterMode[] = ['scene', 'director', 'library', 'gpt', 'cover']
-    // 작품·알림 탭은 Custom 1에만 있다
-    void window.nais.invoke('app:profile', undefined).then(({ profile }) => {
-      if (profile === 1) order.push('works', 'inbox')
+    // 작품·알림 탭은 맥미니 연결이 설정된 본 프로필에만 있다
+    void window.nais.invoke('app:profile', undefined).then(({ remoteView }) => {
+      if (remoteView) order.push('works', 'inbox')
     })
     const next = (i: number): void => {
       if (cancelled || i >= order.length) return

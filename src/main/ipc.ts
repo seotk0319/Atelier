@@ -177,7 +177,7 @@ import { basename, extname, join, resolve } from 'path'
 import sharp from 'sharp'
 import { verifyToken } from './nai/client'
 import { APP_TITLE, PROFILE } from './profile'
-import { remotePort, viewClient } from './remote/source'
+import { remoteConfigured, remotePort, viewClient } from './remote/source'
 import { REMOTE_DOWN } from './remote/view-client'
 import type { RemoteStamp } from '../shared/remote-view'
 import type {
@@ -333,7 +333,11 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('tagHelper:fromText', (req) => tagFromText(req))
   handle('tagHelper:fromImage', (req) => tagFromImage(req))
   handle('app:version', () => ({ version: app.getVersion() }))
-  handle('app:profile', () => ({ profile: PROFILE, title: APP_TITLE }))
+  handle('app:profile', () => ({
+    profile: PROFILE,
+    title: APP_TITLE,
+    remoteView: PROFILE === 1 && remoteConfigured()
+  }))
 
   handle('nai:verifyToken', ({ token }) => verifyToken(token))
 
