@@ -110,10 +110,7 @@ export async function saveGeneratedImage(input: {
           )
         : out
   }
-  mkdirSync(monthDir, { recursive: true })
-
   const ext = input.format ?? 'png'
-  let filePath = ''
   const stripExif = getSetting('strip_exif') === '1'
   const metadataBuffer =
     ext === 'png' && input.localMetadata && !stripExif
@@ -121,26 +118,45 @@ export async function saveGeneratedImage(input: {
       : input.png
   const fileBuffer = stripExif ? await sanitizeImageMetadata(metadataBuffer, ext) : metadataBuffer
 
-  if (input.sceneName) {
-    // 씬 이미지: 씬이름_생성시각_난수. 이름을 절대 다시 쓰지 않는다 — 지운 이미지 이름을 새 이미지가 받으면
-    // 화면이 같은 주소로 기억해 둔 옛 썸네일을 보여 주고, 옮긴 파일의 DB 기록과도 겹친다.
-    const safeName =
-      input.sceneName.replace(/[/\\:*?"<>|]/g, '_').trim() || `씬-${input.sceneId ?? 0}`
-    const p2 = (n: number): string => String(n).padStart(2, '0')
-    const stamp = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`
-    for (;;) {
-      filePath = join(monthDir, `${safeName}_${stamp}_${randomUUID().slice(0, 6)}.${ext}`)
-      try {
-        writeFileSync(filePath, fileBuffer, { flag: 'wx' })
-        break
-      } catch (error) {
-        if (!isFileExistsError(error)) throw error
+  const writeInto = (dir: string): string => {
+    mkdirSync(dir, { recursive: true })
+    if (input.sceneName) {
+      // 씬 이미지: 씬이름_생성시각_난수. 이름을 절대 다시 쓰지 않는다 — 지운 이미지 이름을 새 이미지가 받으면
+      // 화면이 같은 주소로 기억해 둔 옛 썸네일을 보여 주고, 옮긴 파일의 DB 기록과도 겹친다.
+      const safeName =
+        input.sceneName.replace(/[/\\:*?"<>|]/g, '_').trim() || `씬-${input.sceneId ?? 0}`
+      const p2 = (n: number): string => String(n).padStart(2, '0')
+      const stamp = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}`
+      for (;;) {
+        const path = join(dir, `${safeName}_${stamp}_${randomUUID().slice(0, 6)}.${ext}`)
+        try {
+          writeFileSync(path, fileBuffer, { flag: 'wx' })
+          return path
+        } catch (error) {
+          if (!isFileExistsError(error)) throw error
+        }
       }
     }
-  } else {
     const stamp = now.toISOString().replace(/[:.]/g, '-')
-    filePath = join(monthDir, `NAIS3_${stamp}_${input.seed}_${randomUUID().slice(0, 8)}.${ext}`)
-    writeFileSync(filePath, fileBuffer, { flag: 'wx' })
+    const path = join(dir, `NAIS3_${stamp}_${input.seed}_${randomUUID().slice(0, 8)}.${ext}`)
+    writeFileSync(path, fileBuffer, { flag: 'wx' })
+    return path
+  }
+
+  let filePath: string
+  try {
+    filePath = writeInto(monthDir)
+  } catch (error) {
+    // 저장 폴더를 못 쓰면(드라이브 빠짐·권한·Windows 「제어된 폴더 액세스」) 이미 Anlas를 쓴 그림을 버리지 않고
+    // 앱 데이터 폴더에 둔다. 히스토리에는 그대로 보인다. 자동 저장 OFF 보관소(library)와 따로 두어
+    // 「히스토리 비우기」가 내부 파일로 보고 지우지 않게 한다.
+    const fallback = join(app.getPath('userData'), 'unsaved-images')
+    console.error(`저장 폴더에 쓰지 못해 ${fallback}에 저장합니다:`, error)
+    try {
+      filePath = writeInto(fallback)
+    } catch {
+      throw error
+    }
   }
 
   try {
@@ -160,9 +176,7 @@ export async function saveGeneratedImage(input: {
     )
     const payloadJson = payloadWithLocalMetadata(input.sentPayload, input.localMetadata)
     const save = db.transaction((sceneId: number | null): number => {
-      const id = Number(
-        insertImage.run(filePath, input.kind, input.seed, sceneId).lastInsertRowid
-      )
+      const id = Number(insertImage.run(filePath, input.kind, input.seed, sceneId).lastInsertRowid)
       insertBlob.run(id, thumbnail, payloadJson)
       return id
     })
@@ -355,9 +369,7 @@ export function listImages(
 }
 
 export function getImagePayload(id: number): string | null {
-  const row = getDb()
-    .prepare('SELECT payload_json FROM image_blobs WHERE image_id = ?')
-    .get(id) as
+  const row = getDb().prepare('SELECT payload_json FROM image_blobs WHERE image_id = ?').get(id) as
     { payload_json: string } | undefined
   return row?.payload_json ?? null
 }
