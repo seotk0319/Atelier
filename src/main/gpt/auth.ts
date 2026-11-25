@@ -120,7 +120,12 @@ async function refresh(path: string, data: AuthFile): Promise<GptCredentials> {
     await fs.rename(tmp, path)
   } catch {
     await fs.rm(tmp, { force: true }).catch(() => undefined)
-    await fs.writeFile(path, text, { encoding: 'utf8', mode: 0o600 })
+    try {
+      await fs.writeFile(path, text, { encoding: 'utf8', mode: 0o600 })
+    } catch (e) {
+      // 파일에는 못 남겨도 이번 실행에서는 새 토큰으로 계속 쓴다 (옛 토큰은 이미 무효)
+      console.error('ChatGPT 로그인 파일을 고쳐 쓰지 못했어요:', e)
+    }
   }
   return toCredentials(next)
 }
