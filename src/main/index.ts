@@ -131,7 +131,8 @@ app.whenReady().then(() => {
   protocol.handle('nais-image', async (request) => {
     try {
       const url = new URL(request.url)
-      const filePath = decodeURIComponent(url.searchParams.get('path') ?? '')
+      // searchParams.get이 이미 한 번 풀어 준다 — 한 번 더 풀면 폴더 이름의 %가 깨진다 ("100% 완성")
+      const filePath = url.searchParams.get('path') ?? ''
       if (filePath && url.searchParams.get('thumbnail') === '1') {
         const row = getDb()
           .prepare(
