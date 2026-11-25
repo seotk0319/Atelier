@@ -1,5 +1,14 @@
 import type Database from 'better-sqlite3'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from 'fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -55,7 +64,10 @@ function open(path: string, afterVersionRead?: Hook): { db: Database.Database; r
           throw error
         }
       }
-      return Object.assign(run('DEFERRED'), { immediate: run('IMMEDIATE'), deferred: run('DEFERRED') })
+      return Object.assign(run('DEFERRED'), {
+        immediate: run('IMMEDIATE'),
+        deferred: run('DEFERRED')
+      })
     }
   }
   return { db: api as unknown as Database.Database, raw }
@@ -157,6 +169,31 @@ describe('migrateDatabase', () => {
     expect(readdirSync(backupDir)).toEqual(['pre-migration-v20.db'])
   })
 
+  it('마이그레이션 전에 원본 DB를 바이트 그대로 upgrade-backups/schema-v{N}/에 남기고 지우지 않는다', () => {
+    const path = join(dir, 'nais3.db')
+    const backupDir = join(dir, 'backups')
+    const upgradeBackupDir = join(dir, 'upgrade-backups')
+    const opts = { backupDir, upgradeBackupDir, dbPath: path }
+    const first = connect(path)
+    migrateDatabase(first, migrations.slice(0, 20), opts)
+    expect(existsSync(upgradeBackupDir)).toBe(false)
+    // 원래 DB 파일 내용(복사 직전 상태) — WAL을 비워 파일에 모두 내려 둔다
+    ;(first as unknown as { pragma: (s: string) => unknown }).pragma('wal_checkpoint(TRUNCATE)')
+    const original = readFileSync(path)
+
+    migrateDatabase(connect(path), migrations, opts)
+    const copy = join(upgradeBackupDir, 'schema-v20', 'nais3.db')
+    expect(readFileSync(copy).equals(original)).toBe(true)
+    expect(version(copy)).toBe(20)
+    expect(version(path)).toBe(migrations.length)
+
+    // 같은 버전 복사본은 덮어쓰지 않고, 남은 임시 파일은 다음 실행에서 지운다
+    writeFileSync(join(upgradeBackupDir, 'schema-v20', 'nais3.db.abcd.tmp'), 'partial')
+    migrateDatabase(connect(path), migrations, opts)
+    expect(readdirSync(join(upgradeBackupDir, 'schema-v20'))).toEqual(['nais3.db'])
+    expect(readFileSync(copy).equals(original)).toBe(true)
+  })
+
   it('스냅샷 도중 끊겨 남은 임시 파일을 마이그레이션이 없는 실행에서도 지운다', () => {
     const path = join(dir, 'nais3.db')
     const backupDir = join(dir, 'backups')
@@ -183,26 +220,50 @@ describe('migrateDatabase', () => {
     )
     insert.run('a.png', Buffer.from([1, 2, 3]), 't2i', 11, '{"a":1}', 1)
     insert.run('b.png', null, 'scene', 22, '{"b":2}', 0)
-    const before = raw.prepare('SELECT id, file_path, kind, seed, created_at, favorite FROM images ORDER BY id').all()
+    const before = raw
+      .prepare('SELECT id, file_path, kind, seed, created_at, favorite FROM images ORDER BY id')
+      .all()
 
     migrateDatabase(connect(path), migrations, { backupDir })
 
-    const columns = (raw.prepare('PRAGMA table_info(images)').all() as { name: string }[]).map((c) => c.name)
+    const columns = (raw.prepare('PRAGMA table_info(images)').all() as { name: string }[]).map(
+      (c) => c.name
+    )
     expect(columns).not.toContain('thumbnail')
     expect(columns).not.toContain('payload_json')
-    expect(raw.prepare('SELECT id, file_path, kind, seed, created_at, favorite FROM images ORDER BY id').all()).toEqual(before)
-    const blobs = raw.prepare('SELECT image_id, thumbnail, payload_json FROM image_blobs ORDER BY image_id').all() as {
+    expect(
+      raw
+        .prepare('SELECT id, file_path, kind, seed, created_at, favorite FROM images ORDER BY id')
+        .all()
+    ).toEqual(before)
+    const blobs = raw
+      .prepare('SELECT image_id, thumbnail, payload_json FROM image_blobs ORDER BY image_id')
+      .all() as {
       image_id: number
       thumbnail: Uint8Array | null
       payload_json: string
     }[]
-    expect(blobs.map((b) => [b.image_id, b.thumbnail ? [...b.thumbnail] : null, b.payload_json])).toEqual([
+    expect(
+      blobs.map((b) => [b.image_id, b.thumbnail ? [...b.thumbnail] : null, b.payload_json])
+    ).toEqual([
       [1, [1, 2, 3], '{"a":1}'],
       [2, null, '{"b":2}']
     ])
     // 색인은 그대로 남는다
-    const indexes = (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'images'").all() as { name: string }[]).map((r) => r.name)
-    expect(indexes).toEqual(expect.arrayContaining(['idx_images_created', 'idx_images_kind', 'idx_images_scene', 'idx_images_file_path', 'idx_images_library_folder']))
+    const indexes = (
+      raw
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'images'")
+        .all() as { name: string }[]
+    ).map((r) => r.name)
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        'idx_images_created',
+        'idx_images_kind',
+        'idx_images_scene',
+        'idx_images_file_path',
+        'idx_images_library_folder'
+      ])
+    )
     // 그림을 지우면 무거운 칸도 같이 지워진다
     raw.exec('PRAGMA foreign_keys = ON')
     raw.prepare('DELETE FROM images WHERE id = 1').run()
@@ -224,7 +285,12 @@ describe('pruneBackups', () => {
   it('마이그레이션 전 백업만 최근 것부터 정해진 개수만 남긴다', () => {
     const now = Date.now() / 1000
     // 이름순과 시간순이 다르게 (v9가 v10보다 이름순으로 뒤)
-    const names = ['pre-migration-v9.db', 'pre-migration-v10.db', 'pre-migration-v11.db', 'pre-migration-v12.db']
+    const names = [
+      'pre-migration-v9.db',
+      'pre-migration-v10.db',
+      'pre-migration-v11.db',
+      'pre-migration-v12.db'
+    ]
     names.forEach((name, i) => {
       writeFileSync(join(dir, name), name)
       utimesSync(join(dir, name), now - 100 + i, now - 100 + i)

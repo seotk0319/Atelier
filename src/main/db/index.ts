@@ -21,8 +21,9 @@ export function getDbPath(): string {
  *
  * 안전장치 (NAIS2 세이브 유실 문제의 근본 대책):
  * - WAL 모드: 크래시 시에도 커밋된 데이터 보존
- * - 적용할 마이그레이션이 있을 때만 실행 전 스냅샷 생성 (userData\backups\pre-migration-v{N}.db,
- *   최근 3개만 보관). 스냅샷 도중 끊겨 남은 임시 파일은 실행마다 정리
+ * - 적용할 마이그레이션이 있을 때만 실행 전 원본 파일 복사본(userData\upgrade-backups\schema-v{N}\,
+ *   지우지 않음)과 스냅샷(userData\backups\pre-migration-v{N}.db, 최근 3개만 보관)을 만든다.
+ *   도중 끊겨 남은 임시 파일은 실행마다 정리
  * - 각 마이그레이션은 쓰기 잠금 안에서 버전을 다시 읽고 개별 트랜잭션으로 적용:
  *   실패하면 해당 버전 이전 상태로 남고 앱은 에러 표면화
  */
@@ -39,7 +40,9 @@ export function initDb(): { version: number; path: string } {
   db.pragma('cache_size = -65536')
 
   const { version, backupPath } = migrateDatabase(db, migrations, {
-    backupDir: join(dir, 'backups')
+    backupDir: join(dir, 'backups'),
+    upgradeBackupDir: join(dir, 'upgrade-backups'),
+    dbPath: path
   })
   // 큰 표를 옮긴 마이그레이션(v23) 뒤에는 WAL 파일이 DB만큼 커져 남는다 — 비워서 줄인다
   if (backupPath) db.pragma('wal_checkpoint(TRUNCATE)')
