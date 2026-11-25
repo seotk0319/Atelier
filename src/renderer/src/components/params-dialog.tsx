@@ -48,7 +48,7 @@ export function ParamsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[420px] p-5">
+      <DialogContent className="max-w-[420px] p-5" data-allow-shortcuts="">
         <DialogTitle className="mb-4">생성 파라미터</DialogTitle>
         <div className="grid gap-4">
           <Row label="해상도">

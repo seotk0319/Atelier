@@ -231,6 +231,18 @@ export function bindShortcuts(): () => void {
     const typing =
       target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
     if (typing && !e.metaKey && !e.ctrlKey && entry[0] !== 'refreshWork') return
+    // 모달 창(마스크·모자이크 편집, 설정, 일괄 주입 등) 위에서는 뒤 화면 단축키를 쓰지 않는다 —
+    // 인페인트 마스크 창에서 Ctrl+Enter가 메인 생성을, Ctrl+F가 뒤의 조각 창을 열던 문제.
+    // 생성 파라미터 창만 생성·창 닫기(Ctrl+P)를 그대로 받는다.
+    const modal = document.querySelector('[data-modal-dialog]')
+    if (
+      modal &&
+      !(
+        modal.hasAttribute('data-allow-shortcuts') &&
+        (entry[0] === 'generate' || entry[0] === 'openParams')
+      )
+    )
+      return
     e.preventDefault()
     runAction(entry[0])
   }
