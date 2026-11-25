@@ -526,6 +526,7 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   },
   bulkClearFavorites: async () => {
     await window.nais.invoke('scenes:bulkClearFavorites', { ids: [...get().selection] })
+    await get().load() // 카드 썸네일은 즐겨찾기 우선이라 다시 읽어야 바뀐다
   },
   bulkClearImages: async () => {
     await window.nais.invoke('scenes:bulkClearImages', { ids: [...get().selection] })
@@ -601,6 +602,7 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     if (target && gen.viewingFilePath === target.filePath) gen.view(null)
     // 씬 상세의 명시적 삭제 — 파일까지 삭제 (히스토리 삭제와 달리)
     await window.nais.invoke('images:delete', { id: imageId, deleteFile: true })
+    void get().load() // 카드 썸네일/카운트 갱신 — 지운 파일을 썸네일로 계속 보이지 않게
     void gen.refreshHistory()
   },
   setFavoritesOnly: (v) => {
