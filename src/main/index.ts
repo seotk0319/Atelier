@@ -243,9 +243,13 @@ app.whenReady().then(() => {
         : { vibes: [], newlyEncoded: [] }
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
       const extraCharacterReferences = rawRequest.extraCharRefs?.length
-        ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
+        ? await prepareExtraCharRefs(rawRequest.extraCharRefs, rawRequest.model)
         : []
-      const preparedCharRefs = [...extraCharacterReferences, ...(await prepareCharRefs())]
+      // 그림 모양(V4.5 캔버스 / V5 버킷)은 보낼 모델로 정한다. 인페인트로 바뀌어도 V4.5/V5는 그대로다.
+      const preparedCharRefs = [
+        ...extraCharacterReferences,
+        ...(await prepareCharRefs(rawRequest.model))
+      ]
 
       let source = request.source
       // i2i/인페인트: 소스 해상도를 유효 NAI 해상도(64 배수·픽셀 상한)로 스냅하고 이미지를 맞춰 리사이즈.
