@@ -232,6 +232,9 @@ export class GenerationQueue extends EventEmitter {
   /** 계정 추가/삭제 또는 가속 토글 뒤 UI와 대기열을 즉시 다시 계산한다. */
   refreshConfiguration(): void {
     if (this.isAnlasSpendingEnabled()) this.pausedAccounts.clear()
+    // 401·402·403으로 막은 계정은 토큰을 바꾸거나(같은 id로 저장된다) 계정을 고친 뒤 다시 써 본다.
+    // 지우지 않으면 앱을 다시 켜기 전까지 새 생성이 'busy'로 거절된다.
+    this.blockedAccounts.clear()
     this.emitChanged()
     this.pump()
   }
