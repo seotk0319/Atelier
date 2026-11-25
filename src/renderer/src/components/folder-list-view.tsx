@@ -455,7 +455,8 @@ export function FolderListView<T extends FolderListItem>({
 
   const visible = rows.filter((r) => {
     if (r.type === 'folder' || r.type === 'divider') return true
-    if (r.hidden) return false
+    // 검색 중에는 접힌 폴더 안 카드도 보인다 (폴더 행이 빠져 펼 수도 없었다)
+    if (r.hidden && !searching) return false
     return draggingFolderId === null || r.item.folderId !== draggingFolderId
   })
   const counts = new Map<number, number>()
