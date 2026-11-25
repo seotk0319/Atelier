@@ -36,6 +36,7 @@ import {
   initProfilePaths
 } from './profile'
 import { GenerationQueue } from './queue/generation-queue'
+import { startClaudeGenServer } from './claude-gen/server'
 import { getPresetName, getScene } from './scenes/repo'
 import { viewClient } from './remote/source'
 import { initGpt } from './gpt/service'
@@ -177,12 +178,14 @@ app.whenReady().then(async () => {
       // 실제로 보내는 수로 센다 — V4.5는 의상 레퍼런스를 빼고 보낸다 (무료 확인이 빠지는 레퍼로 거절하지 않게).
       // V5 인페인트는 레퍼를 빼고 보내니 0으로 센다 — 절약 인페인트(…-medium-inpainting, 2026-11-25 실측으로
       // 있음 확인)를 쓸데없이 일반으로 올려 보내지 않게.
+      // 클로 생성 창구에서 온 요청은 화면에서 켜 둔 레퍼·바이브를 싣지 않는다 (받은 프롬프트만 보낸다).
+      const fromClaude = queuedRequest.origin === 'claude'
       const crefCount =
         queuedRequest.source?.maskBase64 && isV5Model(queuedRequest.model)
           ? 0
           : sentRefCount(
               [
-                ...enabledCharRefRows().map((r) => r.refType as CharRefType),
+                ...(fromClaude ? [] : enabledCharRefRows().map((r) => r.refType as CharRefType)),
                 ...(queuedRequest.extraCharRefs ?? []).map((r) => r.refType)
               ],
               queuedRequest.model
@@ -193,10 +196,14 @@ app.whenReady().then(async () => {
         model: effortForRefs(queuedRequest.model, crefCount)
       })
       const token = account.token
-      const maySpend = (): boolean => PROFILE !== 1 || getSetting('anlas_spending') !== '0'
+      // 클로 생성 창구는 앱 스위치와 상관없이 allowAnlas(아빠가 말했을 때만)가 있어야 Anlas를 쓴다.
+      const maySpend = (): boolean =>
+        fromClaude
+          ? rawRequest.allowAnlas === true
+          : PROFILE !== 1 || getSetting('anlas_spending') !== '0'
       const ensureFree = async (): Promise<void> => {
         if (maySpend()) return
-        const rows = supportsVibes(rawRequest.model) ? enabledVibeRows() : []
+        const rows = supportsVibes(rawRequest.model) && !fromClaude ? enabledVibeRows() : []
         await checkFreeGeneration(token, rawRequest, {
           characterCount: crefCount,
           vibeCount: rows.length,
@@ -256,8 +263,9 @@ app.whenReady().then(async () => {
       // 바이브/캐릭레퍼는 DB의 enabled 항목에서 준비 (바이브는 필요 시 인코딩 — 2 Anlas, 캐시됨).
       // V5는 바이브를 받지 않는다 — 싣지도, 4.5용으로 인코딩(과금)하지도 않는다.
       // 캐릭터 레퍼런스는 V5도 받는다. 종류·충실도는 아래에서 보낼 모델에 맞춘다 (shared/char-refs.ts).
-      const { vibes, newlyEncoded } = supportsVibes(rawRequest.model)
-        ? await prepareVibes(token, maySpend)
+      const { vibes, newlyEncoded } =
+        supportsVibes(rawRequest.model) && !fromClaude
+          ? await prepareVibes(token, maySpend)
         : { vibes: [], newlyEncoded: [] }
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
       const extraCharacterReferences = rawRequest.extraCharRefs?.length
@@ -266,7 +274,7 @@ app.whenReady().then(async () => {
       // 그림 모양(V4.5 캔버스 / V5 버킷)은 보낼 모델로 정한다. 인페인트로 바뀌어도 V4.5/V5는 그대로다.
       const preparedCharRefs = [
         ...extraCharacterReferences,
-        ...(await prepareCharRefs(rawRequest.model))
+        ...(fromClaude ? [] : await prepareCharRefs(rawRequest.model))
       ]
 
       let source = request.source
@@ -417,6 +425,12 @@ app.whenReady().then(async () => {
   if (Number.isFinite(savedDelay) && savedDelay >= 0) queue.setDelayMs(savedDelay)
 
   registerIpcHandlers({ dbVersion, queue })
+  // 클로 세션이 NAI 생성을 이 대기열에 넣는 로컬 주소 (127.0.0.1 전용, 설정으로 끔)
+  startClaudeGenServer({
+    queue,
+    profile: PROFILE,
+    onScenesChanged: (presetId) => broadcast('scenePresets:changed', { presetId })
+  })
   initGpt(
     (jobs) => broadcast('gpt:changed', { jobs }),
     (item) => broadcast('images:added', item)

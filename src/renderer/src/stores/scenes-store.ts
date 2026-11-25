@@ -809,6 +809,13 @@ function sceneSeed(scene: Scene, offset: number): number {
 export function bindSceneEvents(): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined
   let reloadSelected = false
+  // 클로 생성 창구가 프리셋·씬을 만들거나 고침 — 프리셋 목록을 다시 읽고, 그 프리셋을 보고 있으면 씬도
+  const offPresets = window.nais.on('scenePresets:changed', ({ presetId }) => {
+    const st = useScenesStore.getState()
+    void st.loadPresets(false).then(() => {
+      if (useScenesStore.getState().activePresetId === presetId) void useScenesStore.getState().load()
+    })
+  })
   // 취소한 예약이 씬으로 돌아옴 — 예약 수만 다시 읽어 맞춘다 (썸네일·장수는 건드리지 않는다)
   const offReserves = window.nais.on('scenes:reservesChanged', ({ sceneIds }) => {
     const st = useScenesStore.getState()
@@ -841,6 +848,7 @@ export function bindSceneEvents(): () => void {
     }, 300)
   })
   return () => {
+    offPresets()
     offReserves()
     offChanged()
   }

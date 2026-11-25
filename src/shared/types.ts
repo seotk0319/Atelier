@@ -135,6 +135,12 @@ export interface GenerationRequest {
   sceneId?: number
   /** 일반 태그 약화: 3분할일 때 고정 칸 아래를 설정 general_tag_weight(기본 0.75)로 감싼다 */
   weakenGeneral?: boolean
+  /**
+   * 'claude' = 클로 생성 창구(로컬 주소)에서 들어온 요청. 화면에서 켜 둔 레퍼·바이브를 싣지 않고,
+   * Anlas 소모는 앱 스위치 대신 allowAnlas만 본다 (없거나 false면 무료 확인을 늘 거친다).
+   */
+  origin?: 'claude'
+  allowAnlas?: boolean
 }
 
 export interface PromptParts {
@@ -976,6 +982,8 @@ export interface IpcEventMap {
   'scenes:changed': { sceneId: number; filePath: string }
   /** 취소된 예약 생성이 씬 예약으로 돌아감 — 예약 수만 다시 읽는다 */
   'scenes:reservesChanged': { sceneIds: number[] }
+  /** 앱 밖(클로 생성 창구)에서 프리셋·씬을 만들거나 고침 — 프리셋 목록과 지금 연 씬 목록을 다시 읽는다 */
+  'scenePresets:changed': { presetId: number }
   /** 바이브 인코딩 완료 — 카드의 인코딩 표시 갱신용 */
   'vibes:encoded': Record<string, never>
   'gpt:changed': { jobs: GptJob[] }

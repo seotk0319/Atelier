@@ -311,8 +311,12 @@ function GenerationSection(): React.JSX.Element {
   const promptSplitEnabled = useGenerationStore((s) => s.promptSplitEnabled)
   const setPromptSplitEnabled = useGenerationStore((s) => s.setPromptSplitEnabled)
   const [generalWeight, setGeneralWeight] = useState(DEFAULT_GENERAL_WEIGHT)
+  const [claudeGen, setClaudeGen] = useState(true)
 
   useEffect(() => {
+    void window.nais.invoke('settings:get', { key: 'claude_gen_enabled' }).then(({ value }) => {
+      setClaudeGen(value !== '0')
+    })
     void window.nais.invoke('settings:get', { key: GENERAL_WEIGHT_KEY }).then(({ value }) => {
       setGeneralWeight(parseGeneralWeight(value))
     })
@@ -403,6 +407,18 @@ function GenerationSection(): React.JSX.Element {
           onCheckedChange={(v) => {
             setAlertNative(v)
             void window.nais.invoke('settings:set', { key: 'alert_native', value: v ? '1' : '0' })
+          }}
+        />
+      </Row>
+      <Row label="클로 생성 창구" hint="클로 세션이 「클로 생성」 프리셋에 씬을 만들어 대기열에 넣어요">
+        <Switch
+          checked={claudeGen}
+          onCheckedChange={(v) => {
+            setClaudeGen(v)
+            void window.nais.invoke('settings:set', {
+              key: 'claude_gen_enabled',
+              value: v ? '1' : '0'
+            })
           }}
         />
       </Row>
