@@ -12,12 +12,25 @@ import {
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CharRefItem, CharRefType, VibeItem } from '@shared/types'
+import {
+  isRefSent,
+  REF_PARTS,
+  shownRefParts,
+  refPartsHint,
+  refShortLabel,
+  refStrengthMax,
+  REF_TYPE_CHOICES,
+  showsFidelity,
+  toggleRefPart
+} from '@shared/char-refs'
+import { isMediumEffort, isV5Model } from '@shared/nai-models'
 import { cn } from '../lib/utils'
 import { applyClickSelection, useSelectAllShortcut } from '../lib/edit-selection'
 import { droppedImagePaths, hasImageDrop } from '../lib/image-drag'
 import { isLeavingDropZone, useDragEndCleanup } from '../lib/drop-zone'
 import { buildDisplayRows } from '../lib/folder-list'
-import { CHARREF_TYPES, refsStoreFor } from '../stores/refs-store'
+import { refsStoreFor } from '../stores/refs-store'
+import { useGenerationStore } from '../stores/generation-store'
 import { askConfirm, askText } from '../stores/dialog-store'
 import { toast } from '../stores/toast-store'
 import { FolderListView } from './folder-list-view'
@@ -35,6 +48,7 @@ import { Switch } from './ui/switch'
  */
 export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.Element {
   const store = refsStoreFor(kind)
+  const model = useGenerationStore((s) => s.request.model)
   const setOverlayOpen = store((s) => s.setOverlayOpen)
   const folders = store((s) => s.folders)
   const items = store((s) => s.items)
@@ -94,6 +108,11 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const enabledCount = items.filter((i) => i.enabled).length
+  // 이 모델로 실제로 보내는 레퍼런스 수 (V4.5는 의상을 뺀다)
+  const sentCount =
+    kind === 'charref'
+      ? items.filter((i) => i.enabled && isRefSent((i as CharRefItem).refType, model)).length
+      : enabledCount
 
   // 화면에 보이는 순서의 아이템 id들 (Shift 구간/Ctrl+A 기준)
   const visibleIds = useMemo(
@@ -104,7 +123,11 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
   const selectItem = (id: number, e: React.MouseEvent): void =>
     setSelected((prev) => applyClickSelection(prev, visibleIds, id, e, anchorRef))
   // memo된 카드가 편집 모드/선택 변화에 리렌더되도록
-  const renderKey = useMemo(() => (editMode ? selected : null), [editMode, selected])
+  // 레퍼런스 카드는 모델(V4.5/V5)에 따라 보이는 칸이 달라서 모델이 바뀌어도 다시 그린다
+  const renderKey = useMemo(
+    () => ({ selected: editMode ? selected : null, model }),
+    [editMode, selected, model]
+  )
 
   const bulkDelete = async (): Promise<void> => {
     if (
@@ -172,9 +195,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
           <span className="shrink-0 font-mono text-[11px] text-faint">
             {kind === 'vibe'
               ? `s${(item as VibeItem).strength.toFixed(2)}`
-              : (item as CharRefItem).refType === 'character&style'
-                ? 'C&S'
-                : (item as CharRefItem).refType[0].toUpperCase()}
+              : refShortLabel((item as CharRefItem).refType, model)}
           </span>
         </div>
       )
@@ -182,7 +203,13 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
     return (
       <div
         data-ref-card
-        className={cn('flex h-10 items-center gap-2 px-2', !item.enabled && 'opacity-55')}
+        className={cn(
+          'flex h-10 items-center gap-2 px-2',
+          // 꺼졌거나, 켜져 있어도 이 모델에서는 빼고 보내는 레퍼런스(V4.5의 의상)는 흐리게
+          (!item.enabled ||
+            (kind === 'charref' && !isRefSent((item as CharRefItem).refType, model))) &&
+            'opacity-55'
+        )}
       >
         <Switch checked={item.enabled} onCheckedChange={(v) => update(item.id, { enabled: v })} />
         {item.thumbnail ? (
@@ -219,9 +246,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
         <span className="shrink-0 font-mono text-[11px] text-faint">
           {kind === 'vibe'
             ? `s${(item as VibeItem).strength.toFixed(2)}`
-            : (item as CharRefItem).refType === 'character&style'
-              ? 'C&S'
-              : (item as CharRefItem).refType[0].toUpperCase()}
+            : refShortLabel((item as CharRefItem).refType, model, (item as CharRefItem).strength)}
         </span>
       </div>
     )
@@ -259,7 +284,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
         {kind === 'vibe' ? (
           <VibeParams item={item as VibeItem} update={update} />
         ) : (
-          <CharRefParams item={item as CharRefItem} update={update} />
+          <CharRefParams item={item as CharRefItem} update={update} model={model} />
         )}
       </div>
     )
@@ -307,14 +332,22 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
           <X size={15} />
         </Button>
         <span className="text-[13px] font-medium">
-          {kind === 'vibe' ? '바이브 트랜스퍼' : '캐릭터 레퍼런스'}
+          {kind === 'vibe' ? '바이브 트랜스퍼' : '레퍼런스'}
         </span>
-        {enabledCount > 0 && (
+        {sentCount > 0 && (
           <span className="rounded-full bg-accent-soft px-1.5 font-mono text-[11px] text-accent">
-            {enabledCount}
+            {sentCount}
           </span>
         )}
       </div>
+
+      {/* V5에서 레퍼런스를 켜면 장당 5 Anlas가 붙고, 절약 모드는 일반으로 바뀐다 — 모델 줄이 이 창에 가려지므로 여기서 알린다 */}
+      {kind === 'charref' && isV5Model(model) && sentCount > 0 && (
+        <p className="rounded-lg bg-accent-soft px-2.5 py-1.5 text-[11px] leading-relaxed text-accent">
+          {isMediumEffort(model) ? '절약 모드는 레퍼런스를 못 써서 V5 일반으로 생성돼요 · ' : ''}
+          레퍼런스 1개당 그림 1장에 5 Anlas가 붙어요
+        </p>
+      )}
 
       <div className="flex items-center gap-1.5">
         <div className="relative flex-1">
@@ -440,6 +473,7 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
       {bulkParamsOpen && (
         <BulkParamsDialog
           kind={kind}
+          model={model}
           count={selected.size}
           onApply={(patch) => {
             for (const id of selected) update(id, patch)
@@ -463,51 +497,93 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
   )
 }
 
-/** 선택 항목 파라미터 일괄 적용 — vibe: 강도/정보, charref: 타입/강도/충실도 */
+/**
+ * 선택 항목 파라미터 일괄 적용 — vibe: 강도/정보, charref: 따라 할 것/강도(+V4.5 충실도).
+ * 레퍼런스는 기본이 「그대로 두기」라서 바꾸겠다고 고른 것만 덮어쓴다.
+ */
 function BulkParamsDialog({
   kind,
+  model,
   count,
   onApply,
   onClose
 }: {
   kind: 'vibe' | 'charref'
+  model: string
   count: number
   onApply: (patch: Record<string, unknown>) => void
   onClose: () => void
 }): React.JSX.Element {
-  const [strength, setStrength] = useState(0.6)
+  const [strength, setStrength] = useState(kind === 'vibe' ? 0.6 : 1)
   const [info, setInfo] = useState(0.7)
   const [fidelity, setFidelity] = useState(0.5)
-  const [refType, setRefType] = useState<CharRefType>('character')
+  const [refTypeSel, setRefTypeSel] = useState<CharRefType | 'keep'>('keep')
+  const [strengthOn, setStrengthOn] = useState(kind === 'vibe')
+  const [fidelityOn, setFidelityOn] = useState(false)
+  const v5 = isV5Model(model)
+  const fidelityShown = showsFidelity(model)
+  const strengthMax = kind === 'vibe' ? 1 : refStrengthMax(model)
+
+  const refPatch = (): Record<string, unknown> => {
+    const patch: Record<string, unknown> = {}
+    if (refTypeSel !== 'keep') patch.refType = refTypeSel
+    if (strengthOn) patch.strength = strength
+    if (fidelityShown && fidelityOn) patch.fidelity = fidelity
+    return patch
+  }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm p-4">
         <DialogTitle className="mb-1">파라미터 일괄 적용</DialogTitle>
-        <p className="mb-3 text-[12px] text-muted">선택한 {count}개에 아래 값을 적용해요.</p>
+        <p className="mb-3 text-[12px] text-muted">
+          선택한 {count}개에 아래 값을 적용해요.
+          {kind === 'charref' && ' 「그대로 두기」와 체크하지 않은 칸은 바꾸지 않아요.'}
+        </p>
         <div className="flex flex-col gap-2.5">
           {kind === 'charref' && (
-            <ParamRow label="타입">
-              <Select value={refType} onValueChange={(v) => setRefType(v as CharRefType)}>
+            <ParamRow label="따라 할 것">
+              <Select
+                value={refTypeSel}
+                onValueChange={(v) => setRefTypeSel(v as CharRefType | 'keep')}
+              >
                 <SelectTrigger className="h-7 flex-1 text-[12px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CHARREF_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
+                  <SelectItem value="keep">그대로 두기</SelectItem>
+                  {REF_TYPE_CHOICES.filter((c) => v5 || !c.v5Only).map((c) => (
+                    <SelectItem key={c.type} value={c.type}>
+                      {c.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </ParamRow>
           )}
-          <ParamRow label={`강도 ${strength.toFixed(2)}`}>
+          <ParamRow
+            label={
+              kind === 'vibe'
+                ? `강도 ${strength.toFixed(2)}`
+                : `강도 ${strength.toFixed(2)} / ${strengthMax}`
+            }
+          >
+            {kind === 'charref' && (
+              <input
+                type="checkbox"
+                aria-label="강도 바꾸기"
+                title="체크하면 강도를 바꿔요"
+                checked={strengthOn}
+                onChange={(e) => setStrengthOn(e.target.checked)}
+                className="size-3.5 shrink-0"
+              />
+            )}
             <Slider
               min={0}
-              max={1}
+              max={strengthMax}
               step={0.05}
               value={[strength]}
+              disabled={!strengthOn}
               onValueChange={([v]) => setStrength(Math.round(v * 100) / 100)}
             />
           </ParamRow>
@@ -522,15 +598,26 @@ function BulkParamsDialog({
               />
             </ParamRow>
           ) : (
-            <ParamRow label={`충실도 ${fidelity.toFixed(2)}`}>
-              <Slider
-                min={0}
-                max={1}
-                step={0.05}
-                value={[fidelity]}
-                onValueChange={([v]) => setFidelity(Math.round(v * 100) / 100)}
-              />
-            </ParamRow>
+            fidelityShown && (
+              <ParamRow label={`충실도 ${fidelity.toFixed(2)}`}>
+                <input
+                  type="checkbox"
+                  aria-label="충실도 바꾸기"
+                  title="체크하면 충실도를 바꿔요"
+                  checked={fidelityOn}
+                  onChange={(e) => setFidelityOn(e.target.checked)}
+                  className="size-3.5 shrink-0"
+                />
+                <Slider
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={[fidelity]}
+                  disabled={!fidelityOn}
+                  onValueChange={([v]) => setFidelity(Math.round(v * 100) / 100)}
+                />
+              </ParamRow>
+            )
           )}
         </div>
         <div className="mt-4 flex justify-end gap-2">
@@ -540,11 +627,7 @@ function BulkParamsDialog({
           <Button
             variant="accent"
             onClick={() =>
-              onApply(
-                kind === 'vibe'
-                  ? { strength, infoExtracted: info }
-                  : { refType, strength, fidelity }
-              )
+              onApply(kind === 'vibe' ? { strength, infoExtracted: info } : refPatch())
             }
           >
             적용
@@ -564,7 +647,7 @@ function ParamRow({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-[12px] text-muted">{label}</span>
+      <span className="w-[84px] shrink-0 whitespace-nowrap text-[12px] text-muted">{label}</span>
       {children}
     </div>
   )
@@ -606,48 +689,118 @@ function VibeParams({
 
 function CharRefParams({
   item,
-  update
+  update,
+  model
 }: {
   item: CharRefItem
   update: (id: number, patch: Record<string, unknown>) => void
+  model: string
 }): React.JSX.Element {
+  const modelMax = refStrengthMax(model)
+  // 다른 모델에서 올려 둔 강도가 슬라이더 끝에 묻히지 않게 지금 값까지는 늘려 둔다 (값은 그대로 보낸다)
+  const max = Math.max(modelMax, Math.ceil(item.strength))
+  const sent = isRefSent(item.refType, model)
   return (
     <div className="flex flex-col gap-1.5">
-      <ParamRow label="타입">
-        <Select
-          value={item.refType}
-          onValueChange={(v) => update(item.id, { refType: v as CharRefType })}
-        >
-          <SelectTrigger className="h-7 flex-1 text-[12px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CHARREF_TYPES.map((t) => (
-              <SelectItem key={t.value} value={t.value}>
-                {t.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </ParamRow>
-      <ParamRow label={`강도 ${item.strength.toFixed(2)}`}>
-        <Slider
-          min={0}
-          max={1}
-          step={0.05}
-          value={[item.strength]}
-          onValueChange={([v]) => update(item.id, { strength: Math.round(v * 100) / 100 })}
-        />
-      </ParamRow>
-      <ParamRow label={`충실도 ${item.fidelity.toFixed(2)}`}>
-        <Slider
-          min={0}
-          max={1}
-          step={0.05}
-          value={[item.fidelity]}
-          onValueChange={([v]) => update(item.id, { fidelity: Math.round(v * 100) / 100 })}
-        />
-      </ParamRow>
+      <RefTypeFields
+        refType={item.refType}
+        model={model}
+        onChange={(refType) => update(item.id, { refType })}
+      />
+      {/* 이 모델에서 빼고 보내는 레퍼런스(V4.5의 의상)는 값 칸을 숨긴다 */}
+      {sent && (
+        <ParamRow label={`강도 ${item.strength.toFixed(2)} / ${modelMax}`}>
+          <Slider
+            min={0}
+            max={max}
+            step={0.05}
+            value={[item.strength]}
+            onValueChange={([v]) => update(item.id, { strength: Math.round(v * 100) / 100 })}
+          />
+        </ParamRow>
+      )}
+      {sent && showsFidelity(model) && (
+        <ParamRow label={`충실도 ${item.fidelity.toFixed(2)}`}>
+          <Slider
+            min={0}
+            max={1}
+            step={0.05}
+            value={[item.fidelity]}
+            onValueChange={([v]) => update(item.id, { fidelity: Math.round(v * 100) / 100 })}
+          />
+        </ParamRow>
+      )}
     </div>
+  )
+}
+
+/**
+ * 레퍼 그림에서 무엇을 따라 할지 — 얼굴·머리 / 옷 / 그림체를 켜고 끈다 (여러 개 고름).
+ * 실제 저장값(description)은 켠 칸의 조합이다 (shared/char-refs.ts). NAI에 없는 조합은 못 누른다.
+ */
+function RefTypeFields({
+  refType,
+  model,
+  onChange
+}: {
+  refType: CharRefType
+  model: string
+  onChange: (refType: CharRefType) => void
+}): React.JSX.Element {
+  const on = shownRefParts(refType, model)
+  const sent = isRefSent(refType, model)
+  return (
+    <>
+      <ParamRow label="따라 할 것">
+        <span role="group" aria-label="따라 할 것" className="flex flex-1 gap-1">
+          {REF_PARTS.map((p) => {
+            const checked = on.includes(p.value)
+            const result = toggleRefPart(refType, p.value, model)
+            const blocked = 'blocked' in result ? result.blocked : null
+            return (
+              <button
+                key={p.value}
+                type="button"
+                aria-pressed={checked}
+                aria-disabled={blocked != null}
+                title={
+                  blocked ?? (checked ? `${p.label} 따라 하기 끄기` : `${p.label}도 따라 하기`)
+                }
+                onClick={() => {
+                  if ('type' in result) onChange(result.type)
+                  else toast(result.blocked, 'info')
+                }}
+                className={cn(
+                  'flex h-7 flex-1 items-center justify-center gap-1 rounded-md border text-[12px] font-medium transition-colors',
+                  checked
+                    ? 'border-accent bg-accent-soft text-accent'
+                    : 'border-line bg-surface-2 text-muted hover:text-ink',
+                  blocked != null && !checked && 'opacity-45 hover:text-muted',
+                  blocked != null && 'cursor-not-allowed'
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid size-3.5 shrink-0 place-items-center rounded-[4px] border text-[10px] leading-none',
+                    checked ? 'border-accent bg-accent-fill text-on-accent' : 'border-line'
+                  )}
+                >
+                  {checked && '✓'}
+                </span>
+                {p.label}
+              </button>
+            )
+          })}
+        </span>
+      </ParamRow>
+      <p
+        className={cn(
+          'pl-[92px] text-[11px] leading-snug',
+          sent ? 'text-faint' : 'font-semibold text-accent'
+        )}
+      >
+        {refPartsHint(refType, model)}
+      </p>
+    </>
   )
 }

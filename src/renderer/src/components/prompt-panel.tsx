@@ -22,10 +22,11 @@ import {
   isMediumEffort,
   isV5Model,
   MEDIUM_EFFORT_STEPS,
-  tokenLimitForModel,
-  withEffort
+  tokenLimitForModel
 } from '@shared/nai-models'
+import { effortForRefs, sentRefCount } from '@shared/char-refs'
 import { removeComments } from '@shared/nai-presets'
+import { GENERAL_WEIGHT_KEY, parseGeneralWeight } from '@shared/general-weight'
 import { cn } from '../lib/utils'
 import { useCharactersStore } from '../stores/characters-store'
 import { useFragmentsStore } from '../stores/fragments-store'
@@ -61,16 +62,35 @@ function anlasTooltip(anlas: ReturnType<typeof estimateAnlas>, batchCount: numbe
   return lines.join('\n')
 }
 
+type ModelChoiceId = 'v45' | 'v5-medium' | 'v5'
+const MODEL_CHOICES: { id: ModelChoiceId; label: string; title: string }[] = [
+  { id: 'v45', label: 'V4.5', title: 'NAI Diffusion V4.5 Full' },
+  {
+    id: 'v5-medium',
+    label: 'V5 절약',
+    title:
+      'V5 Full을 14스텝으로 줄인 모델이에요. NAI 기준 사용량이 약 42% 적고 품질은 비슷해요. 대신 스텝·샘플러·CFG Rescale·네거티브를 바꿀 수 없어요.'
+  },
+  { id: 'v5', label: 'V5 일반', title: 'NAI Diffusion V5 Full' }
+]
+
 export function PromptPanel(): React.JSX.Element {
   const request = useGenerationStore((s) => s.request)
   const patch = useGenerationStore((s) => s.patchRequest)
   const v5Enabled = isV5Model(request.model)
   // V5 Full 절약(Medium) 모드: 스텝 14 고정, 네거티브는 보내지 않는다
   const medium = isMediumEffort(request.model)
-  const steps = medium ? MEDIUM_EFFORT_STEPS : request.steps
-  const setMedium = (on: boolean): void => {
-    localStorage.setItem('v5_effort', on ? 'medium' : 'high')
-    patch({ model: withEffort(request.model, on) })
+  const modelChoice: ModelChoiceId = !v5Enabled ? 'v45' : medium ? 'v5-medium' : 'v5'
+  const chooseModel = (id: ModelChoiceId): void => {
+    const v5 = id !== 'v45'
+    if (v5) localStorage.setItem('v5_effort', id === 'v5-medium' ? 'medium' : 'high')
+    patch({
+      model: fullModelForVersion(
+        v5 ? '5' : '4.5',
+        request.model.includes('inpainting'),
+        id === 'v5-medium'
+      )
+    })
   }
   const tokenLimit = tokenLimitForModel(request.model)
   const patchPromptParts = useGenerationStore((s) => s.patchPromptParts)
@@ -90,9 +110,19 @@ export function PromptPanel(): React.JSX.Element {
   const enabledVibes = useVibesStore((s) => s.items.filter((v) => v.enabled).length)
   const crefOverlayOpen = useCharRefsStore((s) => s.overlayOpen)
   const setCrefOpen = useCharRefsStore((s) => s.setOverlayOpen)
-  const enabledCrefs = useCharRefsStore((s) => s.items.filter((c) => c.enabled).length)
-  // V5 요청에는 바이브·레퍼런스를 싣지 않는다 (본체 index.ts와 같은 기준) — 비용 계산에서도 뺀다
-  const sentCrefs = v5Enabled ? 0 : enabledCrefs
+  // 실제로 보내는 레퍼런스 수 — V4.5는 의상 레퍼런스를 빼고 보낸다 (본체와 같은 기준)
+  const sentCrefs = useCharRefsStore((s) =>
+    sentRefCount(
+      s.items.filter((c) => c.enabled).map((c) => c.refType),
+      request.model
+    )
+  )
+  // V5 절약 모드에서 레퍼런스가 켜져 있으면 일반으로 생성된다
+  const forcedHigh = medium && sentCrefs > 0
+  const effectiveModel = effortForRefs(request.model, sentCrefs)
+  // 실제로 절약 모드로 나가는지 (요약·네거티브 안내·비용은 이 값 기준)
+  const sendsMedium = isMediumEffort(effectiveModel)
+  const steps = sendsMedium ? MEDIUM_EFFORT_STEPS : request.steps
   const source = useGenerationStore((s) => s.source)
   const [paramsOpen, setParamsOpen] = useState(false)
   const stripExif = useStorageSettingsStore((s) => s.stripExif)
@@ -110,6 +140,16 @@ export function PromptPanel(): React.JSX.Element {
   useEffect(() => {
     void loadStorageSettings()
   }, [loadStorageSettings])
+
+  // 일반 태그 약화 값은 설정 창에서 바꾼다. 창이 닫힐 때마다 다시 읽어 토글 옆 숫자를 맞춘다.
+  const settingsOpen = useLayoutStore((s) => s.settingsOpen)
+  const [generalWeight, setGeneralWeight] = useState<number | null>(null)
+  useEffect(() => {
+    if (settingsOpen) return
+    void window.nais
+      .invoke('settings:get', { key: GENERAL_WEIGHT_KEY })
+      .then(({ value }) => setGeneralWeight(parseGeneralWeight(value)))
+  }, [settingsOpen])
 
   // 씬 모드: 생성은 예약된 씬들을 예약 수만큼 큐에 넣는다. 예약 0이면 생성 버튼 비활성.
   const centerMode = useLayoutStore((s) => s.centerMode)
@@ -207,13 +247,13 @@ export function PromptPanel(): React.JSX.Element {
         width: request.width,
         height: request.height,
         steps,
-        model: request.model,
+        model: effectiveModel,
         charRefCount: sentCrefs,
         isOpus: subscriptionTier === 'opus',
         batchCount,
         unencodedVibes: 0 // 캐시 상태는 오버레이에서 확인 — 배지로만 안내
       }),
-    [request.width, request.height, steps, request.model, subscriptionTier, batchCount, sentCrefs]
+    [request.width, request.height, steps, effectiveModel, subscriptionTier, batchCount, sentCrefs]
   )
 
   // 파라미터 요약 줄: 씬 모드는 씬마다 해상도가 달라서, 예약된 씬(없으면 전체 씬) 중 가장 큰 해상도로 판단한다.
@@ -221,7 +261,7 @@ export function PromptPanel(): React.JSX.Element {
     const seedText = seedLocked && request.seed >= 0 ? `시드 ${request.seed}` : '시드 무작위'
     if (!isScene) {
       return {
-        text: `${request.width} × ${request.height} · ${steps}스텝${medium ? ' (절약)' : ''} · ${seedText}`,
+        text: `${request.width} × ${request.height} · ${steps}스텝${sendsMedium ? ' (절약)' : forcedHigh ? ' (레퍼런스 때문에 일반)' : ''} · ${seedText}`,
         free: anlas.total === 0,
         cost: anlas.total,
         tip: anlasTooltip(anlas, batchCount)
@@ -238,7 +278,7 @@ export function PromptPanel(): React.JSX.Element {
       width: largest.width,
       height: largest.height,
       steps,
-      model: request.model,
+      model: effectiveModel,
       charRefCount: sentCrefs,
       isOpus: subscriptionTier === 'opus',
       batchCount: 1,
@@ -249,7 +289,7 @@ export function PromptPanel(): React.JSX.Element {
         ? `씬별 해상도 (최대 ${largest.width} × ${largest.height})`
         : `${largest.width} × ${largest.height}`
     return {
-      text: `${sizeText} · ${steps}스텝${medium ? ' (절약)' : ''} · ${seedText}`,
+      text: `${sizeText} · ${steps}스텝${sendsMedium ? ' (절약)' : forcedHigh ? ' (레퍼런스 때문에 일반)' : ''} · ${seedText}`,
       free: perImage.total === 0,
       cost: perImage.total,
       tip:
@@ -268,7 +308,11 @@ export function PromptPanel(): React.JSX.Element {
     anlas,
     batchCount,
     sentCrefs,
-    subscriptionTier
+    subscriptionTier,
+    steps,
+    sendsMedium,
+    effectiveModel,
+    forcedHigh
   ])
 
   // 오버레이는 하나만 열림 — 서로 배타
@@ -358,78 +402,43 @@ export function PromptPanel(): React.JSX.Element {
             </motion.div>
           )}
         </AnimatePresence>
-        {/* 생성 모델 — 왼쪽 패널 상단에서 V4.5 Full / V5 Full 전환 */}
-        <label
-          className="flex h-9 shrink-0 cursor-pointer items-center justify-between rounded-xl bg-paper px-3"
-          title={`현재 NAI Diffusion ${v5Enabled ? 'V5 Full' : 'V4.5 Full'} 모델을 써요`}
-        >
+        {/* 생성 모델 — V4.5 / V5 절약(Medium) / V5 일반을 한 줄에서 고른다 */}
+        <div className="flex h-9 shrink-0 items-center justify-between rounded-xl bg-paper px-3">
           <span className="text-[11px] font-medium text-muted">생성 모델</span>
-          <span className="flex items-center gap-2">
-            <span
-              className={
-                v5Enabled ? 'text-[11px] text-faint' : 'text-[11px] font-semibold text-ink'
-              }
-            >
-              V4.5
-            </span>
-            <Switch
-              aria-label={`생성 모델 ${v5Enabled ? 'V5 Full' : 'V4.5 Full'}`}
-              checked={v5Enabled}
-              onCheckedChange={(enabled) =>
-                patch({
-                  model: fullModelForVersion(
-                    enabled ? '5' : '4.5',
-                    request.model.includes('inpainting'),
-                    enabled && localStorage.getItem('v5_effort') === 'medium'
-                  )
-                })
-              }
-            />
-            <span
-              className={
-                v5Enabled ? 'text-[11px] font-semibold text-accent' : 'text-[11px] text-faint'
-              }
-            >
-              V5
-            </span>
-          </span>
-        </label>
-        {/* V5 생성 모드 — 절약(Medium): 사용량 약 42% 절약, 14스텝·Euler Ancestral·네거티브 고정 */}
-        {v5Enabled && (
-          <div
-            className="-mt-1 flex h-9 shrink-0 items-center justify-between rounded-xl bg-paper px-3"
-            title="절약 모드는 V5 Full을 14스텝으로 줄인 모델이에요. NAI 기준 사용량이 약 42% 적고 품질은 비슷해요. 대신 스텝·샘플러·CFG Rescale·네거티브를 바꿀 수 없어요."
+          <span
+            role="radiogroup"
+            aria-label="생성 모델"
+            className="flex rounded-lg bg-surface-2 p-0.5"
           >
-            <span className="text-[11px] font-medium text-muted">생성 모드</span>
-            <span
-              role="radiogroup"
-              aria-label="V5 생성 모드"
-              className="flex rounded-lg bg-surface-2 p-0.5"
-            >
-              {(
-                [
-                  [true, '절약'],
-                  [false, '일반']
-                ] as const
-              ).map(([on, label]) => (
+            {MODEL_CHOICES.map((choice) => {
+              const selected = modelChoice === choice.id
+              // 절약을 골랐어도 레퍼런스가 켜져 있으면 일반으로 나간다 — 점선 밑줄로 알린다
+              const overridden = choice.id === 'v5-medium' && selected && forcedHigh
+              return (
                 <button
-                  key={label}
+                  key={choice.id}
                   role="radio"
-                  aria-checked={medium === on}
-                  onClick={() => setMedium(on)}
+                  aria-checked={selected}
+                  title={
+                    overridden
+                      ? '레퍼런스가 켜져 있어서 지금은 V5 일반으로 생성돼요. 레퍼런스를 끄면 다시 절약으로 생성해요.'
+                      : choice.title
+                  }
+                  onClick={() => chooseModel(choice.id)}
                   className={cn(
-                    'h-6 rounded-md px-3 text-[11px] font-semibold transition-colors',
-                    medium === on
+                    'h-6 rounded-md px-2.5 text-[11px] font-semibold transition-colors',
+                    selected
                       ? 'bg-surface text-accent shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
-                      : 'text-faint hover:text-ink'
+                      : 'text-faint hover:text-ink',
+                    overridden && 'underline decoration-dotted underline-offset-2'
                   )}
                 >
-                  {label}
+                  {choice.label}
                 </button>
-              ))}
-            </span>
-          </div>
-        )}
+              )
+            })}
+          </span>
+        </div>
         {/* 프롬프트 프리셋 — 포지티브 프롬프트 위 */}
         <PromptPresetBar />
         {/* 헤더를 제외한 실제 편집 영역을 기준으로 리사이즈한다. 최소 높이보다
@@ -498,7 +507,7 @@ export function PromptPanel(): React.JSX.Element {
             />
             {!negCollapsed && (
               <>
-                {medium && (
+                {sendsMedium && (
                   <p className="shrink-0 rounded-lg bg-accent-soft px-2.5 py-1.5 text-[11px] leading-relaxed text-accent">
                     절약 모드는 네거티브를 보내지 않아요. 빼고 싶은 건 프롬프트에 -3::hat:: 처럼 써
                     주세요. 아래 내용은 일반 모드에서 다시 쓰여요.
@@ -506,7 +515,7 @@ export function PromptPanel(): React.JSX.Element {
                 )}
                 <PromptEditor
                   negative
-                  className={cn('min-h-0 flex-1', medium && 'opacity-45')}
+                  className={cn('min-h-0 flex-1', sendsMedium && 'opacity-45')}
                   value={request.negativePrompt}
                   tokensOverride={tokenTotals.neg}
                   placeholder="UC 프리셋 뒤에 이어 붙어요"
@@ -548,14 +557,8 @@ export function PromptPanel(): React.JSX.Element {
         <ToolButton
           active={crefOverlayOpen}
           icon={<ImageUp size={14} />}
-          label="레퍼런스"
-          badge={enabledCrefs}
-          disabled={v5Enabled}
-          title={
-            v5Enabled
-              ? 'V5에서는 레퍼런스를 쓰지 않아요. V4.5로 바꾸면 다시 쓸 수 있어요'
-              : undefined
-          }
+          label="레퍼"
+          badge={sentCrefs}
           onClick={() => only('cref')}
         />
         <ToolButton
@@ -599,7 +602,7 @@ export function PromptPanel(): React.JSX.Element {
         </button>
       </div>
 
-      {/* 옵션 행: 가속 모드 · Anlas 소모 · EXIF 제거 */}
+      {/* 옵션 행: 가속 모드 · 태그 약화 · EXIF 제거 (Anlas 소모는 제목 표시줄 오른쪽) */}
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1.5 text-[12px] font-medium text-muted">
         {queue?.accelerationAvailable && (
           <>
@@ -624,23 +627,33 @@ export function PromptPanel(): React.JSX.Element {
                 onCheckedChange={(enabled) => void setAccelerationEnabled(enabled)}
               />
             </label>
-            <label
-              className="flex cursor-pointer items-center gap-1.5"
-              title="ON: 기존처럼 유료 생성 허용. OFF: 메인·씬 생성 전 무료 여부 확인, 1% 미만/확인 실패 계정 대기. 이미 전송한 요청은 소급 적용하지 않으며 다른 앱과 같은 계정을 동시에 쓰면 과금 방지를 보장할 수 없어요."
-            >
-              Anlas 소모
-              <Switch
-                aria-label={`Anlas 소모 ${queue.anlasSpendingEnabled !== false ? 'ON' : 'OFF'}`}
-                checked={queue.anlasSpendingEnabled !== false}
-                onCheckedChange={(enabled) =>
-                  void window.nais
-                    .invoke('anlasSpending:set', { enabled })
-                    .then((status) => useGenerationStore.setState({ queue: status }))
-                }
-              />
-            </label>
           </>
         )}
+        {/* 일반 태그 약화 — 고정 칸은 1.0 그대로, 그 아래(가변·디테일·씬)를 설정의 가중치로 감싼다 */}
+        <label
+          className={cn(
+            'flex items-center gap-1.5',
+            promptSplitEnabled ? 'cursor-pointer' : 'opacity-50'
+          )}
+          title={
+            promptSplitEnabled
+              ? `켜면 고정 칸 아래를 ${generalWeight ?? ''}:: … ::로 감싸 보내요. 값은 설정 › 생성에서 바꿔요`
+              : '프롬프트 3분할을 켜야 쓸 수 있어요 (설정 › 생성)'
+          }
+        >
+          태그 약화
+          {request.weakenGeneral && promptSplitEnabled && generalWeight != null && (
+            <span className="font-mono text-[11px] font-semibold text-accent tabular-nums">
+              {generalWeight.toFixed(2)}
+            </span>
+          )}
+          <Switch
+            aria-label={`일반 태그 약화 ${request.weakenGeneral ? '켜짐' : '꺼짐'}`}
+            checked={!!request.weakenGeneral && promptSplitEnabled}
+            disabled={!promptSplitEnabled}
+            onCheckedChange={(enabled) => patch({ weakenGeneral: enabled })}
+          />
+        </label>
         <label
           className="flex cursor-pointer items-center gap-1.5"
           title={
@@ -1058,7 +1071,8 @@ function ToolButton({
       )}
       onClick={onClick}
     >
-      {icon}
+      {/* 다섯 칸이 좁아서 숫자가 붙으면 아이콘을 빼고 이름을 살린다 */}
+      {!inUse && icon}
       <span className="min-w-0 truncate">{label}</span>
       {inUse && (
         <span

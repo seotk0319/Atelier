@@ -69,7 +69,18 @@ export interface VibeItem {
   folderId: number | null
 }
 
-export type CharRefType = 'character' | 'style' | 'character&style' | 'costume' | 'delta'
+/**
+ * NAI director_reference description 값. 끝의 두 개는 V5 「동일 의상 선호」 토글이 만드는 값
+ * (규칙은 shared/char-refs.ts).
+ */
+export type CharRefType =
+  | 'character'
+  | 'style'
+  | 'character&style'
+  | 'costume'
+  | 'delta'
+  | 'character_mainoutfit'
+  | 'character&style_anyoutfit'
 
 export interface CharRefItem {
   id: number
@@ -122,6 +133,8 @@ export interface GenerationRequest {
   skipWildcards?: boolean
   /** 씬 생성이면 씬 id (저장 시 images.scene_id 연결) */
   sceneId?: number
+  /** 일반 태그 약화: 3분할일 때 고정 칸 아래를 설정 general_tag_weight(기본 0.75)로 감싼다 */
+  weakenGeneral?: boolean
 }
 
 export interface PromptParts {

@@ -60,6 +60,37 @@ describe('Anlas 추정 (NAI 웹 공식 이식)', () => {
     expect(estimateAnlas({ ...base, isOpus: false, batchCount: 3 }).generation).toBe(60)
   })
 
+  it('V5는 ×1.5 (웹 화면 실측: V5 Curated 832×1216 23스텝 = 26)', () => {
+    const v5 = { ...base, steps: 23, isOpus: false, model: 'nai-diffusion-5-curated' }
+    expect(estimateAnlas(v5).perImage).toBe(26)
+    expect(estimateAnlas({ ...v5, model: 'nai-diffusion-5-full' }).perImage).toBe(26)
+  })
+
+  it('V5 절약은 스텝과 무관한 고정식 ÷1.75 후 ×1.5', () => {
+    const r = estimateAnlas({
+      ...base,
+      steps: 14,
+      isOpus: false,
+      model: 'nai-diffusion-5-full-medium'
+    })
+    expect(r.perImage).toBe(15)
+  })
+
+  it('V5 레퍼런스: 생성은 무료 유지 + 장당·레퍼당 5 (실측: Opus·1024²·28스텝·레퍼1 = 5, 2026-11-25)', () => {
+    const r = estimateAnlas({
+      ...base,
+      width: 1024,
+      height: 1024,
+      model: 'nai-diffusion-5-full',
+      charRefCount: 1
+    })
+    expect(r.generation).toBe(0)
+    expect(r.total).toBe(5)
+    expect(
+      estimateAnlas({ ...base, steps: 23, model: 'nai-diffusion-5-full', charRefCount: 2 }).total
+    ).toBe(10)
+  })
+
   it('Opus의 1MP 이하 일반 디렉터 툴은 무료', () => {
     for (const method of [
       'lineart',

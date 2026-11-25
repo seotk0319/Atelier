@@ -1,4 +1,4 @@
-import type { GenerationRequest } from '../../shared/types'
+import type { CharRefType, GenerationRequest } from '../../shared/types'
 import { isMediumEffort, isV5Model, snapToGrid, withFixedSettings } from '../../shared/nai-models'
 
 /**
@@ -99,8 +99,8 @@ export interface I2iOptions {
  * - 이미지: 웹은 director_reference_images_cached({cache_secret_key}), 서드파티는 base64 배열
  */
 export interface CharacterReferenceOptions {
-  /** 실캡처는 character&style. costume/delta는 웹 번들 enum에서 확인된 신규 타입 */
-  referenceType: 'character' | 'style' | 'character&style' | 'costume' | 'delta'
+  /** 실캡처는 character&style. 나머지는 웹 번들 enum에서 확인 (모델별 규칙은 shared/char-refs.ts) */
+  referenceType: CharRefType
   strength: number
   fidelity: number
   cacheSecretKey?: string

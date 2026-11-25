@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { ChevronDown, ChevronRight, Palette, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { memo, useState, type CSSProperties } from 'react'
+import { memo, useRef, useState, type CSSProperties } from 'react'
 import { FOLDER_COLORS, type ListFolder } from '@shared/types'
 import { cn } from '../lib/utils'
 import { DIVIDER_KEY, rowKey, type DisplayRow, type FolderListItem } from '../lib/folder-list'
@@ -331,9 +331,13 @@ function ItemCardRowInner<T extends FolderListItem>({
   itemContextMenu?: (item: T) => React.ReactNode
   itemClassName?: (item: T) => string
 }): React.JSX.Element {
+  const cardRef = useRef<HTMLDivElement>(null)
   // 카드 = paper, 내부 박스는 surface-2로 한 단계 대비
   const card = (
-    <div className={cn('rounded-lg border border-line bg-paper', itemClassName?.(item))}>
+    <div
+      ref={cardRef}
+      className={cn('rounded-lg border border-line bg-paper', itemClassName?.(item))}
+    >
       {renderHeader?.(item)}
       <AnimatePresence initial={false}>
         {expanded && (
@@ -343,6 +347,11 @@ function ItemCardRowInner<T extends FolderListItem>({
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.18, ease: EASE }}
             className="overflow-hidden"
+            // 목록 아래쪽 카드를 펼치면 내용이 스크롤 밖으로 열려 안 열린 것처럼 보인다 — 펼친 뒤 보이게 끌어올린다
+            onAnimationComplete={(def) => {
+              if ((def as { height?: unknown }).height === 'auto')
+                revealInScrollParent(cardRef.current)
+            }}
           >
             {renderExpanded?.(item)}
           </motion.div>
@@ -362,6 +371,19 @@ function ItemCardRowInner<T extends FolderListItem>({
       )}
     </ItemRow>
   )
+}
+
+/** 펼친 카드의 아랫부분이 스크롤 영역 밖이면 그만큼 내린다 (카드 머리는 화면 안에 남긴다) */
+function revealInScrollParent(el: HTMLElement | null): void {
+  if (!el) return
+  let box = el.parentElement
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement
+  if (!box) return
+  const r = el.getBoundingClientRect()
+  const b = box.getBoundingClientRect()
+  const below = r.bottom - b.bottom
+  if (below <= 0) return
+  box.scrollBy({ top: Math.min(below + 4, r.top - b.top), behavior: 'smooth' })
 }
 
 /** 그리드 타일 — ItemCardRow와 같은 이유로 memo */

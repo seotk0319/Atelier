@@ -63,10 +63,10 @@ export function isV5Model(model: string): boolean {
 }
 
 /**
- * 바이브 트랜스퍼·캐릭터 레퍼런스를 요청에 실을 수 있는 모델인지. V5는 둘 다 받지 않는다
- * (원본 NAIS3 v1.0.19 modelCapabilities와 같은 기준).
+ * 바이브 트랜스퍼를 요청에 실을 수 있는 모델인지. V5는 받지 않는다 (NAI 웹 capability vibetransfer:false).
+ * 캐릭터 레퍼런스는 2026-11-25부터 V5도 받는다 — 규칙은 shared/char-refs.ts.
  */
-export function supportsReferences(model: string): boolean {
+export function supportsVibes(model: string): boolean {
   return !isV5Model(model)
 }
 

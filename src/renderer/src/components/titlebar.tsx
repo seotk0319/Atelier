@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react'
 import { estimateAnlas } from '@shared/anlas'
 import { isMediumEffort, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
+import { effortForRefs, sentRefCount } from '@shared/char-refs'
 import type { V5UsageStatus } from '@shared/types'
 import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
 import { cn } from '../lib/utils'
@@ -21,6 +22,7 @@ import { useCharRefsStore, useVibesStore } from '../stores/refs-store'
 import { useUpdateStore } from '../stores/update-store'
 import { PageNav } from './page-nav'
 import { ThemeToggle } from './theme-toggle'
+import { Switch } from './ui/switch'
 
 const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
 
@@ -96,6 +98,30 @@ function v5Tooltip(usage: V5UsageStatus, model: string): string {
  * 머리줄 오른쪽 Anlas 잔액(-N 예상 소모)과 V5 잔량. 값이 없으면 그 칸은 그리지 않는다.
  * 창이 좁아지면 「약 N장」→ 막대 순으로 숨기고 숫자는 늘 남긴다.
  */
+/** Anlas 소모 스위치 — 여러 계정(가속)을 쓸 수 있을 때만. 끄면 무료 여부를 확인하고 생성한다 */
+function AnlasSpendSwitch(): React.JSX.Element | null {
+  const queue = useGenerationStore((s) => s.queue)
+  if (!queue?.accelerationAvailable) return null
+  const on = queue.anlasSpendingEnabled !== false
+  return (
+    <label
+      className="no-drag mr-1 flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] font-medium text-muted"
+      title="ON: 기존처럼 유료 생성 허용. OFF: 메인·씬 생성 전 무료 여부 확인, 1% 미만/확인 실패 계정 대기. 이미 전송한 요청은 소급 적용하지 않으며 다른 앱과 같은 계정을 동시에 쓰면 과금 방지를 보장할 수 없어요."
+    >
+      Anlas 소모
+      <Switch
+        aria-label={`Anlas 소모 ${on ? 'ON' : 'OFF'}`}
+        checked={on}
+        onCheckedChange={(enabled) =>
+          void window.nais
+            .invoke('anlasSpending:set', { enabled })
+            .then((status) => useGenerationStore.setState({ queue: status }))
+        }
+      />
+    </label>
+  )
+}
+
 function HeaderMeters(): React.JSX.Element | null {
   const anlasBalance = useGenerationStore((s) => s.anlasBalance)
   const v5Usage = useGenerationStore((s) => s.v5Usage)
@@ -103,7 +129,14 @@ function HeaderMeters(): React.JSX.Element | null {
   const request = useGenerationStore((s) => s.request)
   const batchCount = useGenerationStore((s) => s.batchCount)
   const tier = useGenerationStore((s) => s.subscriptionTier)
-  const enabledCrefs = useCharRefsStore((s) => s.items.filter((c) => c.enabled).length)
+  // 실제로 보내는 레퍼런스 수와 모델 (V4.5는 의상 레퍼런스를 빼고, V5 절약은 레퍼런스가 있으면 일반으로)
+  const sentCrefs = useCharRefsStore((s) =>
+    sentRefCount(
+      s.items.filter((c) => c.enabled).map((c) => c.refType),
+      request.model
+    )
+  )
+  const sendModel = effortForRefs(request.model, sentCrefs)
   const unencodedVibes = useVibesStore(
     (s) => s.items.filter((v) => v.enabled && !v.encodedReady).length
   )
@@ -111,10 +144,10 @@ function HeaderMeters(): React.JSX.Element | null {
   const anlasCost = estimateAnlas({
     width: request.width,
     height: request.height,
-    steps: isMediumEffort(request.model) ? MEDIUM_EFFORT_STEPS : request.steps,
-    model: request.model,
+    steps: isMediumEffort(sendModel) ? MEDIUM_EFFORT_STEPS : request.steps,
+    model: sendModel,
     strength: request.source ? (request.i2iStrength ?? 0.7) : 1,
-    charRefCount: enabledCrefs,
+    charRefCount: sentCrefs,
     isOpus: tier === 'opus',
     batchCount,
     unencodedVibes
@@ -237,9 +270,10 @@ export function Titlebar(): React.JSX.Element {
       <PageNav />
       <div className="min-w-4 flex-1" />
 
-      {/* 오른쪽: Anlas · V5 · 업데이트 · 테마 · 패널 · 설정 · 창 컨트롤 */}
+      {/* 오른쪽: Anlas · V5 · Anlas 소모 · 업데이트 · 테마 · 패널 · 설정 · 창 컨트롤 */}
       <div className="flex shrink-0 items-center gap-1">
         <HeaderMeters />
+        <AnlasSpendSwitch />
         <UpdateButton />
         <div className="no-drag mx-0.5 shrink-0">
           <ThemeToggle />

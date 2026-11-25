@@ -1,5 +1,5 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
-import type { CharRefItem, CharRefType, ListFolder, VibeItem } from '@shared/types'
+import type { CharRefItem, ListFolder, VibeItem } from '@shared/types'
 import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
 
 /**
@@ -142,14 +142,6 @@ export type AnyRefsStore = ReturnType<typeof makeRefsStore<VibeItem | CharRefIte
 export function refsStoreFor(kind: 'vibe' | 'charref'): AnyRefsStore {
   return (kind === 'vibe' ? useVibesStore : useCharRefsStore) as unknown as AnyRefsStore
 }
-
-export const CHARREF_TYPES: { value: CharRefType; label: string }[] = [
-  { value: 'character', label: 'Character' },
-  { value: 'style', label: 'Style' },
-  { value: 'character&style', label: 'Character & Style' },
-  { value: 'costume', label: 'Costume' },
-  { value: 'delta', label: 'Delta' }
-]
 
 export function enabledRefCount(): { vibes: number; crefs: number } {
   return {

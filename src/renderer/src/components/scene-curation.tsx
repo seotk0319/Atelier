@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CharRefType, ExtraCharRef, GenerationRequest, SceneImage } from '@shared/types'
-import { supportsReferences } from '@shared/nai-models'
+import { isV5Model } from '@shared/nai-models'
 import { imageUrl } from '../lib/constants'
 import { copyFileName } from '../lib/copy-file-name'
 import { requestFromMetadata } from '../lib/metadata-request'
@@ -430,8 +430,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
           extraCharRefs,
           sceneId: scene.id
         }
-    if (extraCharRefs && !supportsReferences(request.model))
-      toast('V5에서는 레퍼런스를 쓰지 않아 기준 그림 없이 생성해요', 'info')
+    if (extraCharRefs && isV5Model(request.model))
+      toast('V5 인페인트는 레퍼런스를 지원하지 않아 기준 그림 없이 생성해요', 'info')
     const { ids } = await window.nais.invoke('queue:enqueue', { request, count: 1 })
     setInpaint(null)
     if (ids[0]) {

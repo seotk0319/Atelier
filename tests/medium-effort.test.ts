@@ -75,7 +75,7 @@ describe('V5 Full medium effort (NAI 웹 fixedSettings 기준)', () => {
 
   it('estimates medium as cheaper in Anlas and in V5 usage', () => {
     const base = { width: 1216, height: 832, isOpus: false, batchCount: 1 }
-    const high = estimateAnlas({ ...base, steps: 23 }).perImage
+    const high = estimateAnlas({ ...base, steps: 23, model: 'nai-diffusion-5-full' }).perImage
     const medium = estimateAnlas({
       ...base,
       steps: 14,

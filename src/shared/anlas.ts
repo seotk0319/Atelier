@@ -1,4 +1,5 @@
 import type { DirectorMethod } from './types'
+import { isMediumEffort, isV5Model } from './nai-models'
 
 /**
  * Anlas 비용 추정 — NAI 웹 번들의 실제 비용 함수를 이식 (2026-07-05 _app 번들에서 추출).
@@ -28,7 +29,7 @@ export interface AnlasEstimateInput {
   batchCount: number
   /** 이번 생성에서 새로 인코딩해야 하는 바이브 수 (캐시된 것 제외) */
   unencodedVibes?: number
-  /** V5 Full Medium은 웹 비용식에서 스텝 항에 1/1.06521739를 곱한다 (2026-10-09 번들 확인) */
+  /** 모델별 비용식이 다르다 — V5 ×1.5, V5 Medium은 고정식 (2026-11-25 번들 확인) */
   model?: string
 }
 
@@ -121,13 +122,19 @@ export function estimateAnlas(input: AnlasEstimateInput): AnlasEstimate {
   const px = Math.max(input.width * input.height, 65536)
   const strength = input.strength ?? 1
 
-  const stepFactor = input.model?.startsWith('nai-diffusion-5-full-medium') ? 1 / 1.06521739 : 1
-  const base = Math.ceil(
-    2.951823174884865e-6 * px + 5.753298233447344e-7 * px * input.steps * stepFactor
-  )
+  // 2026-11-25 웹 번들: V5 Medium은 스텝과 무관하게 (a·px + b·px·23) / 1.75 (올림 없음),
+  // 그 밖은 ceil(a·px + b·px·steps). V5 계열은 여기에 1.5를 곱한다.
+  const model = input.model ?? ''
+  const v5 = isV5Model(model)
+  const raw = isMediumEffort(model)
+    ? (2.951823174884865e-6 * px + 5.753298233447344e-7 * px * 23) / 1.75
+    : Math.ceil(2.951823174884865e-6 * px + 5.753298233447344e-7 * px * input.steps)
+  const base = v5 ? raw * 1.5 : raw
   const perImage = Math.max(Math.ceil(base * strength), 2)
 
-  // 캐릭레퍼는 무료 조건을 깨지 않는다 (실측) — 대신 아래에서 별도 사용료 부과
+  // 캐릭레퍼는 무료 조건을 깨지 않는다 — 대신 아래에서 레퍼당 사용료만 붙는다.
+  // V4.5 실측에 이어 V5도 실측(2026-11-25, Opus·1024²·28스텝·레퍼 1): 5 Anlas만 빠지고
+  // 생성은 주간 한도(V5 사용량 1%)에서 나갔다. 공지의 「레퍼 쓰면 무료 횟수 제외」와 다르다.
   const freeEligible = px <= 1048576 && input.steps <= 28 && input.isOpus
 
   const generation = freeEligible ? 0 : perImage * input.batchCount

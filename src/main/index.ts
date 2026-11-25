@@ -9,7 +9,9 @@ import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settin
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
 import { applyCharSections } from '../shared/char-sections'
-import { maxCharactersForModel, supportsReferences } from '../shared/nai-models'
+import { composeWeakened, GENERAL_WEIGHT_KEY, parseGeneralWeight } from '../shared/general-weight'
+import { isV5Model, maxCharactersForModel, supportsVibes } from '../shared/nai-models'
+import { effortForRefs, refsForModel } from '../shared/char-refs'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
@@ -165,18 +167,20 @@ app.whenReady().then(() => {
   // 생성 파이프라인: 큐 → 조각/와일드카드 치환 → 바이브/캐릭레퍼 준비 → 스트리밍 생성 → 저장
   const queue = new GenerationQueue(
     async (queuedRequest, id, signal, account) => {
+      // V5 Medium은 레퍼런스를 못 쓴다 — 레퍼런스가 켜져 있으면 High로 보낸다 (NAI 웹과 같음).
+      const crefCount = enabledCharRefRows().length + (queuedRequest.extraCharRefs?.length ?? 0)
       // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
-      const rawRequest = withFixedSettings(queuedRequest)
+      const rawRequest = withFixedSettings({
+        ...queuedRequest,
+        model: effortForRefs(queuedRequest.model, crefCount)
+      })
       const token = account.token
       const maySpend = (): boolean => PROFILE !== 1 || getSetting('anlas_spending') !== '0'
       const ensureFree = async (): Promise<void> => {
         if (maySpend()) return
-        const refsUsed = supportsReferences(rawRequest.model)
-        const rows = refsUsed ? enabledVibeRows() : []
+        const rows = supportsVibes(rawRequest.model) ? enabledVibeRows() : []
         await checkFreeGeneration(token, rawRequest, {
-          characterCount: refsUsed
-            ? enabledCharRefRows().length + (rawRequest.extraCharRefs?.length ?? 0)
-            : 0,
+          characterCount: crefCount,
           vibeCount: rows.length,
           unencodedVibes: rows.filter((r) => !r.encoded || r.encodedIe !== r.infoExtracted).length
         })
@@ -209,10 +213,18 @@ app.whenReady().then(() => {
         ...rawRequest,
         // 구간 표시에 위치(# == char1 C3 ==)를 적었으면 위치 지정 모드로 바뀐다
         useCoords: sectioned.useCoords,
+        // 일반 태그 약화: 고정 칸은 그대로, 가변·디테일(씬 포함)을 설정의 가중치로 감싼다.
+        // 주석 제거·조각 치환 뒤에 감싸야 닫는 ::가 주석에 먹히지 않는다. 3분할일 때만.
         prompt: subbedParts
-          ? [subbedParts.base, subbedParts.additional, subbedParts.detail]
-              .filter((p) => p.trim())
-              .join(', ')
+          ? rawRequest.weakenGeneral
+            ? composeWeakened(
+                subbedParts.base,
+                [subbedParts.additional, subbedParts.detail],
+                parseGeneralWeight(getSetting(GENERAL_WEIGHT_KEY))
+              )
+            : [subbedParts.base, subbedParts.additional, subbedParts.detail]
+                .filter((p) => p.trim())
+                .join(', ')
           : sub(sectioned.prompt),
         negativePrompt: sub(sectioned.negativePrompt),
         promptParts: subbedParts,
@@ -224,19 +236,16 @@ app.whenReady().then(() => {
       }
 
       // 바이브/캐릭레퍼는 DB의 enabled 항목에서 준비 (바이브는 필요 시 인코딩 — 2 Anlas, 캐시됨).
-      // V5는 둘 다 받지 않는다 — 싣지도, 바이브를 4.5용으로 인코딩(과금)하지도 않는다.
-      const refsSupported = supportsReferences(rawRequest.model)
-      const { vibes, newlyEncoded } = refsSupported
+      // V5는 바이브를 받지 않는다 — 싣지도, 4.5용으로 인코딩(과금)하지도 않는다.
+      // 캐릭터 레퍼런스는 V5도 받는다. 종류·충실도는 아래에서 보낼 모델에 맞춘다 (shared/char-refs.ts).
+      const { vibes, newlyEncoded } = supportsVibes(rawRequest.model)
         ? await prepareVibes(token, maySpend)
         : { vibes: [], newlyEncoded: [] }
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
-      const extraCharacterReferences =
-        refsSupported && rawRequest.extraCharRefs?.length
-          ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
-          : []
-      const characterReferences = refsSupported
-        ? [...extraCharacterReferences, ...(await prepareCharRefs())]
+      const extraCharacterReferences = rawRequest.extraCharRefs?.length
+        ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
         : []
+      const preparedCharRefs = [...extraCharacterReferences, ...(await prepareCharRefs())]
 
       let source = request.source
       // i2i/인페인트: 소스 해상도를 유효 NAI 해상도(64 배수·픽셀 상한)로 스냅하고 이미지를 맞춰 리사이즈.
@@ -259,6 +268,11 @@ app.whenReady().then(() => {
         // TODO(fixture): 인페인트 실캡처로 모델 스위칭 여부 확정 필요 (웹 enum에 -inpainting 존재)
         request = { ...request, model: `${request.model}-inpainting` }
       }
+      // V5 인페인트는 레퍼런스를 지원하지 않는다 (NAI 웹도 빼고 보낸다).
+      const characterReferences =
+        source?.maskBase64 && isV5Model(request.model)
+          ? []
+          : refsForModel(preparedCharRefs, request.model)
 
       const imageFormat: 'png' | 'webp' = getSetting('image_format') === 'webp' ? 'webp' : 'png'
       const buildOpts = {
