@@ -65,6 +65,8 @@ interface InpaintTarget {
   height: number
   /** 소스 이미지 파일 경로 — 인페인트 프롬프트를 이 이미지의 메타데이터에서 읽는다 */
   filePath: string
+  /** 인페인트를 연 씬 — 다른 씬으로 옮기면 그 씬에는 인페인트 창을 보이지 않고 결과도 그 씬에 넣지 않는다 */
+  sceneId: number
 }
 
 function parse01(value: string): number | null {
@@ -116,7 +118,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   }
 
   // 내장 인페인트
-  const [inpaint, setInpaint] = useState<InpaintTarget | null>(null)
+  const [inpaintAny, setInpaint] = useState<InpaintTarget | null>(null)
   const [inpaintLoading, setInpaintLoading] = useState(false)
   // 진행 중 인페인트 작업 (실시간 스트리밍 미리보기)
   const [job, setJob] = useState<{ id: string } | null>(null)
@@ -136,6 +138,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const loadedSceneId = useRef<number | null>(null)
   const reloadVersion = useRef(0)
   sceneIdRef.current = sceneId
+  // 지금 씬에서 연 인페인트만 쓴다 (씬 목록을 눌러 옮기면 다른 씬의 그림이 이 씬에 저장되던 문제)
+  const inpaint = inpaintAny && inpaintAny.sceneId === sceneId ? inpaintAny : null
   const scene = scenes.find((s) => s.id === sceneId) ?? null
   // 이 씬에 대기 중이거나 생성 중인 장 수 (선별 화면의 "1장 생성"과 씬 탭 예약 모두)
   const liveForScene = useGenerationStore(
@@ -358,8 +362,9 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   }
 
   async function startInpaint(): Promise<void> {
-    if (!current) return
+    if (!current || sceneId == null) return
     const filePath = current.filePath
+    const forScene = sceneId
     setInpaintLoading(true)
     const res = await window.nais.invoke('images:readForSource', { filePath })
     setInpaintLoading(false)
@@ -367,7 +372,14 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
       toast(res.error, 'error')
       return
     }
-    setInpaint({ base64: res.base64, width: res.width, height: res.height, filePath })
+    if (sceneIdRef.current !== forScene) return // 읽는 사이 다른 씬으로 옮겼다
+    setInpaint({
+      base64: res.base64,
+      width: res.width,
+      height: res.height,
+      filePath,
+      sceneId: forScene
+    })
   }
 
   /**
@@ -377,7 +389,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
    * 결과는 덮어쓰지 않고 현재 씬에 새 이미지로 추가 (히스토리에도 저장).
    */
   async function generateInpaint(maskBase64: string, strength: number): Promise<void> {
-    if (!scene || !inpaint) return
+    if (!scene || !inpaint || inpaint.sceneId !== scene.id) return
     let extraCharRefs: ExtraCharRef[] | undefined
     if (applyRef && reference) {
       const st = parse01(refStrength)
