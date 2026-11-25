@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { IpcEventMap } from '@shared/types'
+import { useGenerationStore } from './generation-store'
 
 type UpdateStatus = IpcEventMap['update:status']
 
@@ -36,7 +37,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
 /** update:status 이벤트 구독 — App 마운트 시 1회 */
 export function bindUpdateEvents(): () => void {
-  return window.nais.on('update:status', (s) => {
+  // 「생성이 도는 중이에요」는 설치를 누른 순간에만 정해져, 생성이 끝나도 남았다 — 대기열이 비면 푼다
+  const offQueue = useGenerationStore.subscribe((g) => {
+    if (!useUpdateStore.getState().busy) return
+    const active = g.queue?.items.some((i) => i.state === 'pending' || i.state === 'generating')
+    if (!active) useUpdateStore.setState({ busy: false })
+  })
+  const offStatus = window.nais.on('update:status', (s) => {
     const prev = useUpdateStore.getState()
     useUpdateStore.setState({
       status: s.state,
@@ -46,4 +53,8 @@ export function bindUpdateEvents(): () => void {
       portable: s.portable ?? prev.portable
     })
   })
+  return () => {
+    offQueue()
+    offStatus()
+  }
 }
