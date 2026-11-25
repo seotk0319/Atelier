@@ -91,6 +91,19 @@ describe('Anlas 추정 (NAI 웹 공식 이식)', () => {
     ).toBe(10)
   })
 
+  it('무료가 아닌 생성의 실제 차감 (실측 2026-11-25, Opus 계정): V4.5·V5 512² 29스텝 = 6·9', () => {
+    const paid = { ...base, width: 512, height: 512, steps: 29 }
+    expect(estimateAnlas({ ...paid, model: 'nai-diffusion-4-5-full' }).total).toBe(6)
+    expect(estimateAnlas({ ...paid, model: 'nai-diffusion-5-full' }).total).toBe(9)
+    // 같은 날 무료 조건 V4.5·V5 1024² 28스텝과 V5 인페인트(레퍼 빠짐)는 0이었다
+    const free = { ...base, width: 1024, height: 1024 }
+    expect(estimateAnlas({ ...free, model: 'nai-diffusion-4-5-full' }).total).toBe(0)
+    expect(estimateAnlas({ ...free, model: 'nai-diffusion-5-full' }).total).toBe(0)
+    expect(
+      estimateAnlas({ ...free, model: 'nai-diffusion-5-full-inpainting', strength: 0.7 }).total
+    ).toBe(0)
+  })
+
   it('Opus의 1MP 이하 일반 디렉터 툴은 무료', () => {
     for (const method of [
       'lineart',
