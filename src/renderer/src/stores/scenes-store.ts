@@ -236,7 +236,15 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     const folders = orderFolders(list.folders)
     set({ presets: canonicalize(folders, items), presetFolders: folders })
     if (!items.some((p) => p.id === get().activePresetId) && items[0]) {
-      set({ activePresetId: items[0].id })
+      // 보던 프리셋이 지워졌으면 그 씬을 가리키던 상세·선택도 비운다
+      set({
+        activePresetId: items[0].id,
+        selectedId: null,
+        images: [],
+        imagesTotal: 0,
+        selection: new Set(),
+        selectionAnchor: null
+      })
     }
     if (loadScenes) await get().load()
   },
