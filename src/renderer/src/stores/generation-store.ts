@@ -18,6 +18,8 @@ import { toast } from './toast-store'
  * 큐/진행 상태의 진실 공급원은 메인 프로세스다 (이벤트 구독만).
  */
 
+let anlasRetry: ReturnType<typeof setTimeout> | undefined
+
 export const DEFAULT_REQUEST: GenerationRequest = {
   prompt: '',
   negativePrompt: '',
@@ -120,6 +122,16 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   refreshAnlas: async () => {
     // 잔액과 함께 구독 tier도 갱신 (무료 판정이 최신 tier를 쓰도록)
     const { anlas, tier, v5Usage } = await window.nais.invoke('nai:balance', undefined)
+    if (anlas === null && !v5Usage) {
+      // 토큰이 있는데 조회만 실패했으면(네트워크 등) 보이던 잔액을 지우지 않고 1분 뒤 다시 묻는다 —
+      // 지우면 머리줄 게이지가 사라지고, 다음 생성이 끝날 때까지 다시 안 잡혔다
+      const { hasToken } = await window.nais.invoke('nai:tokenStatus', undefined)
+      if (hasToken) {
+        clearTimeout(anlasRetry)
+        anlasRetry = setTimeout(() => void get().refreshAnlas(), 60_000)
+        return
+      }
+    }
     set({ anlasBalance: anlas, v5Usage })
     if (tier) {
       set({ subscriptionTier: tier })
