@@ -177,7 +177,7 @@ import { basename, extname, join, resolve } from 'path'
 import sharp from 'sharp'
 import { verifyToken } from './nai/client'
 import { APP_TITLE, PROFILE } from './profile'
-import { remotePort, viewClient } from './remote/source'
+import { remoteConfigured, remotePort, viewClient } from './remote/source'
 import { REMOTE_DOWN } from './remote/view-client'
 import type { RemoteStamp } from '../shared/remote-view'
 import type {
@@ -333,7 +333,11 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('tagHelper:fromText', (req) => tagFromText(req))
   handle('tagHelper:fromImage', (req) => tagFromImage(req))
   handle('app:version', () => ({ version: app.getVersion() }))
-  handle('app:profile', () => ({ profile: PROFILE, title: APP_TITLE }))
+  handle('app:profile', () => ({
+    profile: PROFILE,
+    title: APP_TITLE,
+    remoteView: PROFILE === 1 && remoteConfigured()
+  }))
 
   handle('nai:verifyToken', ({ token }) => verifyToken(token))
 
@@ -355,7 +359,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
   handle('nai:accounts', () => ({ accounts: getNaiAccountInfos() }))
   handle('nai:addAccount', async ({ token }) => {
-    if (PROFILE !== 1) return { valid: false, error: '가속 계정은 Custom 1에서만 지원합니다' }
+    if (PROFILE !== 1) return { valid: false, error: '가속 계정은 기본 프로필에서만 쓸 수 있어요' }
     const result = await verifyToken(token)
     if (!result.valid) return result
     const saved = addNaiAccount(token)
@@ -368,7 +372,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     setNaiAccountMemo(String(id || ''), typeof memo === 'string' ? memo : '')
   )
   handle('nai:deleteAccount', ({ id }) => {
-    if (PROFILE !== 1) return { deleted: false, error: 'Custom 1에서만 변경할 수 있습니다' }
+    if (PROFILE !== 1) return { deleted: false, error: '기본 프로필에서만 바꿀 수 있어요' }
     if (ctx.queue.isAccountBusy(id)) {
       return { deleted: false, error: '이 계정이 생성 중이라 끝난 뒤 삭제할 수 있습니다' }
     }
@@ -466,7 +470,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     return ctx.queue.status()
   })
   handle('acceleration:setAccount', ({ id, enabled }) => {
-    if (PROFILE !== 1) return { ok: false, error: '가속 모드는 Custom 1에서만 쓸 수 있어요' }
+    if (PROFILE !== 1) return { ok: false, error: '가속 모드는 기본 프로필에서만 쓸 수 있어요' }
     const result = setAccountAccelerated(String(id || ''), enabled === true)
     if (result.ok) ctx.queue.refreshConfiguration()
     return result
@@ -629,7 +633,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     const stamp = new Date().toISOString().slice(0, 10)
     const result = await dialog.showSaveDialog(win, {
       title: '데이터 내보내기',
-      defaultPath: `NAIS3-backup-${stamp}.json`,
+      defaultPath: `Atelier-backup-${stamp}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }]
     })
     if (result.canceled || !result.filePath) return { saved: false }
@@ -665,7 +669,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
         // 엉뚱한 씬에 저장되거나 예약이 돌아가지 않게. 같은 씬으로 남은 번호는 그대로 둔다.
         // (복원이 실패하면 아무것도 바뀌지 않으니 큐도 건드리지 않는다)
         ctx.queue.cancelScenes(replacedSceneIds)
-        return { summary: `NAIS3 백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
+        return { summary: `백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
       }
       const r = importNais2(data)
       const parts = [
@@ -918,7 +922,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     if (!Notification.isSupported()) return
     const body = failed > 0 ? `${done}장 완료 · ${failed}장 실패` : `${done}장 완료`
     // silent — 소리는 앱의 알림음 설정이 따로 담당 (이중 재생 방지)
-    const n = new Notification({ title: 'NAIS3 생성 완료', body, silent: true })
+    const n = new Notification({ title: 'Atelier 생성 완료', body, silent: true })
     n.on('click', () => {
       if (win.isMinimized()) win.restore()
       win.show()

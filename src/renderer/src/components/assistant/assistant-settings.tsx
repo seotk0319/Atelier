@@ -13,6 +13,8 @@ export function AssistantSection(): React.JSX.Element {
   const [status, setStatus] = useState<AssistantStatus | null>(null)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
+  // 저장된 키를 다른 키로 바꿀 때 입력칸을 다시 연다
+  const [editing, setEditing] = useState(false)
   const [note, setNote] = useState<{ ok: boolean; message: string } | null>(null)
 
   const apply = (next: AssistantStatus): void => {
@@ -32,6 +34,7 @@ export function AssistantSection(): React.JSX.Element {
       setNote(result)
       if (result.ok) {
         setKey('')
+        setEditing(false)
         apply(await window.nais.invoke('assistant:status', undefined))
       }
     } finally {
@@ -61,12 +64,15 @@ export function AssistantSection(): React.JSX.Element {
             <p className="text-[13px] font-semibold text-ink">
               {status?.claudeReady ? 'Claude 연결됨' : 'Claude API 키가 필요해요'}
             </p>
-            <p className="mt-0.5 text-[12px] text-faint">
-              AI 답글과 같은 키를 써요. 이 프로필에만 저장돼요.
-            </p>
+            <p className="mt-0.5 text-[12px] text-faint">이 PC에만 암호화해 저장돼요.</p>
           </div>
+          {status?.claudeReady && !editing && (
+            <Button size="sm" onClick={() => setEditing(true)}>
+              키 바꾸기
+            </Button>
+          )}
         </div>
-        {!status?.claudeReady && (
+        {(!status?.claudeReady || editing) && (
           <div className="mt-3 flex gap-2">
             <Input
               type="password"
@@ -78,6 +84,17 @@ export function AssistantSection(): React.JSX.Element {
             <Button variant="accent" loading={busy} onClick={() => void saveKey()}>
               저장
             </Button>
+            {editing && (
+              <Button
+                onClick={() => {
+                  setEditing(false)
+                  setKey('')
+                  setNote(null)
+                }}
+              >
+                취소
+              </Button>
+            )}
           </div>
         )}
         {note && (
@@ -111,8 +128,8 @@ export function AssistantSection(): React.JSX.Element {
       <div>
         <p className="text-[13px] text-ink">작업 지침</p>
         <p className="mt-0.5 text-[12px] leading-relaxed text-faint">
-          세션 인계서처럼 AI가 따라야 할 문서를 넣어 두면 매번 같이 읽어요. 타이포 프롬프트 규칙,
-          확정 색·배치 같은 것을 담아 두면 돼요.
+          AI가 늘 따라야 할 규칙 문서를 넣어 두면 매번 같이 읽어요. 타이포 프롬프트 규칙, 확정
+          색·배치 같은 것을 담아 두면 돼요.
         </p>
         <div className="mt-3 flex items-center gap-3 rounded-xl border border-line p-3">
           <BookText size={16} className="shrink-0 text-muted" />

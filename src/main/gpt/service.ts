@@ -153,8 +153,10 @@ function friendly(e: unknown): string {
   if (e instanceof GptNoImageError) return '그림 대신 글로 답했어요: ' + e.message.slice(0, 160)
   if (e instanceof GptHttpError) {
     if (e.status === 429) return 'ChatGPT 사용 한도에 걸렸어요. 잠시 뒤 다시 해 주세요.'
-    if (e.status === 401 || e.status === 403)
-      return 'ChatGPT 로그인이 거절됐어요. Codex에서 다시 로그인해 주세요.'
+    if (e.status === 401)
+      return 'ChatGPT 로그인이 거절됐어요. 명령 창에서 codex login을 다시 해 주세요.'
+    if (e.status === 403)
+      return 'ChatGPT가 요청을 막았어요 (403). 쓰는 요금제가 이미지 생성을 지원하지 않거나, VPN·지역 제한일 수 있어요.'
     return 'ChatGPT 오류 (' + e.status + '): ' + e.message.slice(0, 160)
   }
   return e instanceof Error ? e.message : String(e)

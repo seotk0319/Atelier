@@ -1,5 +1,5 @@
 // AI 비서: 명령 바에서 받은 말을 Claude에 보내고, 앱 데이터는 읽기 도구로만 보여 준다.
-// 앱을 바꾸는 일은 계획(propose_changes)으로만 돌려주고, 실제 적용은 화면에서 아빠가 실행을 눌렀을 때 한다.
+// 앱을 바꾸는 일은 계획(propose_changes)으로만 돌려주고, 실제 적용은 화면에서 사용자가 실행을 눌렀을 때 한다.
 import { BrowserWindow, dialog } from 'electron'
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
@@ -19,6 +19,8 @@ import { getDb } from '../db'
 import { getClaudeKey, getSetting, setClaudeKey, setSetting } from '../db/settings'
 import { listPresetFolders, listPresets, listScenes } from '../scenes/repo'
 import { ClaudeError, claudeMessage, claudeVerify, type ClaudeResponse } from '../llm/claude'
+import { PROFILE } from '../profile'
+import { remoteConfigured } from '../remote/source'
 
 const MODEL_KEY = 'assistant_model'
 const GUIDE_KEY = 'assistant_guide'
@@ -44,6 +46,29 @@ function model(): AssistantModel {
 }
 function guide(): string {
   return getSetting(GUIDE_KEY) || ''
+}
+
+/**
+ * AI 비서가 사용자를 부르는 말(설정 assistant_user_title). 설정이 없으면 맥미니 연결이 설정된
+ * 본 프로필(만든 사람의 PC)만 "아빠"로 부르고, 새로 깐 PC는 호칭 없이 "사용자"로 쓴다.
+ */
+const USER_TITLE_KEY = 'assistant_user_title'
+function userTitle(): string {
+  const saved = getSetting(USER_TITLE_KEY)?.trim()
+  if (saved) return saved
+  return PROFILE === 1 && remoteConfigured() ? '아빠' : ''
+}
+/** 받침이 있으면 "이라고", 없으면 "라고" */
+function rago(word: string): string {
+  const code = word.charCodeAt(word.length - 1) - 0xac00
+  return code >= 0 && code < 11172 && code % 28 !== 0 ? '이라고' : '라고'
+}
+/** 프롬프트 속 {user}를 호칭으로, {call}을 "사용자를 ~라고 부르고, "로 바꾼다 */
+function addressed(text: string, title: string): string {
+  // 바꿔 넣는 글에 $가 있어도 그대로 들어가게 함수로 넘긴다
+  const call = title ? `사용자를 "${title}"${rago(title)} 부르고, ` : ''
+  const user = title || '사용자'
+  return text.replaceAll('{call}', () => call).replaceAll('{user}', () => user)
 }
 
 export function assistantStatus(): AssistantStatus {
@@ -129,7 +154,7 @@ const TOOLS = [
   {
     name: 'propose_changes',
     description:
-      '앱을 바꾸는 계획을 아빠에게 보여 준다. 실제 적용은 아빠가 실행 버튼을 눌렀을 때만 된다. 이 도구를 부르면 그 턴은 끝난다.',
+      '앱을 바꾸는 계획을 {user}에게 보여 준다. 실제 적용은 {user}가 실행 버튼을 눌렀을 때만 된다. 이 도구를 부르면 그 턴은 끝난다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -195,7 +220,7 @@ const TOOLS = [
   {
     name: 'write_prompt',
     description:
-      '이미지 생성 프롬프트(타이포·업데이트 문구·오버레이·사인 등)를 카드로 보여 준다. 아빠가 카드에서 GPT 이미지 입력칸에 넣거나 복사한다. 시안이 여러 개면 drafts에 각각 완결된 전체 프롬프트로 넣는다. 이 도구를 부르면 그 턴은 끝난다.',
+      '이미지 생성 프롬프트(타이포·업데이트 문구·오버레이·사인 등)를 카드로 보여 준다. {user}가 카드에서 GPT 이미지 입력칸에 넣거나 복사한다. 시안이 여러 개면 drafts에 각각 완결된 전체 프롬프트로 넣는다. 이 도구를 부르면 그 턴은 끝난다.',
     input_schema: {
       type: 'object',
       properties: {
@@ -216,14 +241,18 @@ const TOOLS = [
     }
   }
 ]
+/** 도구 설명 속 {user}를 호칭으로 바꾼다 */
+function addressedTools(title: string): typeof TOOLS {
+  return TOOLS.map((t) => ({ ...t, description: addressed(t.description, title) }))
+}
 const TERMINAL = new Set(['propose_changes', 'write_prompt'])
 
 const SYSTEM = [
-  '너는 NAIS3 Custom 안에 들어 있는 AI 비서다. NAIS3 Custom은 NovelAI·GPT 이미지를 만드는 데스크톱 앱이고, 사용자는 캐릭터챗 크리에이터다.',
-  '사용자를 "아빠"라고 부르고, 짧고 부드러운 한국어 해요체로 답한다. 결과를 먼저 말하고 설명은 한두 문장으로 끝낸다.',
+  '너는 Atelier 안에 들어 있는 AI 비서다. Atelier는 NovelAI·GPT 이미지를 만드는 데스크톱 앱이고, 사용자는 캐릭터챗 크리에이터다.',
+  '{call}짧고 부드러운 한국어 해요체로 답한다. 결과를 먼저 말하고 설명은 한두 문장으로 끝낸다.',
   '',
   '할 수 있는 일',
-  '- 씬 프리셋 정리: 폴더 만들기, 프리셋을 폴더로 옮기기, 프리셋·폴더 이름 바꾸기, 씬 예약 장수 정하기. 반드시 propose_changes로 계획을 내고 멈춘다. 아빠가 실행을 눌러야 적용된다. 적용했다고 말하지 않는다.',
+  '- 씬 프리셋 정리: 폴더 만들기, 프리셋을 폴더로 옮기기, 프리셋·폴더 이름 바꾸기, 씬 예약 장수 정하기. 반드시 propose_changes로 계획을 내고 멈춘다. {user}가 실행을 눌러야 적용된다. 적용했다고 말하지 않는다.',
   '- 이미지 프롬프트 쓰기: write_prompt로 완결된 전체 프롬프트를 낸다. 아래 작업 지침이 있으면 그대로 따른다.',
   '',
   '못 하는 일: 무엇을 지우는 일, 이미지 생성 버튼 누르기, 파일·폴더 작업, 설정 바꾸기. 요청받으면 못 한다고 짧게 말하고 앱에서 직접 하는 방법을 알려 준다.',
@@ -499,8 +528,13 @@ export async function askAssistant(req: {
   messages.push({ role: 'user', content: userBlocks })
 
   const g = guide()
-  const system: Block[] = [{ type: 'text', text: SYSTEM }]
-  if (g) system.push({ type: 'text', text: '## 작업 지침 (아빠가 넣은 문서)\n\n' + g })
+  const title = userTitle()
+  const system: Block[] = [{ type: 'text', text: addressed(SYSTEM, title) }]
+  if (g)
+    system.push({
+      type: 'text',
+      text: addressed('## 작업 지침 ({user}가 넣은 문서)\n\n', title) + g
+    })
   system[system.length - 1].cache_control = { type: 'ephemeral' }
 
   try {
@@ -510,7 +544,7 @@ export async function askAssistant(req: {
         model: ASSISTANT_MODELS[which].id,
         max_tokens: 4000,
         system,
-        tools: TOOLS,
+        tools: addressedTools(title),
         messages
       })
       const u = response.usage || {}

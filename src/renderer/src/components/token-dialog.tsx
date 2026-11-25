@@ -23,7 +23,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NaiAccountInfo, NaiAccountUsage } from '@shared/types'
 import discordSvg from '../assets/discord.svg'
-import nais3Logo from '../assets/nais3-logo.svg'
 import { playChime } from '../lib/completion-alert'
 import { cn } from '../lib/utils'
 import { THEME_PRESETS } from '../lib/theme-presets'
@@ -78,7 +77,7 @@ const NAV: { id: SectionId; label: string; icon: typeof Info }[] = [
   { id: 'generation', label: '생성', icon: ImageIcon },
   { id: 'storage', label: '저장', icon: FolderOpen },
   { id: 'privacy', label: '프라이버시', icon: Lock },
-  // 알림 모아보기(댓글 답글)에서만 쓰므로 알림 탭이 있는 Custom 1에만 보인다.
+  // 알림 모아보기(댓글 답글)에서만 쓰므로 알림 탭이 있을 때만 보인다.
   { id: 'translate', label: '번역', icon: Languages },
   // OpenRouter 키 — 댓글 번역과 태그 도우미가 같이 쓰므로 모든 프로필에 보인다
   { id: 'ai-helper', label: 'AI 도우미', icon: Wand2 },
@@ -280,12 +279,12 @@ const TOGGLABLE_PAGES: { id: CenterMode; label: string }[] = [
 function PageToggles(): React.JSX.Element {
   const hiddenPages = useLayoutStore((s) => s.hiddenPages)
   const setPageHidden = useLayoutStore((s) => s.setPageHidden)
-  // 작품 탭은 Custom 1에만 있다
-  const [profile, setProfile] = useState<number | null>(null)
+  // 작품 탭은 맥미니 연결이 설정된 본 프로필에만 있다
+  const [remoteView, setRemoteView] = useState(false)
   useEffect(() => {
-    void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
+    void window.nais.invoke('app:profile', undefined).then((v) => setRemoteView(v.remoteView))
   }, [])
-  const pages = TOGGLABLE_PAGES.filter((p) => p.id !== 'works' || profile === 1)
+  const pages = TOGGLABLE_PAGES.filter((p) => p.id !== 'works' || remoteView)
   return (
     <div className="mt-2 divide-y divide-line rounded-lg bg-paper px-3">
       {pages.map((p) => {
@@ -889,6 +888,9 @@ function AccountSection(): React.JSX.Element {
               ? `등록한 계정은 OS 키체인으로 암호화해요. 가속 모드에서는 체크한 계정이 각각 한 장씩 생성해요${accelerationEnabled ? '' : ' (지금은 가속 모드가 꺼져 있어 계정 1만 써요)'}.`
               : '등록한 계정은 OS 키체인으로 암호화해요.'}
           </p>
+          <p className="mt-1 text-[12px] text-faint">
+            토큰은 NovelAI 웹 → Account Settings → Get Persistent API Token에서 받아요(pst-로 시작).
+          </p>
         </div>
         <Button
           size="sm"
@@ -1092,7 +1094,7 @@ function AccountSection(): React.JSX.Element {
 
       <div className="flex items-center gap-1.5 text-[11px] text-faint">
         <Coins size={11} className="text-[#c9a34f]" /> 오늘 장수는 PC 시각 00:00부터 성공 저장된
-        이미지만 세요. 이번 업데이트 적용 이후 Custom 1 생성분이며, 삭제해도 장수는 유지돼요.
+        이미지만 세요. 삭제해도 장수는 유지돼요.
       </div>
     </div>
   )
@@ -1109,7 +1111,7 @@ function AboutSection(): React.JSX.Element {
   const checkUpdate = useUpdateStore((s) => s.check)
   const startUpdate = useUpdateStore((s) => s.start)
   const installUpdate = useUpdateStore((s) => s.install)
-  const releasePage = 'https://github.com/seotk0319/NAIS3-Custom/releases/latest'
+  const releasePage = 'https://github.com/seotk0319/Atelier/releases/latest'
 
   useEffect(() => {
     void window.nais.invoke('app:version', undefined).then((r) => setVersion(r.version))
@@ -1118,8 +1120,11 @@ function AboutSection(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1.5 text-[13px] text-muted">
       {/* 로고(흰색)라 라이트 모드에선 invert로 어둡게 */}
-      <img src={nais3Logo} className="h-9 w-auto self-start dark:invert-0 invert" alt="NAIS3" />
-      <p className="mt-1">NovelAI Image Studio 3</p>
+      <p className="flex items-center gap-2 text-[18px] font-extrabold tracking-tight text-ink">
+        <i aria-hidden className="block size-3.5 rotate-45 rounded-[2px] bg-mark" />
+        Atelier
+      </p>
+      <p className="mt-1">NovelAI·GPT 이미지 제작 앱. 원본 NAIS3(sunanakgo)에서 갈라져 나왔어요.</p>
       <p className="font-mono text-[12px] text-faint">버전 {version || '…'}</p>
 
       {/* 업데이트: 이 저장소 GitHub 릴리스 기준 */}
@@ -1168,7 +1173,8 @@ function AboutSection(): React.JSX.Element {
         {updateStatus === 'error' && `업데이트를 확인하지 못했어요. ${updateMessage ?? ''}`}
       </p>
 
-      <div className="mt-3 flex gap-2">
+      <p className="mt-3 text-[12px] text-faint">원본 NAIS3 만든 분</p>
+      <div className="mt-1 flex gap-2">
         <button
           onClick={() => window.open('https://discord.gg/bFxP5Qvaz', '_blank')}
           className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2/60 px-3 py-2 text-[13px] font-medium text-ink transition-colors hover:bg-surface-2"
@@ -1208,11 +1214,12 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void
 }): React.JSX.Element {
   const [section, setSection] = useState<SectionId>('appearance')
-  const [profile, setProfile] = useState<number | null>(null)
+  // 번역·AI 답글은 알림 화면에서만 쓴다. 알림 화면이 없으면(맥미니 연결 없음) 숨긴다
+  const [remoteView, setRemoteView] = useState(false)
   useEffect(() => {
-    void window.nais.invoke('app:profile', undefined).then((v) => setProfile(v.profile))
+    void window.nais.invoke('app:profile', undefined).then((v) => setRemoteView(v.remoteView))
   }, [])
-  const nav = NAV.filter((n) => (n.id !== 'translate' && n.id !== 'ai') || profile === 1)
+  const nav = NAV.filter((n) => (n.id !== 'translate' && n.id !== 'ai') || remoteView)
   // 다른 화면이 특정 섹션으로 열어 달라고 했으면 그 섹션을 먼저 보여준다.
   const requested = useLayoutStore((s) => s.settingsSection) as SectionId | null
   const clearRequested = useLayoutStore((s) => s.clearSettingsSection)

@@ -391,7 +391,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           ? {
               ids: reply.pendingToolIds,
               result: reply.plan
-                ? '아빠가 아직 실행하지 않았어요.'
+                ? '사용자가 아직 실행하지 않았어요.'
                 : '카드를 보여 줬어요. 아직 입력칸에 넣지 않았어요.'
             }
           : null,
@@ -416,7 +416,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({
         items: [
           ...get().items,
-          { id: nextId(), kind: 'error', text: '본체와 연결이 끊겼어요. 다시 말해 주세요.' }
+          {
+            id: nextId(),
+            kind: 'error',
+            text: '앱 안에서 요청을 전하지 못했어요. 다시 말해 주세요.'
+          }
         ]
       })
     } finally {
@@ -446,7 +450,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   cancel: (itemId) => {
     patchItem(itemId, { planState: 'cancelled' })
     if (get().pending)
-      set({ pending: { ...get().pending!, result: '아빠가 이 계획을 취소했어요.' } })
+      set({ pending: { ...get().pending!, result: '사용자가 이 계획을 취소했어요.' } })
   },
 
   revert: async (itemId) => {
@@ -461,7 +465,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       if (item?.kind === 'ai' && item.drafts.length && !item.plan)
         patchItem(itemId, { inserted: null })
       else patchItem(itemId, { planState: 'undone', result: '되돌렸어요' })
-      if (get().pending) set({ pending: { ...get().pending!, result: '아빠가 되돌렸어요.' } })
+      if (get().pending) set({ pending: { ...get().pending!, result: '사용자가 되돌렸어요.' } })
       toast('되돌렸어요', 'success')
     } catch {
       toast('되돌리다 멈췄어요. 씬 프리셋 목록을 확인해 주세요.', 'error')
@@ -484,7 +488,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       set({
         pending: {
           ...get().pending!,
-          result: '아빠가 "' + item.drafts[index].title + '"을(를) GPT 입력칸에 넣었어요.'
+          result: '사용자가 "' + item.drafts[index].title + '"을(를) GPT 입력칸에 넣었어요.'
         }
       })
   }

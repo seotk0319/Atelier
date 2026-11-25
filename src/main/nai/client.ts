@@ -48,8 +48,30 @@ function headers(token: string): Record<string, string> {
 export async function verifyToken(
   token: string
 ): Promise<{ valid: boolean; subscription?: SubscriptionInfo; error?: string }> {
-  const res = await fetch(ENDPOINTS.subscription, { headers: headers(token) })
-  if (res.status === 401) return { valid: false, error: '유효하지 않은 API 토큰' }
+  const value = token.trim()
+  if (/^bearer\s/i.test(value))
+    return { valid: false, error: '앞의 Bearer는 빼고 pst-로 시작하는 부분만 넣어 주세요.' }
+  if (/[^!-~]/.test(value))
+    return {
+      valid: false,
+      error:
+        '토큰에 공백·줄바꿈이나 다른 글자가 섞여 있어요. pst-로 시작하는 토큰만 다시 붙여넣어 주세요.'
+    }
+  let res: Response
+  try {
+    // 처음 토큰을 넣는 사람이 오프라인·방화벽이면 확인 중에서 멈추지 않게 시간을 둔다
+    res = await fetch(ENDPOINTS.subscription, {
+      headers: headers(token),
+      signal: AbortSignal.timeout(15_000)
+    })
+  } catch {
+    return { valid: false, error: 'NovelAI에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.' }
+  }
+  if (res.status === 401)
+    return {
+      valid: false,
+      error: '토큰이 맞지 않아요. NovelAI 계정 설정에서 받은 영구 API 토큰(pst-…)을 넣어 주세요.'
+    }
   if (!res.ok) return { valid: false, error: `API 오류: ${res.status}` }
 
   const data = (await res.json()) as {

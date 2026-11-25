@@ -1,5 +1,4 @@
 import { motion } from 'motion/react'
-import nais3Icon from '../assets/nais3-icon.svg'
 
 /**
  * 시작 로딩 스플래시 (NAIS2 참고). 초기 하이드레이션 동안 표시하고 준비되면 페이드아웃.
@@ -13,14 +12,17 @@ export function LoadingScreen(): React.JSX.Element {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
     >
-      <motion.img
-        src={nais3Icon}
-        alt="NAIS3"
-        className="h-28 w-28"
+      {/* Atelier 표시 (머리줄 로고와 같은 파란 마름모) */}
+      <motion.div
+        role="img"
+        aria-label="Atelier"
+        className="grid h-28 w-28 place-items-center"
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      />
+      >
+        <i aria-hidden className="block size-16 rotate-45 rounded-lg bg-[#3182f6]" />
+      </motion.div>
       {/* 로딩 진행 바 (인디터미네이트) */}
       <div className="mt-8 h-[3px] w-40 overflow-hidden rounded-full bg-white/10">
         <motion.div
