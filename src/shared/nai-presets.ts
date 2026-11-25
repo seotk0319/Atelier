@@ -116,6 +116,9 @@ const UC_WEB_V45_CURATED: Record<UcPresetIndex, string> = {
   4: ''
 }
 
+/** 웹이 tag_hint_uc_preset으로 보내는 프리셋 번호 (Atelier 인덱스 → 웹 번호). 2는 Atelier에서 프리셋 없음 */
+export const UC_PRESET_HINT: Record<UcPresetIndex, number> = { 0: 2, 1: 3, 2: 0, 3: 4, 4: 0 }
+
 /** 이 모델의 웹 UC 프리셋 표. 모르는 모델이면 null (예전 병합 규칙을 쓴다) */
 function webUcPresets(model: string): Record<UcPresetIndex, string> | null {
   const base = model.replace(/-inpainting$/, '')

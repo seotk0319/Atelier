@@ -29,7 +29,12 @@ export {
   mergeUcPreset,
   removeComments
 } from '../../shared/nai-presets'
-import { mergeQualityTags, mergeUcPresetForModel, removeComments } from '../../shared/nai-presets'
+import {
+  mergeQualityTags,
+  mergeUcPresetForModel,
+  removeComments,
+  UC_PRESET_HINT
+} from '../../shared/nai-presets'
 
 /**
  * Variety+(skip_cfg_above_sigma) 값.
@@ -201,6 +206,10 @@ export function buildGenerateImagePayload(
       qualityToggle: req.qualityToggle,
       ...(v5
         ? {
+            // 웹은 퀄리티·UC 프리셋 번호를 tag hint로 같이 보낸다 (번들 표: none 0, standard 1, heavy 2,
+            // light 3, humanFocus 4). Medium은 고정 Heavy.
+            tag_hint_qt: req.qualityToggle ? 1 : 0,
+            tag_hint_uc_preset: UC_PRESET_HINT[medium ? 0 : req.ucPreset],
             tag_hint_transparent_background: transparent,
             // NAI 웹 기본값(알파 모드 Straight). 투명을 지원하는 모델이면 늘 보낸다
             straight_alpha: true,

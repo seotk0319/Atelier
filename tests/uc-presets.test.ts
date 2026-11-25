@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { buildGenerateImagePayload } from '../src/main/nai/payload'
+import type { GenerationRequest } from '../src/shared/types'
 import {
   inferUcPresetIndex,
   mergeUcPreset,
@@ -57,5 +59,36 @@ describe('UC 프리셋 병합 (NAI 웹 규칙)', () => {
     // Human Focus는 Heavy로 시작하지만 더 긴 쪽으로 알아본다
     expect(inferUcPresetIndex(mergeUcPreset('z', 3))).toBe(3)
     expect(inferUcPresetIndex('just my words')).toBeUndefined()
+  })
+})
+
+describe('V5 tag hint (웹 번들 표: none 0, standard 1, heavy 2, light 3, humanFocus 4)', () => {
+  const base: GenerationRequest = {
+    prompt: '1girl',
+    negativePrompt: '',
+    model: 'nai-diffusion-5-full',
+    width: 832,
+    height: 1216,
+    steps: 23,
+    cfgScale: 5,
+    cfgRescale: 0,
+    sampler: 'k_euler_ancestral',
+    noiseSchedule: 'karras',
+    seed: 1,
+    variety: false,
+    qualityToggle: true,
+    ucPreset: 1,
+    characterPrompts: [],
+    useCoords: false
+  }
+  it('V5는 퀄리티·UC 프리셋 번호를 보내고, V4.5는 보내지 않는다', () => {
+    const v5 = buildGenerateImagePayload(base).parameters
+    expect(v5.tag_hint_qt).toBe(1)
+    expect(v5.tag_hint_uc_preset).toBe(3)
+    const human = buildGenerateImagePayload({ ...base, ucPreset: 3, qualityToggle: false })
+    expect(human.parameters.tag_hint_qt).toBe(0)
+    expect(human.parameters.tag_hint_uc_preset).toBe(4)
+    const v45 = buildGenerateImagePayload({ ...base, model: 'nai-diffusion-4-5-full' }).parameters
+    expect('tag_hint_qt' in v45).toBe(false)
   })
 })
