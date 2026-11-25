@@ -1,6 +1,6 @@
 {
   "name": "atelier",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Atelier - 캐릭터챗 작품 제작툴 (NAIS3 Custom 2.13.0에서 포크)",
   "main": "./out/main/index.js",
   "author": "seotk0319",
