@@ -123,7 +123,8 @@ function LockScreen({ onUnlocked }: { onUnlocked: () => void }): React.JSX.Eleme
   return (
     <div
       className={cn(
-        'fixed inset-0 z-[10000] flex select-none flex-col items-center justify-center transition-opacity duration-300',
+        // pointer-events-auto: 모달 창이 떠 있으면 Radix가 body를 pointer-events:none으로 막아 잠금 해제 손잡이가 안 눌렸다
+        'pointer-events-auto fixed inset-0 z-[10000] flex select-none flex-col items-center justify-center transition-opacity duration-300',
         shown && !opening ? 'opacity-100' : 'opacity-0'
       )}
       style={{
