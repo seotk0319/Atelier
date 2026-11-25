@@ -67,8 +67,11 @@ export function ParamsDialog({
                 value={request.seed < 0 ? '' : String(request.seed)}
                 placeholder="랜덤"
                 onChange={(e) => {
-                  const n = Number(e.target.value)
-                  patch({ seed: e.target.value === '' || Number.isNaN(n) ? -1 : n })
+                  // NAI 시드는 0~4294967295 정수 — 소수·지수·범위 밖 값은 생성 요청이 실패했다
+                  const raw = e.target.value.trim()
+                  if (raw === '') return patch({ seed: -1 })
+                  if (!/^\d+$/.test(raw)) return
+                  patch({ seed: Math.min(Number(raw), 4294967295) })
                 }}
               />
               <Button
