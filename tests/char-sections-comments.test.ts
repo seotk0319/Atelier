@@ -20,3 +20,24 @@ describe('char sections next to comment lines', () => {
     expect(sent).toContain('smile')
   })
 })
+
+describe('char sections beyond the model limit', () => {
+  it('keeps the text in the base prompt instead of dropping it', () => {
+    const chars = Array.from({ length: 6 }, () => ({
+      prompt: 'girl',
+      negativePrompt: '',
+      enabled: true
+    }))
+    const r = applyCharSections(
+      {
+        prompt: '6+girls\n# == char7 ==\nred ribbon',
+        negativePrompt: '# == char7 ==\nhat',
+        characterPrompts: chars
+      } as never,
+      6
+    )
+    expect(r.characterPrompts).toHaveLength(6)
+    expect(r.prompt).toBe('6+girls, red ribbon')
+    expect(r.negativePrompt).toBe('hat')
+  })
+})

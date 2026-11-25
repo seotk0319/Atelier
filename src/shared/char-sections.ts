@@ -153,10 +153,17 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
   const numbers = [...new Set([...charPos.keys(), ...charNeg.keys(), ...centers.keys()])].sort(
     (a, b) => a - b
   )
+  // 모델이 받을 수 있는 캐릭터 수(V4.5 6, V5 32)를 넘는 구간은 말없이 버리지 않고 기본 프롬프트로 보낸다
+  let overflowPos = ''
+  let overflowNeg = ''
   for (const n of numbers) {
     let index = enabled[n - 1]
     if (index === undefined) {
-      if (enabled.length >= maxCharacters) continue
+      if (enabled.length >= maxCharacters) {
+        overflowPos = tidyJoin(overflowPos, charPos.get(n) ?? '')
+        overflowNeg = tidyJoin(overflowNeg, charNeg.get(n) ?? '')
+        continue
+      }
       characters.push({ prompt: '', negativePrompt: '', enabled: true })
       index = characters.length - 1
       enabled.push(index)
@@ -168,6 +175,9 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
     if (center) c.center = center
   }
 
+  const last = splits[splits.length - 1]
+  if (overflowPos) last.base = tidyJoin(last.base, overflowPos)
+  if (overflowNeg) negative.base = tidyJoin(negative.base, overflowNeg)
   const promptParts = req.promptParts
     ? { base: splits[0].base, additional: splits[1].base, detail: splits[2].base }
     : undefined
