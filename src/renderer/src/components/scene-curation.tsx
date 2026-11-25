@@ -121,7 +121,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const [inpaintAny, setInpaint] = useState<InpaintTarget | null>(null)
   const [inpaintLoading, setInpaintLoading] = useState(false)
   // 진행 중 인페인트 작업 (실시간 스트리밍 미리보기)
-  const [job, setJob] = useState<{ id: string } | null>(null)
+  // sceneId: 인페인트를 건 씬 — 다른 씬에 진행 화면을 덮거나 그 씬의 보던 위치를 바꾸지 않게
+  const [job, setJob] = useState<{ id: string; sceneId: number } | null>(null)
   const [jobPreview, setJobPreview] = useState<string | null>(null)
   const [jobProgress, setJobProgress] = useState<{ stepIx: number; totalSteps: number } | null>(
     null
@@ -265,7 +266,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
         setJob(null)
         setJobPreview(null)
         setJobProgress(null)
-        setIndex(0) // 새 이미지는 목록 맨 앞(최신순) — 결과를 바로 보여준다
+        // 새 이미지는 목록 맨 앞(최신순) — 결과를 바로 보여준다 (그 씬을 보고 있을 때만)
+        if (sceneIdRef.current === job.sceneId) setIndex(0)
       } else if (item.state === 'failed' || item.state === 'cancelled') {
         toast(item.error ?? '인페인트 생성 실패', 'error')
         setJob(null)
@@ -455,7 +457,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     const { ids } = await window.nais.invoke('queue:enqueue', { request, count: 1 })
     setInpaint(null)
     if (ids[0]) {
-      setJob({ id: ids[0] })
+      setJob({ id: ids[0], sceneId: scene.id })
       setJobPreview(null)
       setJobProgress(null)
     }
@@ -675,7 +677,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
 
           {/* 중앙: 현재 이미지 / 내장 인페인트 */}
           <div className="flex min-h-80 flex-col overflow-hidden rounded-lg border border-line bg-surface lg:min-h-0">
-            {job ? (
+            {job && job.sceneId === sceneId ? (
               <div className="relative min-h-0 flex-1">
                 {jobPreview ? (
                   <img
