@@ -63,8 +63,10 @@ async function prepareVibesOnce(
 async function processCharRefImage(filePath: string): Promise<string> {
   const buf = readFileSync(filePath)
   const meta = await sharp(buf).metadata()
-  const w = meta.width ?? 1
-  const h = meta.height ?? 1
+  // 휴대폰 JPEG는 EXIF 회전값으로 세워 보인다 — 그 방향대로 세운 크기로 캔버스를 고르고 그림도 세워 보낸다
+  const turned = (meta.orientation ?? 1) >= 5
+  const w = (turned ? meta.height : meta.width) ?? 1
+  const h = (turned ? meta.width : meta.height) ?? 1
   const ratio = w / h
   const canvas =
     ratio > 1.2
@@ -74,6 +76,7 @@ async function processCharRefImage(filePath: string): Promise<string> {
         : { w: 1472, h: 1472 }
 
   const png = await sharp(buf)
+    .rotate()
     .resize(canvas.w, canvas.h, { fit: 'contain', background: { r: 0, g: 0, b: 0 } })
     .png()
     .toBuffer()

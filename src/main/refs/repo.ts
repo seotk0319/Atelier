@@ -116,7 +116,9 @@ export async function addRefImagePaths(
 ): Promise<number> {
   const supported = new Set(['.png', '.jpg', '.jpeg', '.webp'])
   const sources = [
-    ...new Set(filePaths.filter((path) => existsSync(path) && supported.has(extname(path).toLowerCase())))
+    ...new Set(
+      filePaths.filter((path) => existsSync(path) && supported.has(extname(path).toLowerCase()))
+    )
   ]
   if (sources.length === 0) return 0
 
@@ -132,6 +134,7 @@ export async function addRefImagePaths(
     const dest = join(refsDir(), `${randomUUID()}${extname(src)}`)
     try {
       const thumbnail = await sharp(readFileSync(src))
+        .rotate()
         .resize(192, 192, { fit: 'cover' })
         .webp({ quality: 82 })
         .toBuffer()
