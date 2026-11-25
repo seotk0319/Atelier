@@ -59,7 +59,9 @@ async function prepareRefs(refs: GptRef[]): Promise<GptRef[]> {
         (meta.width ?? 0) > 2048 || (meta.height ?? 0) > 2048 || buf.length > 6 * 1024 * 1024
       const okMime = r.mime === 'image/png' || r.mime === 'image/jpeg' || r.mime === 'image/webp'
       if (!big && okMime) return r
+      // 다시 인코딩하면 EXIF 회전값이 빠진다 — 먼저 세워 둔다 (휴대폰 사진이 옆으로 누워 가지 않게)
       const out = await sharp(buf)
+        .rotate()
         .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer()
