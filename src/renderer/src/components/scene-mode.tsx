@@ -546,12 +546,13 @@ function SceneGrid(): React.JSX.Element {
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
       <>
         {/* 머리줄: 제목 · 프리셋 · 도구 */}
-        <div className="flex min-w-0 items-center gap-2.5 px-5 pb-3 pt-4">
+        {/* 좁은 창에선 도구 단추가 다음 줄로 내려간다 — 프리셋 이름이 사라지거나 「더 보기」가 옆 칸으로 밀려나지 않게 */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 px-5 pb-3 pt-4">
           <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">씬</h1>
           <span className="text-[13px] tabular-nums text-faint">
             {scenes.length.toLocaleString()}
           </span>
-          <PresetDropdown />
+          <PresetDropdown triggerClassName="min-w-[7rem]" />
           <div className="min-w-2 flex-1" />
           <Button
             className="h-9 shrink-0 px-3"
