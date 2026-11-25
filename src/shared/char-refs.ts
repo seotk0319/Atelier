@@ -151,14 +151,25 @@ export function showsFidelity(model: string): boolean {
 
 interface RefLike {
   referenceType: CharRefType
+  strength: number
   fidelity: number
 }
 
-/** 보낼 모델에 맞춘다 — V5는 fidelity 1 고정, V4.5는 V5 전용 종류를 빼거나 되돌린다 */
+/** 보내는 강도 — 0과 모델 상한 사이. V5에서 올린 강도(최대 5)가 V4.5(최대 1)로 그대로 가지 않게 한다 */
+export function clampRefStrength(strength: number, model: string): number {
+  return Math.min(Math.max(strength, 0), refStrengthMax(model))
+}
+
+/**
+ * 보낼 모델에 맞춘다 — V5는 fidelity 1 고정, V4.5는 V5 전용 종류를 빼거나 되돌린다.
+ * 강도는 두 모델 모두 그 모델의 상한으로 자른다 (저장값은 그대로 둔다).
+ */
 export function refsForModel<T extends RefLike>(refs: T[], model: string): T[] {
-  if (isV5Model(model)) return refs.map((r) => ({ ...r, fidelity: 1 }))
+  if (isV5Model(model))
+    return refs.map((r) => ({ ...r, strength: clampRefStrength(r.strength, model), fidelity: 1 }))
   return refs
     .filter((r) => r.referenceType !== 'costume')
+    .map((r) => ({ ...r, strength: clampRefStrength(r.strength, model) }))
     .map((r) =>
       r.referenceType === 'character_mainoutfit'
         ? { ...r, referenceType: 'character' as const }
@@ -166,6 +177,70 @@ export function refsForModel<T extends RefLike>(refs: T[], model: string): T[] {
           ? { ...r, referenceType: 'character&style' as const }
           : r
     )
+}
+
+/**
+ * 레퍼런스 그림을 보내는 모양.
+ * - canvas (V4.5): 1024×1536 / 1536×1024 / 1472×1472 캔버스에 검정 여백으로 맞춘다 (OpenAPI 명세).
+ * - bucket (V5): 가장 가까운 약 1MP 버킷을 덮도록 키운 뒤 가운데를 잘라 보낸다 (NAI 웹, 2026-11-25).
+ */
+export function refImageMode(model: string): 'canvas' | 'bucket' {
+  return isV5Model(model) ? 'bucket' : 'canvas'
+}
+
+const MEGAPIXEL = 1024 * 1024
+
+/**
+ * V5 레퍼런스 버킷: 높이 4096부터 1024까지 64씩 줄이며, 넓이가 1MP를 넘지 않는 가장 넓은 64 배수 폭.
+ * 가로 버킷은 그 거울(1024×1024 제외). 모두 97개 — NAI 웹 번들의 표와 같다.
+ */
+export const REF_BUCKETS: readonly (readonly [number, number])[] = (() => {
+  const portrait: [number, number][] = []
+  for (let height = 4096; height >= 1024; height -= 64) {
+    portrait.push([Math.floor(MEGAPIXEL / height / 64) * 64, height])
+  }
+  const landscape = portrait
+    .slice(0, -1)
+    .reverse()
+    .map(([width, height]): [number, number] => [height, width])
+  return [...portrait, ...landscape]
+})()
+
+export interface RefBucket {
+  width: number
+  height: number
+  resizeWidth: number
+  resizeHeight: number
+  left: number
+  top: number
+  unchanged: boolean
+}
+
+/** 종횡비(로그)가 가장 가까운 버킷을 골라, 그 버킷을 덮게 키우고 가운데를 자르는 값 */
+export function refBucket(width: number, height: number): RefBucket {
+  const aspect = Math.log(Math.max(width, 1) / Math.max(height, 1))
+  let best = REF_BUCKETS[0]
+  let bestDistance = Math.abs(aspect - Math.log(best[0] / best[1]))
+  for (const bucket of REF_BUCKETS) {
+    const distance = Math.abs(aspect - Math.log(bucket[0] / bucket[1]))
+    if (distance < bestDistance) {
+      best = bucket
+      bestDistance = distance
+    }
+  }
+  const [bucketWidth, bucketHeight] = best
+  const scale = Math.max(bucketWidth / width, bucketHeight / height)
+  const resizeWidth = Math.max(Math.floor(width * scale + 0.5), bucketWidth)
+  const resizeHeight = Math.max(Math.floor(height * scale + 0.5), bucketHeight)
+  return {
+    width: bucketWidth,
+    height: bucketHeight,
+    resizeWidth,
+    resizeHeight,
+    left: Math.floor((resizeWidth - bucketWidth) / 2),
+    top: Math.floor((resizeHeight - bucketHeight) / 2),
+    unchanged: width === bucketWidth && height === bucketHeight
+  }
 }
 
 /** 이 모델로 실제 보내지는 레퍼런스 수 (비용 계산용) */

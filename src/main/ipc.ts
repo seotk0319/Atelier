@@ -42,7 +42,7 @@ import {
   setFolderColor,
   updateCharacter
 } from './characters/repo'
-import { getDbPath, getDb } from './db'
+import { backupBeforeImport, getDbPath, getDb } from './db'
 import * as gpt from './gpt/service'
 import * as cover from './cover/repo'
 import * as coverArchive from './cover/archive'
@@ -542,8 +542,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     renamePreset(id, name)
   })
   handle('scenePresets:delete', ({ id }) => {
-    // 지워지는 씬 번호는 다른 씬이 다시 받을 수 있다 — 큐에 남은 그 씬 예약 출처를 잊는다
-    ctx.queue.forgetReservations(
+    // 지워지는 씬으로 가던 생성(대기·진행 중)을 멈춘다 — 돌게 두면 Anlas를 쓰고, 지워진 씬 번호를
+    // 새 씬이 다시 받으면 그 씬에 엉뚱한 그림이 붙는다 (upstream NAIS3 e7d0483). 예약 출처도 같이 잊는다.
+    ctx.queue.cancelScenes(
       getDb().prepare('SELECT id FROM gen_scenes WHERE preset_id = ?').pluck().all(id) as number[]
     )
     deletePreset(id)
@@ -639,30 +640,38 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     if (result.canceled || !result.filePaths[0]) return { canceled: true as const }
     try {
       const data = JSON.parse(readFileSync(result.filePaths[0], 'utf-8')) as Record<string, unknown>
+      const isNais3 = data._app === 'NAIS3'
+      const isNais2 = !isNais3 && Object.keys(data).some((k) => k.startsWith('nais2-'))
+      if (!isNais3 && !isNais2) return { error: '알 수 없는 백업 형식입니다' }
+      // 가져오기는 표를 비우고 다시 채운다 — 되돌릴 수 있게 지금 DB를 먼저 떠 둔다.
+      // 못 뜨면 아무것도 바꾸지 않고 멈춘다 (upstream NAIS3 3724ef5)
+      try {
+        backupBeforeImport()
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e)
+        return { error: `가져오기 전 백업을 만들지 못해 가져오지 않았어요: ${detail}` }
+      }
       // 포맷 감지: NAIS3는 _app='NAIS3', NAIS2는 nais2-* 키
-      if (data._app === 'NAIS3') {
-        // 씬 표가 통째로 바뀐다 — 큐의 예약 출처가 엉뚱한 씬을 가리키지 않게 먼저 잊는다
-        ctx.queue.forgetReservations()
-        const { imported } = importAll(data)
+      if (isNais3) {
+        const { imported, replacedSceneIds } = importAll(data)
+        // 복원이 성공한 뒤, 사라지거나 다른 씬이 된 번호로 가던 생성을 멈추고 그 예약 출처를 잊는다 —
+        // 엉뚱한 씬에 저장되거나 예약이 돌아가지 않게. 같은 씬으로 남은 번호는 그대로 둔다.
+        // (복원이 실패하면 아무것도 바뀌지 않으니 큐도 건드리지 않는다)
+        ctx.queue.cancelScenes(replacedSceneIds)
         return { summary: `NAIS3 백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
       }
-      if (Object.keys(data).some((k) => k.startsWith('nais2-'))) {
-        const r = importNais2(data)
-        const parts = [
-          r.characters ? `캐릭터 ${r.characters}` : '',
-          r.presets ? `프리셋 ${r.presets}` : '',
-          r.fragments ? `조각 ${r.fragments}` : '',
-          r.scenes ? `씬 ${r.scenes}` : '',
-          r.prompt ? '프롬프트' : ''
-        ].filter(Boolean)
-        return {
-          summary: parts.length
-            ? `NAIS2에서 ${parts.join(' · ')} 가져옴`
-            : '가져올 항목이 없습니다',
-          needsPromptReload: r.prompt
-        }
+      const r = importNais2(data)
+      const parts = [
+        r.characters ? `캐릭터 ${r.characters}` : '',
+        r.presets ? `프리셋 ${r.presets}` : '',
+        r.fragments ? `조각 ${r.fragments}` : '',
+        r.scenes ? `씬 ${r.scenes}` : '',
+        r.prompt ? '프롬프트' : ''
+      ].filter(Boolean)
+      return {
+        summary: parts.length ? `NAIS2에서 ${parts.join(' · ')} 가져옴` : '가져올 항목이 없습니다',
+        needsPromptReload: r.prompt
       }
-      return { error: '알 수 없는 백업 형식입니다' }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }

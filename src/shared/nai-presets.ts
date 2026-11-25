@@ -79,3 +79,116 @@ export function mergeUcPreset(negativePrompt: string, ucPreset: UcPresetIndex): 
   if (!preset) return negativePrompt
   return negativePrompt ? preset + ', ' + negativePrompt : preset
 }
+
+/*
+ * NAI 웹 번들(2026-11-25 novelai.net/image 스크립트 확인)의 UC 프리셋 표와 병합 규칙.
+ * 웹은 프리셋 원문에 nsfw를 넣지 않고, Curated가 아닌 모델에서 프리셋이 None이 아니고 (퀄리티 태그까지
+ * 붙인) 프롬프트에 "nsfw"가 없을 때만 맨 앞에 "nsfw, "를 붙인다. 그래서 V4.5 Full·V5 Full의 Heavy·Light·
+ * Human Focus는 SFW 프롬프트에서 위 UC_PRESETS_V45_FULL과 같고, 프롬프트에 nsfw가 있으면 nsfw가 빠진다.
+ * V5 Light는 문구가 다르고, Curated에는 nsfw가 붙지 않는다. Atelier 인덱스: 0=Heavy 1=Light 3=Human Focus 4=None.
+ */
+const WEB_HEAVY =
+  'lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page'
+const WEB_HUMAN = WEB_HEAVY + ', @_@, mismatched pupils, glowing eyes, bad anatomy'
+
+const UC_WEB_V45_FULL: Record<UcPresetIndex, string> = {
+  0: WEB_HEAVY,
+  1: 'lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page',
+  2: '',
+  3: WEB_HUMAN,
+  4: ''
+}
+
+/** V5 Full·Full Medium·Curated(인페인트 포함) 공통 */
+export const UC_PRESETS_V5: Record<UcPresetIndex, string> = {
+  0: WEB_HEAVY,
+  1: 'lowres, bad hands, bad anatomy, artistic error, sepia, white haze, worst quality, very displeasing, jpeg artifacts, 0::ai-generated::',
+  2: '',
+  3: WEB_HUMAN,
+  4: ''
+}
+
+const UC_WEB_V45_CURATED: Record<UcPresetIndex, string> = {
+  0: 'blurry, lowres, upscaled, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, negative space, blank page',
+  1: 'blurry, lowres, upscaled, artistic error, scan artifacts, jpeg artifacts, logo, too many watermarks, negative space, blank page',
+  2: '',
+  3: 'blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page',
+  4: ''
+}
+
+/** 웹이 tag_hint_uc_preset으로 보내는 프리셋 번호 (Atelier 인덱스 → 웹 번호). 2는 Atelier에서 프리셋 없음 */
+export const UC_PRESET_HINT: Record<UcPresetIndex, number> = { 0: 2, 1: 3, 2: 0, 3: 4, 4: 0 }
+
+/** 이 모델의 웹 UC 프리셋 표. 모르는 모델이면 null (예전 병합 규칙을 쓴다) */
+function webUcPresets(model: string): Record<UcPresetIndex, string> | null {
+  const base = model.replace(/-inpainting$/, '')
+  if (base.startsWith('nai-diffusion-5-')) return UC_PRESETS_V5
+  if (base === 'nai-diffusion-4-5-full') return UC_WEB_V45_FULL
+  if (base === 'nai-diffusion-4-5-curated') return UC_WEB_V45_CURATED
+  return null
+}
+
+/**
+ * 모델별 웹 규칙으로 UC 프리셋을 병합한다. positivePrompt는 퀄리티 태그까지 붙인 보낼 프롬프트.
+ * 웹 함수와 같다: 프리셋, ", ", 유저 네거티브 순서. Curated가 아니고 프리셋이 있고 프롬프트에 nsfw가
+ * 없으면 맨 앞에 "nsfw, ".
+ */
+export function mergeUcPresetForModel(
+  negativePrompt: string,
+  ucPreset: UcPresetIndex,
+  model: string,
+  positivePrompt: string
+): string {
+  const table = webUcPresets(model)
+  if (!table) return mergeUcPreset(negativePrompt, ucPreset)
+  const preset = table[ucPreset] ?? ''
+  const merged = !preset ? negativePrompt : negativePrompt ? `${preset}, ${negativePrompt}` : preset
+  const curated = model.includes('curated')
+  const addNsfw = !curated && preset !== '' && !positivePrompt.toLowerCase().includes('nsfw')
+  if (!addNsfw) return merged
+  return merged ? `nsfw, ${merged}` : 'nsfw'
+}
+
+/**
+ * 메타데이터의 병합된 네거티브 앞에 붙어 있을 수 있는 이 프리셋의 모든 모양 (긴 것 먼저).
+ * V4.5 표(nsfw 포함), 웹 표 그대로, 웹 표 + 앞 nsfw — 모델마다 다르게 붙어 있기 때문.
+ */
+export function ucPresetVariants(ucPreset: number): string[] {
+  const idx = ucPreset as UcPresetIndex
+  const texts = [
+    UC_PRESETS_V45_FULL[idx],
+    UC_WEB_V45_FULL[idx],
+    UC_PRESETS_V5[idx],
+    UC_WEB_V45_CURATED[idx]
+  ].filter((t): t is string => !!t)
+  const all = new Set<string>()
+  for (const t of texts) {
+    all.add(t)
+    if (!t.startsWith('nsfw, ')) all.add(`nsfw, ${t}`)
+  }
+  return [...all].sort((a, b) => b.length - a.length)
+}
+
+/** 병합된 네거티브에서 이 프리셋을 벗긴다 (어느 모양이든). 못 찾으면 그대로 */
+export function stripUcPresetText(uc: string, ucPreset: number): string {
+  for (const preset of ucPresetVariants(ucPreset)) {
+    if (uc === preset) return ''
+    if (uc.startsWith(preset + ', ')) return uc.slice(preset.length + 2)
+  }
+  return uc
+}
+
+/** 병합된 네거티브에서 UC 프리셋 인덱스를 역추적 — 가장 긴 접두로 맞는 것 */
+export function inferUcPresetIndex(uc: string): UcPresetIndex | undefined {
+  let best: UcPresetIndex | undefined
+  let bestLen = -1
+  for (const idx of [0, 1, 3] as const) {
+    for (const preset of ucPresetVariants(idx)) {
+      if ((uc === preset || uc.startsWith(preset + ', ')) && preset.length > bestLen) {
+        best = idx
+        bestLen = preset.length
+      }
+    }
+  }
+  return best
+}

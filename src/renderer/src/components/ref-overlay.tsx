@@ -19,6 +19,7 @@ import {
   refPartsHint,
   refShortLabel,
   refStrengthMax,
+  clampRefStrength,
   REF_TYPE_CHOICES,
   showsFidelity,
   toggleRefPart
@@ -246,7 +247,12 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
         <span className="shrink-0 font-mono text-[11px] text-faint">
           {kind === 'vibe'
             ? `s${(item as VibeItem).strength.toFixed(2)}`
-            : refShortLabel((item as CharRefItem).refType, model, (item as CharRefItem).strength)}
+            : refShortLabel(
+                (item as CharRefItem).refType,
+                model,
+                // 보내는 값으로 적는다 — V5에서 올린 강도는 V4.5에선 1로 간다
+                clampRefStrength((item as CharRefItem).strength, model)
+              )}
         </span>
       </div>
     )
@@ -697,8 +703,10 @@ function CharRefParams({
   model: string
 }): React.JSX.Element {
   const modelMax = refStrengthMax(model)
-  // 다른 모델에서 올려 둔 강도가 슬라이더 끝에 묻히지 않게 지금 값까지는 늘려 둔다 (값은 그대로 보낸다)
+  // 다른 모델에서 올려 둔 강도가 슬라이더 끝에 묻히지 않게 지금 값까지는 늘려 둔다.
+  // 저장값은 그대로 두고, 보낼 때는 이 모델의 상한으로 자른다 (shared/char-refs.ts clampRefStrength).
   const max = Math.max(modelMax, Math.ceil(item.strength))
+  const over = item.strength > modelMax
   const sent = isRefSent(item.refType, model)
   return (
     <div className="flex flex-col gap-1.5">
@@ -709,7 +717,9 @@ function CharRefParams({
       />
       {/* 이 모델에서 빼고 보내는 레퍼런스(V4.5의 의상)는 값 칸을 숨긴다 */}
       {sent && (
-        <ParamRow label={`강도 ${item.strength.toFixed(2)} / ${modelMax}`}>
+        <ParamRow
+          label={`강도 ${item.strength.toFixed(2)} / ${modelMax}${over ? ` · ${modelMax}로 보내요` : ''}`}
+        >
           <Slider
             min={0}
             max={max}

@@ -1,7 +1,7 @@
 import { gunzipSync, inflateSync } from 'zlib'
 import sharp from 'sharp'
 import type { ImageMetadata } from '../../shared/types'
-import { UC_PRESETS_V45_FULL, splitQualityTags } from '../../shared/nai-presets'
+import { inferUcPresetIndex, splitQualityTags } from '../../shared/nai-presets'
 
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const STEALTH_MAGIC = 'stealth_pngcomp'
@@ -133,18 +133,9 @@ function parseLocalParams(text: Record<string, string>): LocalParams | undefined
   return undefined
 }
 
-/** 병합된 네거티브에서 UC 프리셋 인덱스 역추적 (프리셋 텍스트가 접두인 것 중 가장 긴 것) */
+/** 병합된 네거티브에서 UC 프리셋 인덱스 역추적 — V4.5·V5·nsfw 유무 모양을 모두 본다 */
 function inferUcPreset(uc: string): number | undefined {
-  let best: number | undefined
-  let bestLen = -1
-  for (const [k, preset] of Object.entries(UC_PRESETS_V45_FULL)) {
-    if (!preset) continue
-    if ((uc === preset || uc.startsWith(preset + ', ')) && preset.length > bestLen) {
-      best = Number(k)
-      bestLen = preset.length
-    }
-  }
-  return best
+  return inferUcPresetIndex(uc)
 }
 
 /** 파라미터 객체 + 프롬프트/모델 → 정규화 메타 */

@@ -5,13 +5,15 @@ import sharp from 'sharp'
 import icon from '../../resources/icon.png?asset'
 import iconInverted from '../../resources/icon-inverted.png?asset'
 import { closeDb, getDb, initDb } from './db'
+import { offerRecovery } from './backup/recovery-prompt'
 import { getAccelerationExcluded, getNaiAccounts, getSetting } from './db/settings'
 import { processWildcards } from './fragments/processor'
 import { removeComments } from '../shared/nai-presets'
 import { applyCharSections } from '../shared/char-sections'
 import { composeWeakened, GENERAL_WEIGHT_KEY, parseGeneralWeight } from '../shared/general-weight'
 import { isV5Model, maxCharactersForModel, supportsVibes } from '../shared/nai-models'
-import { effortForRefs, refsForModel } from '../shared/char-refs'
+import { effortForRefs, refsForModel, sentRefCount } from '../shared/char-refs'
+import type { CharRefType } from '../shared/types'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
 import { saveGeneratedImage } from './images/storage'
@@ -107,7 +109,7 @@ function createWindow(): void {
 
 const previewGate = createPreviewGate()
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // app.quit()은 비동기라 두 번째 실행도 ready까지 온다 — 여기서 멈추지 않으면 첫 실행이 쓰는
   // DB를 같이 열어 백업·마이그레이션을 중복 실행한다. 기존 창은 첫 실행의 second-instance가 앞으로 가져온다.
   if (!hasSingleInstanceLock) return
@@ -163,12 +165,22 @@ app.whenReady().then(() => {
     app.quit()
     return
   }
+  // 작업 공간이 비었는데 앱이 남긴 백업에는 데이터가 있으면 창을 띄우기 전에 되돌릴지 묻는다
+  // (upstream NAIS3 56299a5). 되돌리면 앱이 다시 시작된다.
+  if (await offerRecovery()) return
 
   // 생성 파이프라인: 큐 → 조각/와일드카드 치환 → 바이브/캐릭레퍼 준비 → 스트리밍 생성 → 저장
   const queue = new GenerationQueue(
     async (queuedRequest, id, signal, account) => {
       // V5 Medium은 레퍼런스를 못 쓴다 — 레퍼런스가 켜져 있으면 High로 보낸다 (NAI 웹과 같음).
-      const crefCount = enabledCharRefRows().length + (queuedRequest.extraCharRefs?.length ?? 0)
+      // 실제로 보내는 수만 센다 — V4.5는 의상(V5 전용) 레퍼런스를 빼고 보낸다 (무료 확인이 헛막히지 않게).
+      const crefCount = sentRefCount(
+        [
+          ...enabledCharRefRows().map((r) => r.refType as CharRefType),
+          ...(queuedRequest.extraCharRefs ?? []).map((r) => r.refType)
+        ],
+        queuedRequest.model
+      )
       // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
       const rawRequest = withFixedSettings({
         ...queuedRequest,
@@ -243,9 +255,13 @@ app.whenReady().then(() => {
         : { vibes: [], newlyEncoded: [] }
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
       const extraCharacterReferences = rawRequest.extraCharRefs?.length
-        ? await prepareExtraCharRefs(rawRequest.extraCharRefs)
+        ? await prepareExtraCharRefs(rawRequest.extraCharRefs, rawRequest.model)
         : []
-      const preparedCharRefs = [...extraCharacterReferences, ...(await prepareCharRefs())]
+      // 그림 모양(V4.5 캔버스 / V5 버킷)은 보낼 모델로 정한다. 인페인트로 바뀌어도 V4.5/V5는 그대로다.
+      const preparedCharRefs = [
+        ...extraCharacterReferences,
+        ...(await prepareCharRefs(rawRequest.model))
+      ]
 
       let source = request.source
       // i2i/인페인트: 소스 해상도를 유효 NAI 해상도(64 배수·픽셀 상한)로 스냅하고 이미지를 맞춰 리사이즈.

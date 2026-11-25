@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { supportsVibes } from '../src/shared/nai-models'
 import {
+  clampRefStrength,
   effortForRefs,
+  REF_BUCKETS,
+  refBucket,
+  refImageMode,
   refParts,
   refShortLabel,
   refsForModel,
@@ -41,9 +45,11 @@ describe('supportsVibes (V5에는 바이브를 싣지 않는다)', () => {
 describe('Precise Reference 모델별 규칙 (NAI 웹 코드 2026-11-25)', () => {
   const ref = (
     referenceType: CharRefType,
-    fidelity = 0.6
-  ): { referenceType: CharRefType; fidelity: number } => ({
+    fidelity = 0.6,
+    strength = 1
+  ): { referenceType: CharRefType; strength: number; fidelity: number } => ({
     referenceType,
+    strength,
     fidelity
   })
 
@@ -124,5 +130,59 @@ describe('Precise Reference 모델별 규칙 (NAI 웹 코드 2026-11-25)', () =>
     )
     expect(refShortLabel('costume', 'nai-diffusion-4-5-full', 0.6)).toBe('옷 · V5에서만')
     expect(refShortLabel('character', 'nai-diffusion-5-full')).toBe('얼굴')
+  })
+
+  it('강도는 보낼 모델의 상한으로 자른다 (저장값 3은 V4.5에 1로 간다)', () => {
+    expect(clampRefStrength(3, 'nai-diffusion-4-5-full')).toBe(1)
+    expect(clampRefStrength(3, 'nai-diffusion-5-full')).toBe(3)
+    expect(clampRefStrength(7, 'nai-diffusion-5-full')).toBe(5)
+    expect(clampRefStrength(-1, 'nai-diffusion-5-full')).toBe(0)
+    expect(
+      refsForModel([ref('character', 0.6, 3)], 'nai-diffusion-4-5-full').map((r) => r.strength)
+    ).toEqual([1])
+    expect(
+      refsForModel([ref('character', 0.6, 3)], 'nai-diffusion-5-full').map((r) => r.strength)
+    ).toEqual([3])
+  })
+})
+
+describe('V5 레퍼런스 그림 버킷 (NAI 웹과 같은 표)', () => {
+  it('V5는 버킷, V4.5는 캔버스', () => {
+    expect(refImageMode('nai-diffusion-5-full')).toBe('bucket')
+    expect(refImageMode('nai-diffusion-5-full-medium-inpainting')).toBe('bucket')
+    expect(refImageMode('nai-diffusion-4-5-full')).toBe('canvas')
+  })
+
+  it('버킷은 97개, 모두 64 배수이고 1MP를 넘지 않는다', () => {
+    expect(REF_BUCKETS).toHaveLength(97)
+    for (const [w, h] of REF_BUCKETS) {
+      expect(w % 64).toBe(0)
+      expect(h % 64).toBe(0)
+      expect(w * h).toBeLessThanOrEqual(1024 * 1024)
+    }
+    expect(REF_BUCKETS[0]).toEqual([256, 4096])
+    expect(REF_BUCKETS[48]).toEqual([1024, 1024])
+    expect(REF_BUCKETS[96]).toEqual([4096, 256])
+  })
+
+  it('종횡비가 가까운 버킷을 덮게 키우고 가운데를 자른다', () => {
+    // 832×1216 (세로 에셋) → 832×1216 버킷이 있으면 그대로
+    const same = refBucket(832, 1216)
+    expect([same.width, same.height]).toEqual([832, 1216])
+    expect(same.unchanged).toBe(true)
+    // 정사각 2048² → 1024² 로 줄이기만
+    const square = refBucket(2048, 2048)
+    expect([square.width, square.height, square.resizeWidth, square.resizeHeight]).toEqual([
+      1024, 1024, 1024, 1024
+    ])
+    expect(square.unchanged).toBe(false)
+    // 가로 1920×1080 → 가장 가까운 가로 버킷, 잘라 낸 영역이 키운 그림 안에 있다
+    const wide = refBucket(1920, 1080)
+    expect(wide.width).toBeGreaterThan(wide.height)
+    expect(wide.width * wide.height).toBeLessThanOrEqual(1024 * 1024)
+    expect(wide.left + wide.width).toBeLessThanOrEqual(wide.resizeWidth)
+    expect(wide.top + wide.height).toBeLessThanOrEqual(wide.resizeHeight)
+    expect(wide.resizeWidth).toBeGreaterThanOrEqual(wide.width)
+    expect(wide.resizeHeight).toBeGreaterThanOrEqual(wide.height)
   })
 })

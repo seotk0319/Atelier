@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { createHash, randomUUID } from 'crypto'
 import { extname, join, resolve } from 'path'
 import sharp from 'sharp'
@@ -160,9 +160,7 @@ export async function saveGeneratedImage(input: {
     )
     const payloadJson = payloadWithLocalMetadata(input.sentPayload, input.localMetadata)
     const save = db.transaction((sceneId: number | null): number => {
-      const id = Number(
-        insertImage.run(filePath, input.kind, input.seed, sceneId).lastInsertRowid
-      )
+      const id = Number(insertImage.run(filePath, input.kind, input.seed, sceneId).lastInsertRowid)
       insertBlob.run(id, thumbnail, payloadJson)
       return id
     })
@@ -184,11 +182,9 @@ export async function saveGeneratedImage(input: {
       virtualFolderId: null
     }
   } catch (error) {
-    try {
-      unlinkSync(filePath)
-    } catch {
-      // 저장 실패 cleanup 중 이미 없어진 파일은 무시한다.
-    }
+    // 파일은 지우지 않는다 — 이미 Anlas를 쓴 그림의 하나뿐인 사본이다. 히스토리에 안 잡힌 파일이
+    // 저장 폴더에 남는 편이 잃는 것보다 낫다 (upstream NAIS3 f4915f1).
+    console.error('Failed to record a saved image in history:', filePath, error)
     throw error
   }
 }
@@ -355,9 +351,7 @@ export function listImages(
 }
 
 export function getImagePayload(id: number): string | null {
-  const row = getDb()
-    .prepare('SELECT payload_json FROM image_blobs WHERE image_id = ?')
-    .get(id) as
+  const row = getDb().prepare('SELECT payload_json FROM image_blobs WHERE image_id = ?').get(id) as
     { payload_json: string } | undefined
   return row?.payload_json ?? null
 }

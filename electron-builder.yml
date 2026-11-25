@@ -13,6 +13,8 @@ files:
   - '!**/*.log*'
   - '!intro-assets/**'
   - '!guide/**'
+  - '!design/**'
+  - '!*.tsbuildinfo'
   - '!.superloopy/**'
   - '!DESIGN.md'
   - '!NAIS3_CUSTOM_*.md'

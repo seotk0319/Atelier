@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { ImageMetadata, UcPresetIndex } from '@shared/types'
-import { UC_PRESETS_V45_FULL, splitQualityTags } from '@shared/nai-presets'
+import { splitQualityTags, stripUcPresetText } from '@shared/nai-presets'
 import { imageUrl } from '../lib/constants'
 import { useCharactersStore } from './characters-store'
 import { mergePromptParts, useGenerationStore } from './generation-store'
@@ -19,10 +19,7 @@ function stripQuality(prompt: string): string {
   return splitQualityTags(prompt).prompt
 }
 function stripUcPreset(uc: string, idx: number): string {
-  const preset = UC_PRESETS_V45_FULL[idx as keyof typeof UC_PRESETS_V45_FULL]
-  if (!preset) return uc
-  if (uc === preset) return ''
-  return uc.startsWith(preset + ', ') ? uc.slice(preset.length + 2) : uc
+  return stripUcPresetText(uc, idx)
 }
 
 interface MetadataState {
@@ -98,11 +95,12 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
     }
 
     // UC 프리셋: 체크 시 원본 네거티브+프리셋으로(재병합), 미체크 시 병합본 그대로+None
-    const uc = (sel.ucPreset && m.ucPreset != null ? m.ucPreset : 0) as UcPresetIndex
+    // 프리셋을 못 알아봤거나 고르지 않았으면 None(4) — Heavy(0)로 두면 병합본 위에 Heavy가 한 번 더 붙는다
+    const uc = (sel.ucPreset && m.ucPreset != null ? m.ucPreset : 4) as UcPresetIndex
     if (sel.negativePrompt) {
       const rawNegative = m.promptParts?.negative ?? m.negativePrompt
       patch.negativePrompt =
-        m.ucPreset != null ? stripUcPreset(rawNegative, m.ucPreset) : rawNegative
+        sel.ucPreset && m.ucPreset != null ? stripUcPreset(rawNegative, m.ucPreset) : rawNegative
       patch.ucPreset = uc
     } else if (sel.ucPreset && m.ucPreset != null) {
       patch.ucPreset = uc

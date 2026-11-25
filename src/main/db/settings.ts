@@ -75,6 +75,42 @@ function readStoredAccounts(): NaiAccountSecret[] | null {
   }
 }
 
+/**
+ * 저장된 토큰 값이 있는데 지금 읽을 수 없는지 — 키체인 잠김, 다른 PC·사용자에서 옮겨 온 데이터 폴더,
+ * 손상된 값. 이때 읽은 결과는 빈 목록이라, 그 위에 새 계정을 쓰면 기존 계정이 조용히 사라진다
+ * (upstream NAIS3 37aa08b·2d08255).
+ */
+export function isNaiTokenStoreUnreadable(): boolean {
+  const stored = getSetting(ACCOUNTS_KEY)
+  if (stored !== null) {
+    const raw = decryptValue(stored)
+    if (raw === null) return true
+    try {
+      return !Array.isArray(JSON.parse(raw))
+    } catch {
+      return true
+    }
+  }
+  const legacy = getSetting(TOKEN_KEY)
+  if (legacy === null) return false
+  const token = decryptValue(legacy)
+  return token === null || !/^[!-~]+$/.test(token.trim())
+}
+
+/**
+ * 읽을 수 없는 토큰 값을 지우지 않고 다른 키로 옮겨 둔다 (키체인이 돌아오면 되살릴 수 있게).
+ * 계정을 새로 쓰기 직전에만 부른다.
+ */
+function preserveUnreadableTokens(): void {
+  if (!isNaiTokenStoreUnreadable()) return
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  for (const key of [ACCOUNTS_KEY, TOKEN_KEY]) {
+    const value = getSetting(key)
+    if (value !== null) setSetting(`${key}_unreadable_${stamp}`, value)
+  }
+  getDb().prepare('DELETE FROM settings WHERE key IN (?, ?)').run(TOKEN_KEY, ACCOUNTS_KEY)
+}
+
 function writeAccounts(accounts: NaiAccountSecret[]): void {
   const normalized = accounts.map((account, index) => ({
     ...account,
@@ -93,6 +129,7 @@ function writeAccounts(accounts: NaiAccountSecret[]): void {
  */
 export function setNaiToken(token: string): void {
   const normalized = token.trim()
+  preserveUnreadableTokens()
   const accounts = readStoredAccounts()
   if (accounts !== null) {
     if (accounts[0]) accounts[0] = { ...accounts[0], token: normalized }
@@ -189,7 +226,9 @@ function getAccountMemos(): Record<string, string> {
     const value = JSON.parse(getSetting(MEMOS_KEY) || '{}') as unknown
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
     return Object.fromEntries(
-      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      Object.entries(value).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string'
+      )
     )
   } catch {
     return {}
@@ -242,6 +281,7 @@ export function getNaiAccountToken(id: string): string | null {
 
 export function addNaiAccount(token: string): { added: boolean; error?: string } {
   const normalized = token.trim()
+  preserveUnreadableTokens()
   const accounts = getNaiAccounts()
   if (accounts.some((account) => account.token === normalized)) {
     return { added: false, error: '이미 등록된 토큰입니다' }

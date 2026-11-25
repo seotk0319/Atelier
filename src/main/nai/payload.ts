@@ -29,11 +29,12 @@ export {
   mergeUcPreset,
   removeComments
 } from '../../shared/nai-presets'
+import { applyAutoText } from '../../shared/nai-auto-text'
 import {
   mergeQualityTags,
-  mergeUcPreset,
+  mergeUcPresetForModel,
   removeComments,
-  UC_HEAVY_V5
+  UC_PRESET_HINT
 } from '../../shared/nai-presets'
 
 /**
@@ -141,9 +142,14 @@ export function buildGenerateImagePayload(
   // V5 투명 배경: NAI 웹과 같이 퀄리티 접미사 앞에 태그를 붙이고 tag_hint로 알린다
   const transparent = v5 && req.transparentBackground === true
   const prompt = mergeQualityTags(removeComments(req.prompt), req.qualityToggle, transparent)
-  const negative = medium
-    ? UC_HEAVY_V5
-    : mergeUcPreset(removeComments(req.negativePrompt), req.ucPreset)
+  // UC 프리셋은 웹 규칙대로 모델별 표에서 붙이고, 프롬프트에 nsfw가 없을 때만 앞에 nsfw를 붙인다.
+  // Medium은 웹처럼 유저 네거티브를 비우고 Heavy만 (withFixedSettings가 ucPreset 0·네거티브 ''로 맞춤).
+  const negative = mergeUcPresetForModel(
+    medium ? '' : removeComments(req.negativePrompt),
+    medium ? 0 : req.ucPreset,
+    req.model,
+    prompt
+  )
 
   // 캐릭터 프롬프트도 주석(#) 제거 — 기본/네거만 걸러지고 캐릭터 칸은 그대로 전송되던 버그 수정
   const activeChars = req.characterPrompts
@@ -153,6 +159,9 @@ export function buildGenerateImagePayload(
       negativePrompt: removeComments(c.negativePrompt)
     }))
     .filter((c) => c.enabled && c.prompt.trim())
+  // V5 Auto Text: 웹은 V5에서 따옴표 안 문구를 첫 구역 끝에 "teXt: …"로 늘 덧붙인다 (모델 능력 autoText,
+  // 설정 없음 — novelai.net 스크립트 2026-11-25 확인). 퀄리티 태그 뒤에 붙는다 (upstream NAIS3 90febc0).
+  const sentPrompt = v5 ? applyAutoText(prompt, activeChars, req.useCoords) : prompt
   // V5는 0~1 자유 좌표(소수 셋째 자리), V4.5는 5×5 칸 좌표만 받는다
   const center = (c: (typeof activeChars)[number]): { x: number; y: number } => {
     if (!req.useCoords || !c.center) return { x: 0.5, y: 0.5 }
@@ -163,7 +172,7 @@ export function buildGenerateImagePayload(
 
   return {
     action: opts.i2i ? (opts.i2i.maskBase64 ? 'infill' : 'img2img') : 'generate',
-    input: prompt,
+    input: sentPrompt,
     model: req.model,
     parameters: {
       // V4.5는 기존 실캡처 fixture와의 호환을 유지하고, V5만 현행 요청 버전을 사용한다.
@@ -201,6 +210,10 @@ export function buildGenerateImagePayload(
       qualityToggle: req.qualityToggle,
       ...(v5
         ? {
+            // 웹은 퀄리티·UC 프리셋 번호를 tag hint로 같이 보낸다 (번들 표: none 0, standard 1, heavy 2,
+            // light 3, humanFocus 4). Medium은 고정 Heavy.
+            tag_hint_qt: req.qualityToggle ? 1 : 0,
+            tag_hint_uc_preset: UC_PRESET_HINT[medium ? 0 : req.ucPreset],
             tag_hint_transparent_background: transparent,
             // NAI 웹 기본값(알파 모드 Straight). 투명을 지원하는 모델이면 늘 보낸다
             straight_alpha: true,
@@ -213,8 +226,10 @@ export function buildGenerateImagePayload(
       legacy: false,
       // 인페인트는 add_original_image=true: 서버가 마스크 밖을 원본으로 합성
       add_original_image: true,
-      cfg_rescale: req.cfgRescale,
-      noise_schedule: req.noiseSchedule,
+      // 웹은 모델이 고르지 못하는 값은 요청에서 지운다: V5는 noise schedule, V5 절약은 CFG rescale도
+      // (novelai.net 스크립트 2026-11-25: 능력표 noiseSchedule·cfgRescale이 false면 delete)
+      ...(medium ? {} : { cfg_rescale: req.cfgRescale }),
+      ...(v5 ? {} : { noise_schedule: req.noiseSchedule }),
       legacy_v3_extend: false,
       skip_cfg_above_sigma: varietySigma({
         model: req.model,
@@ -229,7 +244,7 @@ export function buildGenerateImagePayload(
       seed: req.seed,
       v4_prompt: {
         caption: {
-          base_caption: prompt,
+          base_caption: sentPrompt,
           char_captions: activeChars.map((c) => ({
             char_caption: c.prompt,
             centers: [center(c)]
