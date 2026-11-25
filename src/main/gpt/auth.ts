@@ -136,8 +136,7 @@ function toCredentials(data: AuthFile): GptCredentials {
 /** 요청에 쓸 자격 증명. force면 만료 전이어도 갱신한다 (401을 받았을 때) */
 export async function getCredentials(force = false): Promise<GptCredentials> {
   const found = await readAuth()
-  if (!found)
-    throw new GptAuthError('ChatGPT 로그인 파일을 찾지 못했어요. Codex에서 로그인해 주세요.')
+  if (!found) throw new GptAuthError('ChatGPT 로그인 파일(~/.codex/auth.json)을 찾지 못했어요.')
   const exp = tokenExpiresAt(found.data.tokens?.access_token)
   const fresh = exp !== null && exp - Date.now() > REFRESH_MARGIN_MS
   if (fresh && !force) return toCredentials(found.data)

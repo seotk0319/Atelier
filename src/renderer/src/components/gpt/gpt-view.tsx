@@ -115,8 +115,10 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
             </div>
             <div className="mt-1">{status.reason}</div>
             <div className="mt-1.5 text-muted">
-              Codex에서 ChatGPT로 로그인하면 여기서 바로 쓸 수 있어요. 로그인 뒤 오른쪽 위 연결
-              표시를 눌러 주세요.
+              GPT 이미지는 ChatGPT 계정으로 만들어요. 명령 창에서{' '}
+              <code className="font-mono">npm i -g @openai/codex</code>로 Codex CLI를 깔고{' '}
+              <code className="font-mono">codex login</code>으로 로그인한 뒤, 오른쪽 위 연결 표시를
+              눌러 주세요.
             </div>
           </div>
         )}
