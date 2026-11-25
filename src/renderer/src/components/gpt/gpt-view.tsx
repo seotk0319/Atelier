@@ -130,6 +130,8 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()
+              // 전역 Ctrl+Enter(NAI 메인 생성)까지 올라가지 않게 막는다
+              e.stopPropagation()
               void s.generate()
             }
           }}
