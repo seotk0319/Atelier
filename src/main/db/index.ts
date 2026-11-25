@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
-import { migrateDatabase } from './migrate'
+import { migrateDatabase, snapshotBeforeImport } from './migrate'
 import { migrations } from './migrations'
 
 let db: Database.Database | null = null
@@ -52,6 +52,11 @@ export function initDb(): { version: number; path: string } {
   )
 
   return { version, path }
+}
+
+/** 가져오기 직전 스냅샷 (userData\backups\pre-import\, 최근 3개) — 만든 파일 경로 */
+export function backupBeforeImport(): string {
+  return snapshotBeforeImport(getDb(), join(app.getPath('userData'), 'backups'))
 }
 
 export function closeDb(): void {

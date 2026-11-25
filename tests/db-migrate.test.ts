@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { migrateDatabase, pruneBackups } from '../src/main/db/migrate'
+import { migrateDatabase, pruneBackups, snapshotBeforeImport } from '../src/main/db/migrate'
 import { migrations } from '../src/main/db/migrations'
 
 // better-sqlite3는 Electron용으로 빌드돼 있어 vitest(Node)에서 열 수 없다.
@@ -301,5 +301,42 @@ describe('pruneBackups', () => {
     expect(readdirSync(dir).sort()).toEqual(
       ['other.db', 'pre-migration-v11.db', 'pre-migration-v12.db'].sort()
     )
+  })
+})
+
+describe('snapshotBeforeImport', () => {
+  it('가져오기 전 DB를 backups/pre-import/에 뜨고 최근 3개만 남긴다', () => {
+    const path = join(dir, 'nais3.db')
+    const backupDir = join(dir, 'backups')
+    const db = connect(path)
+    migrateDatabase(db, migrations, { backupDir })
+    db.prepare("INSERT INTO settings (key, value) VALUES ('probe', 'before-import')").run()
+
+    const made: string[] = []
+    for (let i = 0; i < 4; i++) {
+      const file = snapshotBeforeImport(db, backupDir, new Date(Date.UTC(2026, 10, 25, 10, 0, i)))
+      // 같은 초에 뜬 것도 수정 시각 순서가 갈리게 한다
+      utimesSync(file, 1_700_000_000 + i, 1_700_000_000 + i)
+      made.push(file)
+    }
+    const folder = join(backupDir, 'pre-import')
+    expect(readdirSync(folder).sort()).toEqual(
+      made
+        .slice(1)
+        .map((f) => f.slice(folder.length + 1))
+        .sort()
+    )
+    const raw = new DatabaseSync(made[3])
+    try {
+      expect(raw.prepare("SELECT value FROM settings WHERE key = 'probe'").get()).toEqual({
+        value: 'before-import'
+      })
+    } finally {
+      raw.close()
+    }
+    // 마이그레이션 백업 정리는 가져오기 백업을 건드리지 않는다
+    writeFileSync(join(backupDir, 'pre-migration-v1.db'), 'x')
+    pruneBackups(backupDir, 0)
+    expect(readdirSync(folder)).toHaveLength(3)
   })
 })

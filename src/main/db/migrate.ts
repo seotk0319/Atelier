@@ -211,10 +211,10 @@ export function removeSnapshotTemps(backupDir: string): void {
   }
 }
 
-/** 마이그레이션 전 백업(pre-migration-*.db)만 수정 시각 순으로 최근 keep개 남긴다 */
-export function pruneBackups(backupDir: string, keep: number): void {
+/** 백업(기본 pre-migration-*.db)만 수정 시각 순으로 최근 keep개 남긴다 */
+export function pruneBackups(backupDir: string, keep: number, prefix = 'pre-migration-'): void {
   const files = readdirSync(backupDir)
-    .filter((f) => f.startsWith('pre-migration-') && f.endsWith('.db'))
+    .filter((f) => f.startsWith(prefix) && f.endsWith('.db'))
     .map((name) => ({ name, mtimeMs: statSync(join(backupDir, name)).mtimeMs }))
     .sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name))
   for (const f of files.slice(0, Math.max(0, files.length - keep))) {
@@ -226,4 +226,26 @@ function hasTable(database: Database.Database, table: string): boolean {
   return Boolean(
     database.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)
   )
+}
+
+/** 가져오기 전 스냅샷은 마이그레이션 백업과 따로 최근 것만 남긴다 */
+export const KEEP_IMPORT_BACKUPS = 3
+
+/**
+ * 가져오기(백업 복원·NAIS2)가 표를 비우고 다시 채우기 직전에 지금 DB를 backups/pre-import/에 뜬다
+ * (upstream NAIS3 3724ef5). 실패하면 던진다 — 호출 쪽은 가져오기를 하지 않는다.
+ */
+export function snapshotBeforeImport(
+  db: Database.Database,
+  backupDir: string,
+  now: Date = new Date()
+): string {
+  const folder = join(backupDir, 'pre-import')
+  mkdirSync(folder, { recursive: true })
+  removeSnapshotTemps(folder)
+  const stamp = now.toISOString().replace(/[:.]/g, '-')
+  const destination = join(folder, `pre-import-${stamp}.db`)
+  writeSnapshot(db, destination)
+  pruneBackups(folder, KEEP_IMPORT_BACKUPS, 'pre-import-')
+  return destination
 }
