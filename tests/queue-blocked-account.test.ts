@@ -47,4 +47,41 @@ describe('account blocked by an auth error', () => {
     await tick()
     expect(queue.status().counts.done).toBe(1)
   })
+
+  it('hands the image to another account when one account gets 401 in acceleration', async () => {
+    const accounts: GenerationAccount[] = [
+      { id: 'a1', name: '계정 1', token: 'bad' },
+      { id: 'a2', name: '계정 2', token: 'good' }
+    ]
+    const used: string[] = []
+    const queue = new GenerationQueue(
+      async (_r, _id, _signal, acc) => {
+        used.push(acc.id)
+        if (acc.token === 'bad') throw Object.assign(new Error('생성 실패 401'), { status: 401 })
+        return 'C:/out.png'
+      },
+      {
+        getAccounts: () => accounts,
+        accelerationAvailable: true,
+        isAccelerationEnabled: () => true
+      }
+    )
+    queue.setDelayMs(0)
+    queue.enqueue(request, 2)
+    for (let i = 0; i < 10; i++) await tick()
+    const { counts } = queue.status()
+    expect(counts.done).toBe(2)
+    expect(counts.failed).toBe(0)
+    expect(used.filter((id) => id === 'a1')).toHaveLength(1)
+  })
+
+  it('treats a server error whose text mentions "aborted" as a failure, not a cancel', async () => {
+    const queue = new GenerationQueue(async () => {
+      throw Object.assign(new Error('생성 실패 400: upstream connection aborted'), { status: 400 })
+    })
+    queue.setDelayMs(0)
+    queue.enqueue(request, 1)
+    await tick()
+    expect(queue.status().counts).toMatchObject({ failed: 1, cancelled: 0 })
+  })
 })

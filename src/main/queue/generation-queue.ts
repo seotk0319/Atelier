@@ -412,6 +412,12 @@ export class GenerationQueue extends EventEmitter {
         item.state = 'pending'
         delete item.accountId
         delete item.error
+      } else if (isAccountFatalError(error) && this.hasOtherUsableAccount(item, account.id)) {
+        // 401·402·403은 이 계정만의 문제 — 그 계정을 막고, 같이 쓸 수 있는 다른 계정이 있으면 그 장을 넘긴다
+        this.blockedAccounts.add(account.id)
+        item.state = 'pending'
+        delete item.accountId
+        delete item.error
       } else {
         item.error = error instanceof Error ? error.message : String(error)
         if (isAccountFatalError(error)) this.blockedAccounts.add(account.id)
@@ -464,6 +470,17 @@ export class GenerationQueue extends EventEmitter {
         this.emitChanged()
       }
     }
+  }
+
+  /** 이 항목이 쓸 수 있는 계정 가운데 막히지 않은 다른 계정이 있는지 */
+  private hasOtherUsableAccount(item: InternalQueueItem, failedId: string): boolean {
+    return this.getAccounts().some(
+      (account) =>
+        account.id !== failedId &&
+        account.token.trim() &&
+        item.allowedAccountIds.includes(account.id) &&
+        !this.blockedAccounts.has(account.id)
+    )
   }
 
   /** includeQuick=false면 예약 묶음 항목만 본다 (바로 뽑기 제외). */
@@ -582,10 +599,17 @@ function abortError(): Error {
   return error
 }
 
+/**
+ * 취소로 끝난 오류인지. 이름으로만 본다 — 메시지에 "abort"가 들어간 서버 오류
+ * ("생성 실패 502: upstream ... aborted")를 취소로 보면 재시도도 안 하고 예약까지 돌려준다.
+ * 실제 취소는 부르는 쪽이 signal.aborted로도 함께 확인한다.
+ */
 function isAbortError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'))
+    !!error &&
+    typeof error === 'object' &&
+    (error as { name?: unknown }).name === 'AbortError' &&
+    !(typeof (error as { status?: unknown }).status === 'number')
   )
 }
 
