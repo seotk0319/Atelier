@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs'
+import { basename } from 'path'
 import sharp from 'sharp'
 import type { ExtraCharRef } from '../../shared/types'
 import type { CharacterReferenceOptions, VibeOptions } from '../nai/payload'
@@ -34,11 +35,12 @@ async function prepareVibesOnce(
     if (!encoded || row.encodedIe !== row.infoExtracted) {
       if (!maySpend())
         throw new Error('Anlas 소모 OFF: 새 바이브 인코딩은 유료이므로 중단했습니다.')
+      const image = readRefFile(row.filePath, '바이브', row.name).toString('base64')
       const res = await fetch(ENDPOINTS.encodeVibe, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token.trim()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: readFileSync(row.filePath).toString('base64'),
+          image,
           information_extracted: row.infoExtracted,
           model: 'nai-diffusion-4-5-full'
         })
@@ -60,9 +62,27 @@ async function prepareVibesOnce(
  * 캐릭레퍼 이미지 전처리 — OpenAPI 명세: 1024×1536 / 1536×1024 / 1472×1472
  * 캔버스에 검정 패딩으로 맞춰 전송. 종횡비에 따라 캔버스 선택.
  */
-async function processCharRefImage(filePath: string): Promise<string> {
-  const buf = readFileSync(filePath)
-  const meta = await sharp(buf).metadata()
+/**
+ * 레퍼 그림 파일을 읽는다. 파일이 지워졌거나 옮겨졌으면 어느 레퍼인지 알려 준다
+ * (그대로 두면 켜 둔 동안 모든 장이 ENOENT 원문으로 실패한다).
+ */
+function readRefFile(filePath: string, kind: string, name: string): Buffer {
+  try {
+    return readFileSync(filePath)
+  } catch {
+    throw new Error(
+      `${kind} 그림 파일을 찾지 못했어요: 「${name}」. 목록에서 끄거나 지운 뒤 다시 해 주세요.`
+    )
+  }
+}
+
+async function processCharRefImage(filePath: string, name: string): Promise<string> {
+  const buf = readRefFile(filePath, '레퍼런스', name)
+  const meta = await sharp(buf)
+    .metadata()
+    .catch(() => {
+      throw new Error(`레퍼런스 그림을 읽지 못했어요: 「${name}」. 그림 파일이 깨졌을 수 있어요.`)
+    })
   // 휴대폰 JPEG는 EXIF 회전값으로 세워 보인다 — 그 방향대로 세운 크기로 캔버스를 고르고 그림도 세워 보낸다
   const turned = (meta.orientation ?? 1) >= 5
   const w = (turned ? meta.height : meta.width) ?? 1
@@ -100,7 +120,7 @@ async function prepareCharRefsOnce(): Promise<CharacterReferenceOptions[]> {
       referenceType: row.refType as CharacterReferenceOptions['referenceType'],
       strength: row.strength,
       fidelity: row.fidelity,
-      imageBase64: await processCharRefImage(row.filePath)
+      imageBase64: await processCharRefImage(row.filePath, row.name)
     })
   }
   return result
@@ -116,7 +136,7 @@ export async function prepareExtraCharRefs(
       referenceType: ref.refType as CharacterReferenceOptions['referenceType'],
       strength: ref.strength,
       fidelity: ref.fidelity,
-      imageBase64: await processCharRefImage(ref.filePath)
+      imageBase64: await processCharRefImage(ref.filePath, basename(ref.filePath))
     })
   }
   return result

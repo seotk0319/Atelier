@@ -278,6 +278,7 @@ export function deleteRefFolder(kind: Kind, id: number): void {
 /** 생성 시 사용할 enabled 항목들의 원본 데이터 */
 export function enabledVibeRows(): {
   id: number
+  name: string
   filePath: string
   strength: number
   infoExtracted: number
@@ -287,11 +288,12 @@ export function enabledVibeRows(): {
   return (
     getDb()
       .prepare(
-        `SELECT id, file_path, strength, info_extracted, encoded, encoded_ie
+        `SELECT id, name, file_path, strength, info_extracted, encoded, encoded_ie
          FROM vibe_images WHERE enabled = 1 ORDER BY sort_order, id`
       )
       .all() as {
       id: number
+      name: string
       file_path: string
       strength: number
       info_extracted: number
@@ -300,6 +302,7 @@ export function enabledVibeRows(): {
     }[]
   ).map((r) => ({
     id: r.id,
+    name: r.name,
     filePath: r.file_path,
     strength: r.strength,
     infoExtracted: r.info_extracted,
@@ -315,6 +318,7 @@ export function saveVibeEncoding(id: number, encoded: string, ie: number): void 
 }
 
 export function enabledCharRefRows(): {
+  name: string
   filePath: string
   refType: string
   strength: number
@@ -322,11 +326,18 @@ export function enabledCharRefRows(): {
 }[] {
   const rows = getDb()
     .prepare(
-      `SELECT file_path, ref_type, strength, fidelity
+      `SELECT name, file_path, ref_type, strength, fidelity
        FROM charref_images WHERE enabled = 1 ORDER BY sort_order, id`
     )
-    .all() as { file_path: string; ref_type: string; strength: number; fidelity: number }[]
+    .all() as {
+    name: string
+    file_path: string
+    ref_type: string
+    strength: number
+    fidelity: number
+  }[]
   return rows.map((r) => ({
+    name: r.name,
     filePath: r.file_path,
     refType: r.ref_type,
     strength: r.strength,
