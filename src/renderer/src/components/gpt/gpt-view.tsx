@@ -117,8 +117,8 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
             <div className="mt-1.5 text-muted">
               GPT 이미지는 ChatGPT 계정으로 만들어요. 명령 창에서{' '}
               <code className="font-mono">npm i -g @openai/codex</code>로 Codex CLI를 깔고{' '}
-              <code className="font-mono">codex login</code>으로 로그인한 뒤, 오른쪽 위 연결 표시를
-              눌러 주세요.
+              <code className="font-mono">codex login</code>으로 ChatGPT 계정 로그인(API 키 로그인
+              말고)을 한 뒤, 오른쪽 위 연결 표시를 눌러 주세요.
             </div>
           </div>
         )}
