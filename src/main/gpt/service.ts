@@ -174,14 +174,27 @@ async function run(id: string, req: GptRequest): Promise<void> {
           String(now.getMonth() + 1).padStart(2, '0') +
           '-' +
           String(now.getDate()).padStart(2, '0')
-        const saved = await saveGeneratedImage({
-          png,
-          sentPayload: JSON.stringify({ ...sent, revised_prompt: revisedPrompt }),
-          seed: 0,
-          kind: 'gpt',
-          subDir: 'gpt/' + day,
-          format: 'png'
-        })
+        let saved: Awaited<ReturnType<typeof saveGeneratedImage>>
+        try {
+          saved = await saveGeneratedImage({
+            png,
+            sentPayload: JSON.stringify({ ...sent, revised_prompt: revisedPrompt }),
+            seed: 0,
+            kind: 'gpt',
+            subDir: 'gpt/' + day,
+            format: 'png'
+          })
+        } catch (saveError) {
+          // 그림은 이미 받았다 — 저장 실패를 재시도로 돌리면 ChatGPT에 같은 그림을 다시 요청(한도 소모)한다
+          const cur = job()
+          if (cur) {
+            cur.state = 'failed'
+            cur.error = '그림을 저장하지 못했어요: ' + friendly(saveError)
+            cur.finishedAt = Date.now()
+            changed()
+          }
+          return
+        }
         const done = job()
         if (done) {
           done.state = 'done'
