@@ -19,6 +19,7 @@ import {
   refPartsHint,
   refShortLabel,
   refStrengthMax,
+  clampRefStrength,
   REF_TYPE_CHOICES,
   showsFidelity,
   toggleRefPart
@@ -246,7 +247,12 @@ export function RefOverlay({ kind }: { kind: 'vibe' | 'charref' }): React.JSX.El
         <span className="shrink-0 font-mono text-[11px] text-faint">
           {kind === 'vibe'
             ? `s${(item as VibeItem).strength.toFixed(2)}`
-            : refShortLabel((item as CharRefItem).refType, model, (item as CharRefItem).strength)}
+            : refShortLabel(
+                (item as CharRefItem).refType,
+                model,
+                // 보내는 값으로 적는다 — V5에서 올린 강도는 V4.5에선 1로 간다
+                clampRefStrength((item as CharRefItem).strength, model)
+              )}
         </span>
       </div>
     )
