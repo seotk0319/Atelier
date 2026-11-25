@@ -84,6 +84,8 @@ interface AssistantState {
 
 let seq = 0
 const nextId = (): number => ++seq
+/** 「새 대화」마다 1씩 — 답을 기다리는 사이 새 대화를 열면 옛 답(대화 기록·실행 계획)을 새 대화에 넣지 않는다 */
+let conversation = 0
 
 const VIEW_LABELS: Record<string, string> = {
   main: '생성',
@@ -348,7 +350,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   },
   toggle: () => get().setOpen(!get().open),
   expand: () => set({ minimized: false, open: true }),
-  reset: () =>
+  reset: () => {
+    conversation++
     set({
       items: [],
       messages: [],
@@ -356,11 +359,13 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
       undo: {},
       minimized: false,
       focusTick: get().focusTick + 1
-    }),
+    })
+  },
 
   ask: async (raw) => {
     const text = raw.trim()
     if (!text || get().busy) return
+    const conv = conversation
     const pending = get().pending
     set({
       busy: true,
@@ -376,6 +381,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         context: context(),
         toolResults: pending ? pending.ids.map((id) => ({ id, content: pending.result })) : []
       })
+      if (conv !== conversation) return
       if (!reply.ok) {
         set({
           items: [
@@ -413,6 +419,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
         ]
       })
     } catch {
+      if (conv !== conversation) return
       set({
         items: [
           ...get().items,
