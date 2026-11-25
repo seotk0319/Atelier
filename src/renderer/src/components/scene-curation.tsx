@@ -152,8 +152,12 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const followNew = useRef<Map<number, number>>(new Map())
   function generateHere(): void {
     if (sceneId == null) return
-    followNew.current.set(sceneId, (followNew.current.get(sceneId) ?? 0) + 1)
-    void generateOne(sceneId)
+    const id = sceneId
+    followNew.current.set(id, (followNew.current.get(id) ?? 0) + 1)
+    // 대기열에 못 넣었으면 기다림을 되돌린다 — 남으면 나중에 다른 그림이 들어올 때 보던 위치가 맨 앞으로 튀었다
+    void generateOne(id).then((ok) => {
+      if (!ok) followNew.current.set(id, Math.max(0, (followNew.current.get(id) ?? 1) - 1))
+    })
   }
   const current = images[index] ?? null
   const currentRef = useRef(current)
