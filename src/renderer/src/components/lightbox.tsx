@@ -22,6 +22,9 @@ export function Lightbox({
   )
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      // 우클릭 메뉴·메타데이터 창 등 위에 뜬 것이 먼저 받은 키는 넘긴다 (Esc 한 번에 둘 다 닫히거나 뒤에서 그림이 넘어가지 않게)
+      if (e.defaultPrevented || index < 0 || index >= filePaths.length) return
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return
       if (e.key === 'Escape') onClose()
       else if (e.key === 'ArrowLeft') onIndex(Math.max(0, index - 1))
       else if (e.key === 'ArrowRight') onIndex(Math.min(filePaths.length - 1, index + 1))
