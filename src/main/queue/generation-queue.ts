@@ -232,6 +232,9 @@ export class GenerationQueue extends EventEmitter {
   /** 계정 추가/삭제 또는 가속 토글 뒤 UI와 대기열을 즉시 다시 계산한다. */
   refreshConfiguration(): void {
     if (this.isAnlasSpendingEnabled()) this.pausedAccounts.clear()
+    // 401·402·403으로 막은 계정은 토큰을 바꾸거나(같은 id로 저장된다) 계정을 고친 뒤 다시 써 본다.
+    // 지우지 않으면 앱을 다시 켜기 전까지 새 생성이 'busy'로 거절된다.
+    this.blockedAccounts.clear()
     this.emitChanged()
     this.pump()
   }
@@ -273,6 +276,9 @@ export class GenerationQueue extends EventEmitter {
   }
 
   private accountsForNewBatch(): GenerationAccount[] {
+    // 아무것도 돌지 않을 때 새로 누르면 막아 둔 계정을 한 번 더 써 본다 — 402(Anlas 부족) 뒤 충전했거나
+    // 403이 잠깐이었으면 앱을 다시 켜지 않아도 된다. 여전히 막혀 있으면 그 장이 진짜 이유로 실패한다.
+    if (this.activeAccounts.size === 0 && !this.nextPending()) this.blockedAccounts.clear()
     for (const [id, state] of this.pausedAccounts) {
       if (state.retryAt <= Date.now()) this.pausedAccounts.delete(id)
     }
@@ -365,15 +371,11 @@ export class GenerationQueue extends EventEmitter {
   private nextDispatchable(): { item: InternalQueueItem; account: GenerationAccount } | undefined {
     const accounts = this.getAccounts().filter((account) => account.id && account.token.trim())
     if (accounts.length === 0) return undefined
-    // 대기 중인 작업도 가속에서 뺀 계정은 새로 쓰지 않는다. 그 작업이 쓸 수 있는 계정이
-    // 전부 빠졌을 때만 원래 계정 그대로 둔다 (영원히 대기하지 않게).
-    const excluded = new Set(this.getAccelerationExcluded())
     // 바로 뽑기(priority)를 먼저, 그다음 예약 순서대로.
     const pending = [...this.items.values()].filter((item) => item.state === 'pending')
     const ordered = [...pending.filter((i) => i.priority), ...pending.filter((i) => !i.priority)]
     for (const item of ordered) {
-      const preferred = item.allowedAccountIds.filter((id) => !excluded.has(id))
-      const allowed = preferred.length ? preferred : item.allowedAccountIds
+      const allowed = this.effectiveAllowed(item)
       for (let offset = 0; offset < accounts.length; offset++) {
         const index = (this.roundRobinIndex + offset) % accounts.length
         const account = accounts[index]
@@ -406,6 +408,12 @@ export class GenerationQueue extends EventEmitter {
             reason: error.message,
             retryAt: Date.now() + error.retryAfterMs
           })
+        item.state = 'pending'
+        delete item.accountId
+        delete item.error
+      } else if (isAccountFatalError(error) && this.hasOtherUsableAccount(item, account.id)) {
+        // 401·402·403은 이 계정만의 문제 — 그 계정을 막고, 같이 쓸 수 있는 다른 계정이 있으면 그 장을 넘긴다
+        this.blockedAccounts.add(account.id)
         item.state = 'pending'
         delete item.accountId
         delete item.error
@@ -463,6 +471,28 @@ export class GenerationQueue extends EventEmitter {
     }
   }
 
+  /**
+   * 이 항목을 지금 맡길 수 있는 계정 id. 대기 중인 작업도 가속에서 뺀 계정은 새로 쓰지 않는다.
+   * 그 작업이 쓸 수 있는 계정이 전부 빠졌을 때만 원래 계정 그대로 둔다 (영원히 대기하지 않게).
+   * 넘기기·고아 판정도 같은 집합을 봐야 한다 — 다르면 뺀 계정을 기다리며 영원히 대기한다.
+   */
+  private effectiveAllowed(item: InternalQueueItem): string[] {
+    const excluded = new Set(this.getAccelerationExcluded())
+    const preferred = item.allowedAccountIds.filter((id) => !excluded.has(id))
+    return preferred.length ? preferred : item.allowedAccountIds
+  }
+
+  /** 이 항목이 쓸 수 있는 계정 가운데 막히지 않은 다른 계정이 있는지 */
+  private hasOtherUsableAccount(item: InternalQueueItem, failedId: string): boolean {
+    return this.getAccounts().some(
+      (account) =>
+        account.id !== failedId &&
+        account.token.trim() &&
+        this.effectiveAllowed(item).includes(account.id) &&
+        !this.blockedAccounts.has(account.id)
+    )
+  }
+
   /** includeQuick=false면 예약 묶음 항목만 본다 (바로 뽑기 제외). */
   private nextPending(includeQuick = true): InternalQueueItem | undefined {
     for (const item of this.items.values()) {
@@ -483,7 +513,7 @@ export class GenerationQueue extends EventEmitter {
     let changed = false
     for (const item of this.items.values()) {
       if (item.state !== 'pending') continue
-      if (item.allowedAccountIds.some((id) => usableIds.has(id))) continue
+      if (this.effectiveAllowed(item).some((id) => usableIds.has(id))) continue
       item.error = '사용 가능한 NAI 계정이 없어 생성이 중단됐습니다'
       this.markTerminal(item, 'failed')
       this.releaseHeavyFields(item)
@@ -579,14 +609,23 @@ function abortError(): Error {
   return error
 }
 
+/**
+ * 취소로 끝난 오류인지. 이름으로만 본다 — 메시지에 "abort"가 들어간 서버 오류
+ * ("생성 실패 502: upstream ... aborted")를 취소로 보면 재시도도 안 하고 예약까지 돌려준다.
+ * 실제 취소는 부르는 쪽이 signal.aborted로도 함께 확인한다.
+ */
 function isAbortError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'))
+    !!error &&
+    typeof error === 'object' &&
+    (error as { name?: unknown }).name === 'AbortError' &&
+    !(typeof (error as { status?: unknown }).status === 'number')
   )
 }
 
 function isRetryableError(error: unknown): boolean {
+  // 연결 단계에서 끊긴 오류(서버에 닿지 않음 — nai/errors.ts)는 다시 보내도 두 번 과금되지 않는다
+  if ((error as { retryable?: unknown })?.retryable === true) return true
   const status = (error as { status?: number })?.status
   return typeof status === 'number' && RETRYABLE_STATUS.has(status)
 }

@@ -70,7 +70,8 @@ describe('char sections', () => {
       }),
       1
     )
-    expect(out.promptParts).toEqual({ base: 'base tags', additional: 'extra', detail: '' })
+    // 상한(1명)을 넘는 char7 글은 버리지 않고 마지막 칸(디테일)으로 보낸다
+    expect(out.promptParts).toEqual({ base: 'base tags', additional: 'extra', detail: 'nope' })
     expect(out.characterPrompts).toEqual([
       { prompt: 'from fixed, from detail', negativePrompt: '', enabled: true }
     ])

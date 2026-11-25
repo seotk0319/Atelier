@@ -67,10 +67,12 @@ async function prepareRefs(refs: GptRef[]): Promise<GptRef[]> {
         return { ...r, b64: clean.toString('base64') }
       }
       if (!big && okMime) {
-        const out = await sharp(buf).jpeg({ quality: 95 }).toBuffer()
+        // 다시 인코딩하면 EXIF 회전값이 빠진다 — 먼저 세워 둔다 (휴대폰 사진이 옆으로 누워 가지 않게)
+        const out = await sharp(buf).rotate().jpeg({ quality: 95 }).toBuffer()
         return { ...r, b64: out.toString('base64') }
       }
       const out = await sharp(buf)
+        .rotate()
         .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer()
@@ -185,14 +187,27 @@ async function run(id: string, req: GptRequest): Promise<void> {
           String(now.getMonth() + 1).padStart(2, '0') +
           '-' +
           String(now.getDate()).padStart(2, '0')
-        const saved = await saveGeneratedImage({
-          png,
-          sentPayload: JSON.stringify({ ...sent, revised_prompt: revisedPrompt }),
-          seed: 0,
-          kind: 'gpt',
-          subDir: 'gpt/' + day,
-          format: 'png'
-        })
+        let saved: Awaited<ReturnType<typeof saveGeneratedImage>>
+        try {
+          saved = await saveGeneratedImage({
+            png,
+            sentPayload: JSON.stringify({ ...sent, revised_prompt: revisedPrompt }),
+            seed: 0,
+            kind: 'gpt',
+            subDir: 'gpt/' + day,
+            format: 'png'
+          })
+        } catch (saveError) {
+          // 그림은 이미 받았다 — 저장 실패를 재시도로 돌리면 ChatGPT에 같은 그림을 다시 요청(한도 소모)한다
+          const cur = job()
+          if (cur) {
+            cur.state = 'failed'
+            cur.error = '그림을 저장하지 못했어요: ' + friendly(saveError)
+            cur.finishedAt = Date.now()
+            changed()
+          }
+          return
+        }
         const done = job()
         if (done) {
           done.state = 'done'

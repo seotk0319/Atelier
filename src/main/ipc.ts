@@ -542,8 +542,10 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     renamePreset(id, name)
   })
   handle('scenePresets:delete', ({ id }) => {
-    // 지워지는 씬으로 가던 생성(대기·진행 중)을 멈춘다 — 돌게 두면 Anlas를 쓰고, 지워진 씬 번호를
-    // 새 씬이 다시 받으면 그 씬에 엉뚱한 그림이 붙는다 (upstream NAIS3 e7d0483). 예약 출처도 같이 잊는다.
+    // 마지막 프리셋은 지우지 않는다(deletePreset이 그냥 돌아간다) — 그때는 큐도 건드리지 않는다
+    if (listPresets().length <= 1) return
+    // 씬 하나 지울 때처럼 그 프리셋 씬의 대기·생성 중 항목을 취소한다 (주인 없는 그림에 Anlas를 쓰지 않게).
+    // cancelScenes는 예약 출처도 잊는다 — 지워진 씬 번호를 다른 씬이 다시 받아도 예약이 붙지 않는다.
     ctx.queue.cancelScenes(
       getDb().prepare('SELECT id FROM gen_scenes WHERE preset_id = ?').pluck().all(id) as number[]
     )
@@ -615,7 +617,12 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     startUpdateDownload()
   })
   handle('update:check', () => checkForUpdate())
-  handle('update:install', () => installUpdateNow(() => ctx.queue.status()))
+  handle('update:install', () => {
+    // GPT 이미지도 생성 중이면 설치(앱 종료)를 미룬다 — 끄면 그 작업이 말없이 사라진다
+    if (gpt.listJobs().some((j) => j.state === 'running' || j.state === 'retrying'))
+      return { ok: false, busy: true }
+    return installUpdateNow(() => ctx.queue.status())
+  })
 
   handle('backup:export', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -787,7 +794,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('frags:delete', ({ id }) => {
     deleteFragment(id)
   })
-  handle('frags:importTxt', async () => ({ count: await importTxtFragments() }))
+  handle('frags:importTxt', () => importTxtFragments())
   handle('frags:exportTxt', async ({ id }) => ({ saved: await exportTxtFragment(id) }))
   handle('frags:exportAll', async () => ({ count: await exportAllFragmentsZip() }))
   handle('frags:resetSequential', () => {

@@ -132,7 +132,8 @@ app.whenReady().then(async () => {
   protocol.handle('nais-image', async (request) => {
     try {
       const url = new URL(request.url)
-      const filePath = decodeURIComponent(url.searchParams.get('path') ?? '')
+      // searchParams.get이 이미 한 번 풀어 준다 — 한 번 더 풀면 폴더 이름의 %가 깨진다 ("100% 완성")
+      const filePath = url.searchParams.get('path') ?? ''
       if (filePath && url.searchParams.get('thumbnail') === '1') {
         const row = getDb()
           .prepare(
@@ -173,14 +174,19 @@ app.whenReady().then(async () => {
   const queue = new GenerationQueue(
     async (queuedRequest, id, signal, account) => {
       // V5 Medium은 레퍼런스를 못 쓴다 — 레퍼런스가 켜져 있으면 High로 보낸다 (NAI 웹과 같음).
-      // 실제로 보내는 수만 센다 — V4.5는 의상(V5 전용) 레퍼런스를 빼고 보낸다 (무료 확인이 헛막히지 않게).
-      const crefCount = sentRefCount(
-        [
-          ...enabledCharRefRows().map((r) => r.refType as CharRefType),
-          ...(queuedRequest.extraCharRefs ?? []).map((r) => r.refType)
-        ],
-        queuedRequest.model
-      )
+      // 실제로 보내는 수로 센다 — V4.5는 의상 레퍼런스를 빼고 보낸다 (무료 확인이 빠지는 레퍼로 거절하지 않게).
+      // V5 인페인트는 레퍼를 빼고 보내니 0으로 센다 — 절약 인페인트(…-medium-inpainting, 2026-11-25 실측으로
+      // 있음 확인)를 쓸데없이 일반으로 올려 보내지 않게.
+      const crefCount =
+        queuedRequest.source?.maskBase64 && isV5Model(queuedRequest.model)
+          ? 0
+          : sentRefCount(
+              [
+                ...enabledCharRefRows().map((r) => r.refType as CharRefType),
+                ...(queuedRequest.extraCharRefs ?? []).map((r) => r.refType)
+              ],
+              queuedRequest.model
+            )
       // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
       const rawRequest = withFixedSettings({
         ...queuedRequest,

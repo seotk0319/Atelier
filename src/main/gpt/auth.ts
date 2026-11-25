@@ -111,9 +111,22 @@ async function refresh(path: string, data: AuthFile): Promise<GptCredentials> {
     refresh_token: body.refresh_token ?? rt
   }
   const next: AuthFile = { ...latest, tokens, last_refresh: new Date().toISOString() }
+  // 서버는 이미 갱신 토큰을 바꿨다 — 새 토큰을 파일에 못 남기면 다음 갱신이 옛 토큰으로 실패하고
+  // Codex 로그인까지 풀린다. Windows에서 다른 프로그램이 파일을 열고 있어 rename이 막히면 직접 덮어쓴다.
+  const text = JSON.stringify(next, null, 2)
   const tmp = path + '.nais3-tmp'
-  await fs.writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fs.rename(tmp, path)
+  try {
+    await fs.writeFile(tmp, text, { encoding: 'utf8', mode: 0o600 })
+    await fs.rename(tmp, path)
+  } catch {
+    await fs.rm(tmp, { force: true }).catch(() => undefined)
+    try {
+      await fs.writeFile(path, text, { encoding: 'utf8', mode: 0o600 })
+    } catch (e) {
+      // 파일에는 못 남겨도 이번 실행에서는 새 토큰으로 계속 쓴다 (옛 토큰은 이미 무효)
+      console.error('ChatGPT 로그인 파일을 고쳐 쓰지 못했어요:', e)
+    }
+  }
   return toCredentials(next)
 }
 

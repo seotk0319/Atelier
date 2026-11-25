@@ -192,6 +192,7 @@ export async function pickCharacterThumbnail(id: number): Promise<string | null>
   if (result.canceled || result.filePaths.length === 0) return null
 
   const thumbnail = await sharp(readFileSync(result.filePaths[0]))
+    .rotate()
     .resize(192, 192, { fit: 'cover' })
     .webp({ quality: 82 })
     .toBuffer()

@@ -52,8 +52,20 @@ export function removeCommentsKeepSections(text: string): string {
     .join('\n')
 }
 
+/** 앞뒤 끝의 주석(#) 줄을 뗀다 — 주석 줄 끝에 ", 다음 글"을 붙이면 주석 제거가 그 글까지 지운다 */
+function trimCommentEdges(text: string): string {
+  const lines = text.split('\n')
+  const isComment = (line: string): boolean => line.trimStart().startsWith('#')
+  while (lines.length && (isComment(lines[lines.length - 1]) || !lines[lines.length - 1].trim()))
+    lines.pop()
+  while (lines.length && (isComment(lines[0]) || !lines[0].trim())) lines.shift()
+  return lines.join('\n')
+}
+
 const tidyJoin = (a: string, b: string): string =>
-  [a.trim().replace(/,\s*$/, ''), b.trim().replace(/^,\s*/, '')].filter(Boolean).join(', ')
+  [trimCommentEdges(a).trim().replace(/,\s*$/, ''), trimCommentEdges(b).trim().replace(/^,\s*/, '')]
+    .filter(Boolean)
+    .join(', ')
 
 /**
  * 프롬프트 두 개를 이어 붙인다 (기본 + 씬 등). 구간 표시는 남기고,
@@ -141,10 +153,17 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
   const numbers = [...new Set([...charPos.keys(), ...charNeg.keys(), ...centers.keys()])].sort(
     (a, b) => a - b
   )
+  // 모델이 받을 수 있는 캐릭터 수(V4.5 6, V5 32)를 넘는 구간은 말없이 버리지 않고 기본 프롬프트로 보낸다
+  let overflowPos = ''
+  let overflowNeg = ''
   for (const n of numbers) {
     let index = enabled[n - 1]
     if (index === undefined) {
-      if (enabled.length >= maxCharacters) continue
+      if (enabled.length >= maxCharacters) {
+        overflowPos = tidyJoin(overflowPos, charPos.get(n) ?? '')
+        overflowNeg = tidyJoin(overflowNeg, charNeg.get(n) ?? '')
+        continue
+      }
       characters.push({ prompt: '', negativePrompt: '', enabled: true })
       index = characters.length - 1
       enabled.push(index)
@@ -156,6 +175,9 @@ export function applyCharSections<T extends SectionTarget>(req: T, maxCharacters
     if (center) c.center = center
   }
 
+  const last = splits[splits.length - 1]
+  if (overflowPos) last.base = tidyJoin(last.base, overflowPos)
+  if (overflowNeg) negative.base = tidyJoin(negative.base, overflowNeg)
   const promptParts = req.promptParts
     ? { base: splits[0].base, additional: splits[1].base, detail: splits[2].base }
     : undefined

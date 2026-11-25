@@ -629,7 +629,8 @@ export interface IpcInvokeMap {
   }
   'frags:delete': { req: { id: number }; res: void }
   'frags:duplicate': { req: { id: number }; res: { id: number | null } }
-  'frags:importTxt': { req: void; res: { count: number } }
+  /** error: 못 읽은 파일과 이유 (그때는 아무것도 넣지 않는다) */
+  'frags:importTxt': { req: void; res: { count: number; error?: string } }
   'frags:exportTxt': { req: { id: number }; res: { saved: boolean } }
   /** 조각 전체를 ZIP으로 내보내기 (공유/백업) */
   'frags:exportAll': { req: void; res: { count: number } }
@@ -860,7 +861,8 @@ export interface IpcInvokeMap {
   'scenes:exportJson': { req: { presetId: number }; res: { saved: boolean } }
   'scenes:importJson': {
     req: { presetId: number }
-    res: { count: number; presetId: number; presetName: string | null }
+    /** error: 파일이 깨졌거나 씬 파일이 아닐 때 이유 (그때는 아무것도 넣지 않는다) */
+    res: { count: number; presetId: number; presetName: string | null; error?: string }
   }
   /** 활성 프리셋의 씬들을 ZIP으로 — 씬별 즐겨찾기 전부, 없으면 최상단 1장 (파일 다이얼로그) */
   'scenes:exportZip': { req: { presetId: number }; res: { count: number } }
