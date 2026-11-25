@@ -69,21 +69,51 @@ export function exportAll(): Record<string, unknown> {
   }
 }
 
-/** 가져오기 — replace: 기존 라이브러리를 지우고 교체(복원). false면 미구현(현재 replace만). */
-export function importAll(data: Record<string, unknown>): { imported: number } {
+/**
+ * 가져오기 — 백업에 든 표만 지우고 백업 내용으로 바꾼다(복원). 백업에 없는 표(예전 백업에는 없던 씬 프리셋
+ * 폴더 등)는 그대로 둔다.
+ *
+ * 히스토리(images)는 백업하지 않지만 images.scene_id는 gen_scenes를 ON DELETE SET NULL로 가리킨다 —
+ * 씬 표를 비우면 씬 그림 연결이 모두 풀린다. 번호와 만든 시각이 같은 씬(같은 씬)은 다시 잇는다
+ * (upstream NAIS3 60b39db·d47ac3d). replacedSceneIds: 복원으로 사라지거나 다른 씬이 된 씬 번호 —
+ * 그 씬으로 가던 생성은 호출한 쪽이 취소한다.
+ */
+export function importAll(data: Record<string, unknown>): {
+  imported: number
+  replacedSceneIds: number[]
+} {
   const tables = (data.tables ?? {}) as Record<string, Row[]>
+  const present = TABLES.filter((t) => Array.isArray(tables[t]))
   const db = getDb()
   const libDir = join(imagesRoot(), '_imported')
   mkdirSync(libDir, { recursive: true })
 
   let imported = 0
+  let replacedSceneIds: number[] = []
   const tx = db.transaction(() => {
-    // 자식→부모 순서 무관하게, 전체 교체: 먼저 모두 비우고(역순) 다시 삽입
-    for (const t of [...TABLES].reverse()) db.prepare(`DELETE FROM ${t}`).run()
+    const replacingScenes = present.includes('gen_scenes')
+    const sceneStamps = (): Map<number, string> =>
+      new Map(
+        (
+          db.prepare('SELECT id, created_at FROM gen_scenes').all() as {
+            id: number
+            created_at: string
+          }[]
+        ).map((r) => [r.id, r.created_at])
+      )
+    const before = replacingScenes ? sceneStamps() : new Map<number, string>()
+    const links = replacingScenes
+      ? (db.prepare('SELECT id, scene_id FROM images WHERE scene_id IS NOT NULL').all() as {
+          id: number
+          scene_id: number
+        }[])
+      : []
 
-    for (const t of TABLES) {
+    // 자식→부모 순서 무관하게, 백업에 든 표만 교체: 먼저 비우고(역순) 다시 삽입
+    for (const t of [...present].reverse()) db.prepare(`DELETE FROM ${t}`).run()
+
+    for (const t of present) {
       const rows = tables[t]
-      if (!Array.isArray(rows)) continue
       for (const raw of rows) {
         const row: Row = {}
         for (const [k, v] of Object.entries(raw)) {
@@ -105,8 +135,18 @@ export function importAll(data: Record<string, unknown>): { imported: number } {
         imported++
       }
     }
+
+    if (replacingScenes) {
+      const after = sceneStamps()
+      const kept = new Set(
+        [...before].filter(([id, createdAt]) => after.get(id) === createdAt).map(([id]) => id)
+      )
+      const relink = db.prepare('UPDATE images SET scene_id = ? WHERE id = ?')
+      for (const link of links) if (kept.has(link.scene_id)) relink.run(link.scene_id, link.id)
+      replacedSceneIds = [...before.keys()].filter((id) => !kept.has(id))
+    }
     if (typeof data.mainParams === 'string') setSetting('main_params', data.mainParams)
   })
   tx()
-  return { imported }
+  return { imported, replacedSceneIds }
 }

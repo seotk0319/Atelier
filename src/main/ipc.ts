@@ -654,7 +654,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
       if (isNais3) {
         // 씬 표가 통째로 바뀐다 — 큐의 예약 출처가 엉뚱한 씬을 가리키지 않게 먼저 잊는다
         ctx.queue.forgetReservations()
-        const { imported } = importAll(data)
+        const { imported, replacedSceneIds } = importAll(data)
+        // 복원으로 사라지거나 다른 씬이 된 번호로 가던 생성은 멈춘다 — 엉뚱한 씬에 저장되지 않게
+        ctx.queue.cancelScenes(replacedSceneIds)
         return { summary: `NAIS3 백업 복원 완료 (${imported}개 항목)`, needsPromptReload: true }
       }
       const r = importNais2(data)
