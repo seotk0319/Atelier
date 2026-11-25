@@ -311,8 +311,12 @@ function GenerationSection(): React.JSX.Element {
   const [alertNative, setAlertNative] = useState(false)
   const promptSplitEnabled = useGenerationStore((s) => s.promptSplitEnabled)
   const setPromptSplitEnabled = useGenerationStore((s) => s.setPromptSplitEnabled)
+  const [generalWeight, setGeneralWeight] = useState(DEFAULT_GENERAL_WEIGHT)
 
   useEffect(() => {
+    void window.nais.invoke('settings:get', { key: GENERAL_WEIGHT_KEY }).then(({ value }) => {
+      setGeneralWeight(parseGeneralWeight(value))
+    })
     void window.nais.invoke('settings:get', { key: 'gen_streaming' }).then(({ value }) => {
       setStreaming(value !== '0')
     })
@@ -340,6 +344,38 @@ function GenerationSection(): React.JSX.Element {
       </Row>
       <Row label="프롬프트 3분할" hint="고정 / 가변 / 디테일 칸으로 나누기">
         <Switch checked={promptSplitEnabled} onCheckedChange={setPromptSplitEnabled} />
+      </Row>
+      <Row
+        label={`일반 태그 약화 — ${generalWeight.toFixed(2)}`}
+        hint="토글을 켜면 고정 칸 아래를 이 값으로 감싸요 (기본 0.75)"
+      >
+        <div className="flex items-center gap-2">
+          <Slider
+            className="w-36"
+            min={GENERAL_WEIGHT_MIN}
+            max={GENERAL_WEIGHT_MAX}
+            step={0.01}
+            value={[generalWeight]}
+            onValueChange={([v]) => setGeneralWeight(v)}
+            onValueCommit={([v]) =>
+              void window.nais.invoke('settings:set', { key: GENERAL_WEIGHT_KEY, value: String(v) })
+            }
+          />
+          <button
+            type="button"
+            className="rounded-md px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+            disabled={Math.abs(generalWeight - DEFAULT_GENERAL_WEIGHT) < 0.001}
+            onClick={() => {
+              setGeneralWeight(DEFAULT_GENERAL_WEIGHT)
+              void window.nais.invoke('settings:set', {
+                key: GENERAL_WEIGHT_KEY,
+                value: String(DEFAULT_GENERAL_WEIGHT)
+              })
+            }}
+          >
+            기본값
+          </button>
+        </div>
       </Row>
       <Row label={`생성 지연 — ${(delay / 1000).toFixed(1)}초`} hint="연속 생성 간격">
         <Slider
@@ -661,6 +697,66 @@ function formatUsageDuration(seconds: number): string {
   return minutes > 0 ? `${minutes}분 ${seconds % 60}초` : `${seconds}초`
 }
 
+/** 계정 메모 — 칸을 벗어나거나 Enter를 누르면 저장한다. Esc는 되돌린다. */
+function AccountMemo({
+  account,
+  onSaved,
+  onError
+}: {
+  account: NaiAccountInfo
+  onSaved: (memo: string) => void
+  onError: (error: string) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState(account.memo)
+  const [saved, setSaved] = useState(false)
+
+  async function save(): Promise<void> {
+    const memo = draft.trim()
+    if (memo === account.memo) {
+      setDraft(memo)
+      return
+    }
+    const result = await window.nais
+      .invoke('nai:setAccountMemo', { id: account.id, memo })
+      .catch(() => ({ ok: false, error: '메모를 저장하지 못했어요' }))
+    if (!result.ok) {
+      setDraft(account.memo)
+      onError(result.error ?? '메모를 저장하지 못했어요')
+      return
+    }
+    onSaved(memo)
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 1500)
+  }
+
+  return (
+    <div className="relative mb-1.5">
+      <Input
+        className="h-8 pr-14 text-[12px]"
+        value={draft}
+        maxLength={200}
+        placeholder="메모"
+        aria-label={`${account.name} 메모`}
+        spellCheck={false}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') {
+            e.stopPropagation()
+            setDraft(account.memo)
+          }
+        }}
+      />
+      {saved && (
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-accent">
+          저장됨
+        </span>
+      )}
+    </div>
+  )
+}
+
 function AccountSection(): React.JSX.Element {
   const [accounts, setAccounts] = useState<NaiAccountInfo[]>([])
   const [accountUsage, setAccountUsage] = useState<NaiAccountUsage[]>([])
@@ -866,6 +962,17 @@ function AccountSection(): React.JSX.Element {
                   </label>
                 )}
               </div>
+              <AccountMemo
+                key={account.id}
+                account={account}
+                onSaved={(memo) =>
+                  setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, memo } : a)))
+                }
+                onError={(error) => {
+                  setStatus('fail')
+                  setMessage(error)
+                }}
+              />
               <div className="flex gap-1.5">
                 <Input
                   className="cursor-default font-mono"
@@ -1200,3 +1307,10 @@ export function SettingsDialog({
   )
 }
 import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
+import {
+  DEFAULT_GENERAL_WEIGHT,
+  GENERAL_WEIGHT_KEY,
+  GENERAL_WEIGHT_MAX,
+  GENERAL_WEIGHT_MIN,
+  parseGeneralWeight
+} from '@shared/general-weight'

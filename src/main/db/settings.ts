@@ -170,13 +170,44 @@ export function getNaiAccounts(): NaiAccountSecret[] {
 
 export function getNaiAccountInfos(): NaiAccountInfo[] {
   const excluded = new Set(getAccelerationExcluded())
+  const memos = getAccountMemos()
   return getNaiAccounts().map((account, index) => ({
     id: account.id,
     name: `계정 ${index + 1}`,
     prefix: account.token.slice(0, 4),
     length: account.token.length,
-    accelerated: !excluded.has(account.id)
+    accelerated: !excluded.has(account.id),
+    memo: memos[account.id] ?? ''
   }))
+}
+
+// 계정별 메모. 비밀값이 아니라서 토큰 묶음과 따로 평문으로 둔다 (계정 id → 메모).
+const MEMOS_KEY = 'nai_account_memos'
+export const ACCOUNT_MEMO_MAX = 200
+function getAccountMemos(): Record<string, string> {
+  try {
+    const value = JSON.parse(getSetting(MEMOS_KEY) || '{}') as unknown
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    return Object.fromEntries(
+      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    )
+  } catch {
+    return {}
+  }
+}
+function writeAccountMemos(memos: Record<string, string>): void {
+  setSetting(MEMOS_KEY, JSON.stringify(memos))
+}
+/** 계정 메모를 저장한다. 비우면 지운다. */
+export function setNaiAccountMemo(id: string, memo: string): { ok: boolean; error?: string } {
+  if (!getNaiAccounts().some((account) => account.id === id))
+    return { ok: false, error: '계정을 찾지 못했어요' }
+  const text = memo.trim().slice(0, ACCOUNT_MEMO_MAX)
+  const memos = getAccountMemos()
+  if (text) memos[id] = text
+  else delete memos[id]
+  writeAccountMemos(memos)
+  return { ok: true }
 }
 
 // 가속 모드에서 쓰지 않을 계정 id. 비어 있으면(기본) 모든 계정을 쓴다.
@@ -225,5 +256,10 @@ export function deleteNaiAccount(id: string): boolean {
   const next = accounts.filter((account) => account.id !== id)
   if (next.length === accounts.length) return false
   writeAccounts(next)
+  const memos = getAccountMemos()
+  if (id in memos) {
+    delete memos[id]
+    writeAccountMemos(memos)
+  }
   return true
 }

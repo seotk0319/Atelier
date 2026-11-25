@@ -81,6 +81,7 @@ import {
   getSetting,
   setNaiToken,
   setAccountAccelerated,
+  setNaiAccountMemo,
   setSetting
 } from './db/settings'
 import { anlasUsage, logBalance } from './nai/anlas-log'
@@ -363,6 +364,9 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     return result
   })
   handle('nai:revealAccount', ({ id }) => ({ token: getNaiAccountToken(id) }))
+  handle('nai:setAccountMemo', ({ id, memo }) =>
+    setNaiAccountMemo(String(id || ''), typeof memo === 'string' ? memo : '')
+  )
   handle('nai:deleteAccount', ({ id }) => {
     if (PROFILE !== 1) return { deleted: false, error: 'Custom 1에서만 변경할 수 있습니다' }
     if (ctx.queue.isAccountBusy(id)) {

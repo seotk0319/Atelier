@@ -185,6 +185,8 @@ export interface NaiAccountInfo {
   length: number
   /** 가속 모드에서 이 계정을 쓰는지 */
   accelerated: boolean
+  /** 아빠가 적어 둔 메모 (없으면 빈 문자열) */
+  memo: string
 }
 
 /** V5 무료 생성 사용량. 서버는 정확한 장수 대신 정수 비율과 1%당 충전 시간을 제공한다. */
@@ -529,6 +531,7 @@ export interface IpcInvokeMap {
     res: { valid: boolean; subscription?: SubscriptionInfo; error?: string }
   }
   'nai:revealAccount': { req: { id: string }; res: { token: string | null } }
+  'nai:setAccountMemo': { req: { id: string; memo: string }; res: { ok: boolean; error?: string } }
   'nai:deleteAccount': {
     req: { id: string }
     res: { deleted: boolean; error?: string }
