@@ -247,7 +247,7 @@ function addressedTools(title: string): typeof TOOLS {
 const TERMINAL = new Set(['propose_changes', 'write_prompt'])
 
 const SYSTEM = [
-  '너는 NAIS3 Custom 안에 들어 있는 AI 비서다. NAIS3 Custom은 NovelAI·GPT 이미지를 만드는 데스크톱 앱이고, 사용자는 캐릭터챗 크리에이터다.',
+  '너는 Atelier 안에 들어 있는 AI 비서다. Atelier는 NovelAI·GPT 이미지를 만드는 데스크톱 앱이고, 사용자는 캐릭터챗 크리에이터다.',
   '{call}짧고 부드러운 한국어 해요체로 답한다. 결과를 먼저 말하고 설명은 한두 문장으로 끝낸다.',
   '',
   '할 수 있는 일',

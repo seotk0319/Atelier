@@ -359,7 +359,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
   handle('nai:accounts', () => ({ accounts: getNaiAccountInfos() }))
   handle('nai:addAccount', async ({ token }) => {
-    if (PROFILE !== 1) return { valid: false, error: '가속 계정은 Custom 1에서만 지원합니다' }
+    if (PROFILE !== 1) return { valid: false, error: '가속 계정은 기본 프로필에서만 쓸 수 있어요' }
     const result = await verifyToken(token)
     if (!result.valid) return result
     const saved = addNaiAccount(token)
@@ -372,7 +372,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     setNaiAccountMemo(String(id || ''), typeof memo === 'string' ? memo : '')
   )
   handle('nai:deleteAccount', ({ id }) => {
-    if (PROFILE !== 1) return { deleted: false, error: 'Custom 1에서만 변경할 수 있습니다' }
+    if (PROFILE !== 1) return { deleted: false, error: '기본 프로필에서만 바꿀 수 있어요' }
     if (ctx.queue.isAccountBusy(id)) {
       return { deleted: false, error: '이 계정이 생성 중이라 끝난 뒤 삭제할 수 있습니다' }
     }
@@ -470,7 +470,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     return ctx.queue.status()
   })
   handle('acceleration:setAccount', ({ id, enabled }) => {
-    if (PROFILE !== 1) return { ok: false, error: '가속 모드는 Custom 1에서만 쓸 수 있어요' }
+    if (PROFILE !== 1) return { ok: false, error: '가속 모드는 기본 프로필에서만 쓸 수 있어요' }
     const result = setAccountAccelerated(String(id || ''), enabled === true)
     if (result.ok) ctx.queue.refreshConfiguration()
     return result

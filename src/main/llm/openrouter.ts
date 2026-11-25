@@ -71,8 +71,8 @@ async function call(
       body: init.body,
       headers: {
         Authorization: 'Bearer ' + key.trim(),
-        'HTTP-Referer': 'https://github.com/seotk0319/NAIS3-Custom',
-        'X-Title': 'NAIS3 Custom',
+        'HTTP-Referer': 'https://github.com/seotk0319/Atelier',
+        'X-Title': 'Atelier',
         ...(init.body ? { 'Content-Type': 'application/json' } : {})
       },
       signal: AbortSignal.timeout(init.timeoutMs)

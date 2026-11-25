@@ -23,7 +23,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NaiAccountInfo, NaiAccountUsage } from '@shared/types'
 import discordSvg from '../assets/discord.svg'
-import nais3Logo from '../assets/nais3-logo.svg'
 import { playChime } from '../lib/completion-alert'
 import { cn } from '../lib/utils'
 import { THEME_PRESETS } from '../lib/theme-presets'
@@ -1092,7 +1091,7 @@ function AccountSection(): React.JSX.Element {
 
       <div className="flex items-center gap-1.5 text-[11px] text-faint">
         <Coins size={11} className="text-[#c9a34f]" /> 오늘 장수는 PC 시각 00:00부터 성공 저장된
-        이미지만 세요. 이번 업데이트 적용 이후 Custom 1 생성분이며, 삭제해도 장수는 유지돼요.
+        이미지만 세요. 삭제해도 장수는 유지돼요.
       </div>
     </div>
   )
@@ -1109,7 +1108,7 @@ function AboutSection(): React.JSX.Element {
   const checkUpdate = useUpdateStore((s) => s.check)
   const startUpdate = useUpdateStore((s) => s.start)
   const installUpdate = useUpdateStore((s) => s.install)
-  const releasePage = 'https://github.com/seotk0319/NAIS3-Custom/releases/latest'
+  const releasePage = 'https://github.com/seotk0319/Atelier/releases/latest'
 
   useEffect(() => {
     void window.nais.invoke('app:version', undefined).then((r) => setVersion(r.version))
@@ -1118,8 +1117,11 @@ function AboutSection(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1.5 text-[13px] text-muted">
       {/* 로고(흰색)라 라이트 모드에선 invert로 어둡게 */}
-      <img src={nais3Logo} className="h-9 w-auto self-start dark:invert-0 invert" alt="NAIS3" />
-      <p className="mt-1">NovelAI Image Studio 3</p>
+      <p className="flex items-center gap-2 text-[18px] font-extrabold tracking-tight text-ink">
+        <i aria-hidden className="block size-3.5 rotate-45 rounded-[2px] bg-mark" />
+        Atelier
+      </p>
+      <p className="mt-1">NovelAI·GPT 이미지 제작 앱. 원본 NAIS3(sunanakgo)에서 갈라져 나왔어요.</p>
       <p className="font-mono text-[12px] text-faint">버전 {version || '…'}</p>
 
       {/* 업데이트: 이 저장소 GitHub 릴리스 기준 */}
@@ -1168,7 +1170,8 @@ function AboutSection(): React.JSX.Element {
         {updateStatus === 'error' && `업데이트를 확인하지 못했어요. ${updateMessage ?? ''}`}
       </p>
 
-      <div className="mt-3 flex gap-2">
+      <p className="mt-3 text-[12px] text-faint">원본 NAIS3 만든 분</p>
+      <div className="mt-1 flex gap-2">
         <button
           onClick={() => window.open('https://discord.gg/bFxP5Qvaz', '_blank')}
           className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2/60 px-3 py-2 text-[13px] font-medium text-ink transition-colors hover:bg-surface-2"
