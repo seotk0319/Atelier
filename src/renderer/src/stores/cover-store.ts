@@ -232,9 +232,29 @@ export const useCoverStore = create<CoverState>((set, get) => {
    */
   const landedElsewhere = (p: CoverProject): boolean => {
     if (get().project === p) return false
+    // 그사이 지운 작품은 되살리지 않는다. 같은 작품을 다시 열었으면(새 사본) 옛 사본으로 덮지 않는다
+    if (!get().projects.some((it) => it.id === p.id) || get().project?.id === p.id) {
+      toast('가져오는 동안 작품이 바뀌어서 그림을 넣지 않았어요. 다시 넣어 주세요', 'info')
+      return true
+    }
     void window.nais.invoke('cover:save', { project: p }).then((res) => {
-      if ('error' in res) toast('표지를 저장하지 못했어요: ' + res.error, 'error')
-      else toast('가져온 그림은 「' + p.name + '」에 넣었어요', 'info')
+      if ('error' in res) {
+        toast('표지를 저장하지 못했어요: ' + res.error, 'error')
+        return
+      }
+      toast('가져온 그림은 「' + p.name + '」에 넣었어요', 'info')
+      set((s) => ({
+        projects: s.projects.map((it) =>
+          it.id === p.id
+            ? {
+                ...it,
+                updatedAt: res.updatedAt,
+                backgrounds: p.backgrounds.length,
+                typos: p.typos.length
+              }
+            : it
+        )
+      }))
     })
     return true
   }
