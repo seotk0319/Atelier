@@ -52,8 +52,20 @@ export function removeCommentsKeepSections(text: string): string {
     .join('\n')
 }
 
+/** 앞뒤 끝의 주석(#) 줄을 뗀다 — 주석 줄 끝에 ", 다음 글"을 붙이면 주석 제거가 그 글까지 지운다 */
+function trimCommentEdges(text: string): string {
+  const lines = text.split('\n')
+  const isComment = (line: string): boolean => line.trimStart().startsWith('#')
+  while (lines.length && (isComment(lines[lines.length - 1]) || !lines[lines.length - 1].trim()))
+    lines.pop()
+  while (lines.length && (isComment(lines[0]) || !lines[0].trim())) lines.shift()
+  return lines.join('\n')
+}
+
 const tidyJoin = (a: string, b: string): string =>
-  [a.trim().replace(/,\s*$/, ''), b.trim().replace(/^,\s*/, '')].filter(Boolean).join(', ')
+  [trimCommentEdges(a).trim().replace(/,\s*$/, ''), trimCommentEdges(b).trim().replace(/^,\s*/, '')]
+    .filter(Boolean)
+    .join(', ')
 
 /**
  * 프롬프트 두 개를 이어 붙인다 (기본 + 씬 등). 구간 표시는 남기고,
