@@ -1,7 +1,7 @@
 import { gunzipSync, inflateSync } from 'zlib'
 import sharp from 'sharp'
 import type { ImageMetadata } from '../../shared/types'
-import { UC_PRESETS_V45_FULL, splitQualityTags } from '../../shared/nai-presets'
+import { UC_HEAVY_V5, UC_PRESETS_V45_FULL, splitQualityTags } from '../../shared/nai-presets'
 
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const STEALTH_MAGIC = 'stealth_pngcomp'
@@ -137,7 +137,12 @@ function parseLocalParams(text: Record<string, string>): LocalParams | undefined
 function inferUcPreset(uc: string): number | undefined {
   let best: number | undefined
   let bestLen = -1
-  for (const [k, preset] of Object.entries(UC_PRESETS_V45_FULL)) {
+  // V5 Heavy(nsfw 없음)도 Heavy로 알아본다
+  const candidates: [string, string][] = [
+    ...Object.entries(UC_PRESETS_V45_FULL),
+    ['0', UC_HEAVY_V5]
+  ]
+  for (const [k, preset] of candidates) {
     if (!preset) continue
     if ((uc === preset || uc.startsWith(preset + ', ')) && preset.length > bestLen) {
       best = Number(k)

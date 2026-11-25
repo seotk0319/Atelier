@@ -143,7 +143,7 @@ export function buildGenerateImagePayload(
   const prompt = mergeQualityTags(removeComments(req.prompt), req.qualityToggle, transparent)
   const negative = medium
     ? UC_HEAVY_V5
-    : mergeUcPreset(removeComments(req.negativePrompt), req.ucPreset)
+    : mergeUcPreset(removeComments(req.negativePrompt), req.ucPreset, req.model)
 
   // 캐릭터 프롬프트도 주석(#) 제거 — 기본/네거만 걸러지고 캐릭터 칸은 그대로 전송되던 버그 수정
   const activeChars = req.characterPrompts

@@ -73,9 +73,22 @@ export function splitQualityTags(prompt: string): {
   return { prompt: rest, quality, transparent }
 }
 
-/** 캡처 확정: 프리셋 텍스트 + ", " + 유저 네거티브 순서로 병합 */
-export function mergeUcPreset(negativePrompt: string, ucPreset: UcPresetIndex): string {
-  const preset = UC_PRESETS_V45_FULL[ucPreset]
+/**
+ * 모델에 맞는 프리셋 텍스트. V5 Heavy는 nsfw가 없는 UC_HEAVY_V5다 (NAI 웹 코드 확인).
+ * V5의 Light·Human Focus 텍스트는 확인하지 못해 V4.5 것을 그대로 쓴다.
+ */
+export function ucPresetText(ucPreset: UcPresetIndex, model?: string): string {
+  if (ucPreset === 0 && model?.includes('nai-diffusion-5-')) return UC_HEAVY_V5
+  return UC_PRESETS_V45_FULL[ucPreset] ?? ''
+}
+
+/** 캡처 확정: 프리셋 텍스트 + ", " + 유저 네거티브 순서로 병합. model이 없으면 V4.5 텍스트 */
+export function mergeUcPreset(
+  negativePrompt: string,
+  ucPreset: UcPresetIndex,
+  model?: string
+): string {
+  const preset = ucPresetText(ucPreset, model)
   if (!preset) return negativePrompt
   return negativePrompt ? preset + ', ' + negativePrompt : preset
 }
