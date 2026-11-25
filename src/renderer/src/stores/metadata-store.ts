@@ -103,13 +103,15 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
     }
 
     // UC 프리셋: 체크 시 원본 네거티브+프리셋으로(재병합), 미체크 시 병합본 그대로+None
-    const uc = (sel.ucPreset && m.ucPreset != null ? m.ucPreset : 0) as UcPresetIndex
+    // (예전엔 미체크·프리셋 모름일 때 0=Heavy를 넣어, 이미 Heavy가 병합된 네거티브에 한 번 더 붙었다. 4=None)
+    const keepPreset = sel.ucPreset && m.ucPreset != null
+    const uc = (keepPreset ? m.ucPreset : 4) as UcPresetIndex
     if (sel.negativePrompt) {
-      const rawNegative = m.promptParts?.negative ?? m.negativePrompt
-      patch.negativePrompt =
-        m.ucPreset != null ? stripUcPreset(rawNegative, m.ucPreset) : rawNegative
+      patch.negativePrompt = keepPreset
+        ? stripUcPreset(m.promptParts?.negative ?? m.negativePrompt, m.ucPreset!)
+        : m.negativePrompt
       patch.ucPreset = uc
-    } else if (sel.ucPreset && m.ucPreset != null) {
+    } else if (keepPreset) {
       patch.ucPreset = uc
     }
     if (sel.seed && m.seed != null) patch.seed = m.seed
