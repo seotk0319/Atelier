@@ -658,6 +658,8 @@ function ShortcutsSection(): React.JSX.Element {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [recording, setBinding, setRecording])
+  // 키 입력 중에 창을 닫거나 다른 탭으로 가면 녹화를 끝낸다 — 남아 있으면 모든 단축키가 멈췄다
+  useEffect(() => () => useShortcutsStore.getState().setRecording(null), [])
 
   return (
     <div className="flex flex-col gap-1">
