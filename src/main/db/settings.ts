@@ -19,6 +19,8 @@ export function setSetting(key: string, value: string): void {
 
 const TOKEN_KEY = 'nai_token_encrypted'
 const ACCOUNTS_KEY = 'nai_accounts_encrypted_v1'
+/** 풀 수 없던 계정 묶음을 덮어쓰기 전에 옮겨 두는 자리 (읽는 코드는 없다 — 복구용 보관) */
+const UNREADABLE_ACCOUNTS_KEY = 'nai_accounts_encrypted_v1_unreadable'
 
 export interface NaiAccountSecret {
   id: string
@@ -76,6 +78,11 @@ function readStoredAccounts(): NaiAccountSecret[] | null {
 }
 
 function writeAccounts(accounts: NaiAccountSecret[]): void {
+  // 지금 저장된 묶음을 이 PC·이 사용자로 풀 수 없으면(다른 PC에서 옮긴 DB, 백업 복원) 덮어쓰기 전에 따로 남긴다.
+  // 화면에는 토큰이 없어 보여도 원래 PC로 돌아가면 되살릴 수 있게.
+  const current = getSetting(ACCOUNTS_KEY)
+  if (current && decryptValue(current) === null && getSetting(UNREADABLE_ACCOUNTS_KEY) === null)
+    setSetting(UNREADABLE_ACCOUNTS_KEY, current)
   const normalized = accounts.map((account, index) => ({
     ...account,
     name: `계정 ${index + 1}`,
@@ -189,7 +196,9 @@ function getAccountMemos(): Record<string, string> {
     const value = JSON.parse(getSetting(MEMOS_KEY) || '{}') as unknown
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
     return Object.fromEntries(
-      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      Object.entries(value).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string'
+      )
     )
   } catch {
     return {}
