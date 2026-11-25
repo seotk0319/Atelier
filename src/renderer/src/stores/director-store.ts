@@ -36,6 +36,7 @@ export const useDirectorStore = create<DirectorState>((set, get) => ({
     const cur = get().current()
     if (!cur || get().loading) return
     set({ loading: true, error: null })
+    const started = get().stack
 
     const res = await window.nais.invoke('director:run', {
       method,
@@ -48,6 +49,12 @@ export const useDirectorStore = create<DirectorState>((set, get) => ({
       toast(res.error, 'error')
       return
     }
+    // 도는 사이 다른 그림을 열었거나 비웠으면 그 그림 위에 얹지 않는다 (결과는 히스토리에 저장돼 있다)
+    if (get().stack !== started) {
+      set({ loading: false })
+      void useGenerationStore.getState().refreshHistory()
+      return
+    }
     // 결과를 스택에 push → 자동으로 다음 입력이 됨 (이어서 처리)
     set({ loading: false, stack: [...get().stack, res.base64] })
     void useGenerationStore.getState().refreshHistory()
@@ -57,10 +64,16 @@ export const useDirectorStore = create<DirectorState>((set, get) => ({
     const cur = get().current()
     if (!cur || get().loading) return
     set({ loading: true, error: null })
+    const started = get().stack
     const res = await window.nais.invoke('images:upscale', { imageBase64: cur, scale })
     if ('error' in res) {
       set({ loading: false, error: null })
       toast(res.error, 'error')
+      return
+    }
+    if (get().stack !== started) {
+      set({ loading: false })
+      void useGenerationStore.getState().refreshHistory()
       return
     }
     set({ loading: false, stack: [...get().stack, res.base64] })
