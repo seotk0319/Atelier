@@ -292,6 +292,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   async function deleteUnselected(): Promise<boolean> {
     if (sceneId == null) return false
     const favorites = images.filter((i) => i.favorite)
+    void useScenesStore.getState().load() // 씬 카드 썸네일은 즐겨찾기 우선이라 다시 읽는다
     if (favorites.length === 0) {
       toast('선별하지 못했어요.', 'error')
       return false
