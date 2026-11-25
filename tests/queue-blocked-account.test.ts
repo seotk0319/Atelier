@@ -38,7 +38,10 @@ describe('account blocked by an auth error', () => {
     queue.enqueue(request, 1)
     await tick()
     expect(queue.status().counts.failed).toBe(1)
-    expect(queue.tryEnqueue(request, 1).blockedReason).toBe('busy')
+    // 쉬고 있을 때 다시 누르면 'busy'로 거절하지 않고 한 번 더 써 본다 — 여전히 401이면 그 이유로 실패
+    expect(queue.tryEnqueue(request, 1).blockedReason).toBeUndefined()
+    await tick()
+    expect(queue.status().counts.failed).toBe(2)
 
     account.token = 'good'
     queue.refreshConfiguration()
@@ -113,5 +116,24 @@ describe('auth failure with an account left out of acceleration', () => {
     rejectA1(Object.assign(new Error('생성 실패 401'), { status: 401 }))
     for (let i = 0; i < 5; i++) await tick()
     expect(queue.status().counts).toMatchObject({ pending: 0, failed: 1 })
+  })
+})
+
+describe('account blocked by 402 (out of Anlas)', () => {
+  it('is tried again on the next click once the queue is idle', async () => {
+    let anlas = 0
+    const queue = new GenerationQueue(async () => {
+      if (anlas === 0) throw Object.assign(new Error('생성 실패 402'), { status: 402 })
+      return 'C:/out.png'
+    })
+    queue.setDelayMs(0)
+    queue.enqueue(request, 3)
+    for (let i = 0; i < 5; i++) await tick()
+    expect(queue.status().counts).toMatchObject({ pending: 0, failed: 3 })
+
+    anlas = 100 // 충전했다
+    expect(queue.tryEnqueue(request, 1).blockedReason).toBeUndefined()
+    await tick()
+    expect(queue.status().counts.done).toBe(1)
   })
 })

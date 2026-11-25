@@ -276,6 +276,9 @@ export class GenerationQueue extends EventEmitter {
   }
 
   private accountsForNewBatch(): GenerationAccount[] {
+    // 아무것도 돌지 않을 때 새로 누르면 막아 둔 계정을 한 번 더 써 본다 — 402(Anlas 부족) 뒤 충전했거나
+    // 403이 잠깐이었으면 앱을 다시 켜지 않아도 된다. 여전히 막혀 있으면 그 장이 진짜 이유로 실패한다.
+    if (this.activeAccounts.size === 0 && !this.nextPending()) this.blockedAccounts.clear()
     for (const [id, state] of this.pausedAccounts) {
       if (state.retryAt <= Date.now()) this.pausedAccounts.delete(id)
     }
