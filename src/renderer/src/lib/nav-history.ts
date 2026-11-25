@@ -42,7 +42,9 @@ export function recordNav(): void {
 function apply(v: View): void {
   applying = true
   try {
-    useLayoutStore.getState().setCenterMode(v.mode)
+    const layout = useLayoutStore.getState()
+    // 기록한 뒤 설정에서 숨긴 탭으로는 돌아가지 않는다 (탭 줄에 없는 화면에 머물게 된다)
+    layout.setCenterMode(v.mode !== 'main' && layout.hiddenPages.includes(v.mode) ? 'main' : v.mode)
     useScenesStore.getState().select(v.sceneId)
   } finally {
     applying = false
