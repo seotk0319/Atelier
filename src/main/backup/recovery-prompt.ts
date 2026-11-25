@@ -51,6 +51,13 @@ export async function offerRecovery(): Promise<boolean> {
     })
   } catch (e) {
     dialog.showErrorBox('되돌리지 못했어요', e instanceof Error ? e.message : String(e))
+    // 바꿔 달기에 실패한 뒤 지금 DB를 다시 열지도 못했으면 이어서 시작할 수 없다 — 창 없이 멈추지 않게 끈다
+    try {
+      getDb()
+    } catch {
+      app.quit()
+      return true
+    }
     return false
   }
   app.relaunch()
