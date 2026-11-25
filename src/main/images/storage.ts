@@ -44,7 +44,14 @@ export function libraryRoot(): string {
 }
 
 function cleanStorageSegment(value: string, fallback: string): string {
-  return value.replace(/[/\\:*?"<>|]/g, '_').trim() || fallback
+  // 끝의 점·공백은 Windows가 떼어 버리고, "."·".."은 상위 폴더로 빠져나간다 (씬 그림이 다른 프리셋 폴더에 섞임)
+  const cleaned = value
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .trim()
+    .replace(/[. ]+$/, '')
+  if (!cleaned) return fallback
+  // CON·NUL 같은 Windows 예약 이름은 폴더를 만들 수 없다
+  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(cleaned) ? '_' + cleaned : cleaned
 }
 
 /** 활성 씬 프리셋 이미지 폴더 경로 */
