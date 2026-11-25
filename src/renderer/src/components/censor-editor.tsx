@@ -136,8 +136,15 @@ export function CensorEditor(): React.JSX.Element | null {
     })()
       .catch((error) => {
         afterSaveRef.current = null
+        // 저장이 안 되는 파일(지워짐·잠김)이면 닫기·이동이 매번 저장을 다시 시도하다 실패해 창을 못 벗어났다 —
+        // 한 번 알린 뒤에는 다음 닫기·이동이 저장 없이 넘어가게 한다
+        dirtyRef.current = false
         setSaveState('error')
-        toast(error instanceof Error ? error.message : '검열 이미지 저장 실패', 'error')
+        toast(
+          (error instanceof Error ? error.message : '검열 이미지 저장 실패') +
+            ' · 다시 누르면 저장하지 않고 넘어가요',
+          'error'
+        )
       })
       .finally(() => {
         savePromiseRef.current = null
