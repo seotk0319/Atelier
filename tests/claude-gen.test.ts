@@ -9,7 +9,7 @@ const job = {
 }
 
 describe('claude-gen buildClaudeRequest', () => {
-  it('3분할이면 씬 글을 디테일 칸 앞에 넣고 고정·가변 칸은 그대로 둔다', () => {
+  it('3분할이면 고정 칸만 가져오고 가변·디테일 칸(지금 뽑던 인물)은 버린다', () => {
     const base = parseMainParams(
       JSON.stringify({
         prompt: 'artist:a, masterpiece, x, detail',
@@ -37,11 +37,11 @@ describe('claude-gen buildClaudeRequest', () => {
     )
     expect(req.promptParts).toEqual({
       base: 'artist:a, masterpiece',
-      additional: 'x',
-      detail: 'boy, blue eyes, 1.1::short hair ::, 1boy, solo, standing, detail'
+      additional: '',
+      detail: 'boy, blue eyes, 1.1::short hair ::, 1boy, solo, standing'
     })
     expect(req.prompt).toBe(
-      'artist:a, masterpiece, x, boy, blue eyes, 1.1::short hair ::, 1boy, solo, standing, detail'
+      'artist:a, masterpiece, boy, blue eyes, 1.1::short hair ::, 1boy, solo, standing'
     )
     expect(req.negativePrompt).toBe('lowres, extra arms')
     expect(req.characterPrompts).toEqual([])

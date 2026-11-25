@@ -56,9 +56,10 @@ export function randomSeed(): number {
 }
 
 /**
- * 씬 생성과 같은 순서로 요청을 만든다 (화면의 buildSceneRequest·composeScenePrompt와 같음):
- * 메인 파라미터(고정·가변·디테일 칸, 네거티브, 샘플러 등) + 씬 프롬프트(가변 뒤·디테일 앞).
- * 다른 점: 사이드바 캐릭터 카드·i2i 소스는 싣지 않는다. 레퍼·바이브는 생성 함수가 origin을 보고 뺀다.
+ * 메인 파라미터(네거티브, 샘플러·스텝 등)를 쓰되, 프롬프트는 고정 칸(작가·품질)만 가져오고 받은 글을 붙인다.
+ * 가변·디테일 칸은 아빠가 그때 뽑던 인물이 들어 있어 섞이면 안 된다 (2026-11-25 첫 실측에서 섞임).
+ * 3분할이 꺼져 있으면 칸 경계를 몰라 메인 프롬프트 전체를 앞에 둔다.
+ * 사이드바 캐릭터 카드·i2i 소스는 싣지 않는다. 레퍼·바이브는 생성 함수가 origin을 보고 뺀다.
  */
 export function buildClaudeRequest(
   base: GenerationRequest,
@@ -74,7 +75,7 @@ export function buildClaudeRequest(
   delete rest.skipWildcards
   const promptParts =
     splitEnabled && rest.promptParts
-      ? { ...rest.promptParts, detail: joinPromptSections(job.prompt, rest.promptParts.detail) }
+      ? { base: rest.promptParts.base, additional: '', detail: joinPromptSections(job.prompt, '') }
       : undefined
   const request: GenerationRequest = {
     ...rest,
