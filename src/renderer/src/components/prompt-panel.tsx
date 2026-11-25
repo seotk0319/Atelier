@@ -118,13 +118,15 @@ export function PromptPanel(): React.JSX.Element {
       request.model
     )
   )
+  const source = useGenerationStore((s) => s.source)
+  // V5 인페인트는 레퍼런스를 빼고 보낸다 — 그때는 절약 모드도 그대로 나간다 (본체와 같은 기준)
+  const refsInRequest = isV5Model(request.model) && source?.maskBase64 ? 0 : sentCrefs
   // V5 절약 모드에서 레퍼런스가 켜져 있으면 일반으로 생성된다
-  const forcedHigh = medium && sentCrefs > 0
-  const effectiveModel = effortForRefs(request.model, sentCrefs)
+  const forcedHigh = medium && refsInRequest > 0
+  const effectiveModel = effortForRefs(request.model, refsInRequest)
   // 실제로 절약 모드로 나가는지 (요약·네거티브 안내·비용은 이 값 기준)
   const sendsMedium = isMediumEffort(effectiveModel)
   const steps = sendsMedium ? MEDIUM_EFFORT_STEPS : request.steps
-  const source = useGenerationStore((s) => s.source)
   const [paramsOpen, setParamsOpen] = useState(false)
   const stripExif = useStorageSettingsStore((s) => s.stripExif)
   const loadStorageSettings = useStorageSettingsStore((s) => s.load)
