@@ -35,6 +35,8 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
       <DialogPrimitive.Content
+        // 뒤 화면의 전역 키가 이 창 위에서 먹지 않게 표시 (lib/overlay-open.ts)
+        data-modal-dialog=""
         className={cn(
           'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[460px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-line bg-surface text-ink shadow-2xl outline-none',
           className

@@ -11,10 +11,11 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { estimateAnlas } from '@shared/anlas'
-import { isMediumEffort, MEDIUM_EFFORT_STEPS } from '@shared/nai-models'
-import { effortForRefs, sentRefCount } from '@shared/char-refs'
+import { isMediumEffort } from '@shared/nai-models'
+import { sentRefCount } from '@shared/char-refs'
 import type { V5UsageStatus } from '@shared/types'
 import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
+import { mainCostInput } from '../lib/main-cost'
 import { cn } from '../lib/utils'
 import { useGenerationStore } from '../stores/generation-store'
 import { useLayoutStore } from '../stores/layout-store'
@@ -136,22 +137,25 @@ function HeaderMeters(): React.JSX.Element | null {
       request.model
     )
   )
-  const sendModel = effortForRefs(request.model, sentCrefs)
   const unencodedVibes = useVibesStore(
     (s) => s.items.filter((v) => v.enabled && !v.encodedReady).length
   )
-  // 이번 생성에 소모될 Anlas 추정 (고해상도·캐릭터 레퍼런스·미인코딩 바이브 등)
-  const anlasCost = estimateAnlas({
-    width: request.width,
-    height: request.height,
-    steps: isMediumEffort(sendModel) ? MEDIUM_EFFORT_STEPS : request.steps,
-    model: sendModel,
-    strength: request.source ? (request.i2iStrength ?? 0.7) : 1,
-    charRefCount: sentCrefs,
-    isOpus: tier === 'opus',
-    batchCount,
-    unencodedVibes
-  }).total
+  const source = useGenerationStore((s) => s.source)
+  // 씬 탭의 생성은 씬마다 해상도가 달라 여기 한 숫자로 못 보인다 — 왼쪽 요약 줄(가장 큰 씬 기준)을 본다
+  const sceneMode = useLayoutStore((s) => s.centerMode === 'scene')
+  // 이번 메인 생성에 소모될 Anlas 추정 (원본 크기·강도·캐릭터 레퍼런스·미인코딩 바이브 등)
+  const anlasCost = sceneMode
+    ? 0
+    : estimateAnlas(
+        mainCostInput({
+          request,
+          source,
+          sentCrefs,
+          isOpus: tier === 'opus',
+          batchCount,
+          unencodedVibes
+        })
+      ).total
 
   useEffect(() => {
     if (!v5Usage || v5Usage.percent >= 100) return

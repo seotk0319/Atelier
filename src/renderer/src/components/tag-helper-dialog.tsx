@@ -79,6 +79,8 @@ function TagHelperBody(): React.JSX.Element {
   const [text, setText] = useState(initial.text)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  // 넣은 그림·탭이 바뀔 때마다 1씩 — 뽑는 사이 그림을 바꾸면 앞 그림의 태그를 새 그림 옆에 보이지(적용하지) 않는다
+  const inputRev = useRef(0)
   const [dragOver, setDragOver] = useState(false)
   const [items, setItems] = useState<TagHelperItem[]>([])
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null)
@@ -122,6 +124,7 @@ function TagHelperBody(): React.JSX.Element {
   async function takeFile(file: File): Promise<void> {
     const next = await imageFromFile(file)
     if (!next) return
+    inputRev.current++
     setImage(next)
     setItems([])
     setFeedback(null)
@@ -134,6 +137,7 @@ function TagHelperBody(): React.JSX.Element {
       toast(res.error, 'error')
       return
     }
+    inputRev.current++
     setImage({ base64: res.base64, mime: mimeForPath(paths[0]) })
     setItems([])
     setFeedback(null)
@@ -159,6 +163,7 @@ function TagHelperBody(): React.JSX.Element {
     setFeedback(null)
     setItems([])
     setBusy(true)
+    const rev = inputRev.current
     try {
       let res: TagHelperResult
       if (tab === 'image') {
@@ -184,6 +189,7 @@ function TagHelperBody(): React.JSX.Element {
         }
         res = await window.nais.invoke('tagHelper:fromText', request)
       }
+      if (rev !== inputRev.current) return
       const nextItems =
         res.items?.length > 0
           ? res.items
@@ -243,7 +249,14 @@ function TagHelperBody(): React.JSX.Element {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 no-scrollbar">
-        <Segmented value={tab} onValueChange={(v) => v && setTab(v as 'image' | 'text')}>
+        <Segmented
+          value={tab}
+          onValueChange={(v) => {
+            if (!v) return
+            inputRev.current++
+            setTab(v as 'image' | 'text')
+          }}
+        >
           <SegmentedItem value="image">그림에서 뽑기</SegmentedItem>
           <SegmentedItem value="text">한글로 쓰기</SegmentedItem>
         </Segmented>
@@ -319,7 +332,14 @@ function TagHelperBody(): React.JSX.Element {
                     className="h-28 max-w-full rounded-md border border-line object-contain"
                   />
                   <div className="flex gap-1.5">
-                    <Button size="sm" variant="ghost" onClick={() => setImage(null)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        inputRev.current++
+                        setImage(null)
+                      }}
+                    >
                       <X size={13} /> 빼기
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>

@@ -8,7 +8,7 @@ import type {
 } from '@shared/types'
 import { NAI_MODEL_V45_FULL } from '@shared/nai-models'
 import { queueDoneAlert } from '../lib/completion-alert'
-import { enabledCharacters, setCharacterModelSource } from './characters-store'
+import { characterLimit, enabledCharacters, setCharacterModelSource } from './characters-store'
 import { useVibesStore } from './refs-store'
 import { toast } from './toast-store'
 
@@ -17,6 +17,8 @@ import { toast } from './toast-store'
  * 파라미터는 SQLite settings('main_params')에 저장/복원하고,
  * 큐/진행 상태의 진실 공급원은 메인 프로세스다 (이벤트 구독만).
  */
+
+let anlasRetry: ReturnType<typeof setTimeout> | undefined
 
 export const DEFAULT_REQUEST: GenerationRequest = {
   prompt: '',
@@ -120,6 +122,16 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   refreshAnlas: async () => {
     // 잔액과 함께 구독 tier도 갱신 (무료 판정이 최신 tier를 쓰도록)
     const { anlas, tier, v5Usage } = await window.nais.invoke('nai:balance', undefined)
+    if (anlas === null && !v5Usage) {
+      // 토큰이 있는데 조회만 실패했으면(네트워크 등) 보이던 잔액을 지우지 않고 1분 뒤 다시 묻는다 —
+      // 지우면 머리줄 게이지가 사라지고, 다음 생성이 끝날 때까지 다시 안 잡혔다
+      const { hasToken } = await window.nais.invoke('nai:tokenStatus', undefined)
+      if (hasToken) {
+        clearTimeout(anlasRetry)
+        anlasRetry = setTimeout(() => void get().refreshAnlas(), 60_000)
+        return
+      }
+    }
     set({ anlasBalance: anlas, v5Usage })
     if (tier) {
       set({ subscriptionTier: tier })
@@ -213,6 +225,15 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     // 3분할 꺼진 상태로 뽑은 이미지에 promptParts 메타데이터가 담기면 안 됨
     if (!promptSplitEnabled) delete baseRequest.promptParts
     // 캐릭터는 라이브러리의 enabled 카드에서 구성 (리스트 순서 = v4 use_order 순서)
+    // V5에서 켠 캐릭터가 V4.5 상한(6명)을 넘은 채 모델을 바꾸면 그대로 보내져 NAI가 거절했다
+    const limit = characterLimit()
+    if (enabledCharacters().length > limit) {
+      toast(
+        `이 모델은 캐릭터를 ${limit}명까지 보낼 수 있어요. 캐릭터 창에서 ${enabledCharacters().length - limit}명을 꺼 주세요`,
+        'error'
+      )
+      return false
+    }
     const characterPrompts = enabledCharacters().map((c) => ({
       prompt: c.prompt,
       negativePrompt: c.negativePrompt,
@@ -456,6 +477,12 @@ export function bindGenerationEvents(): () => void {
     const stillActive = queue.items.some((i) => i.state === 'pending' || i.state === 'generating')
     if (!stillActive && useGenerationStore.getState().viewPinned) {
       useGenerationStore.setState({ viewPinned: false })
+    }
+    // 취소·실패로 끝나면 완료 때처럼 지우지 않아 반쯤 그려진 미리보기와 진행 값이 화면에 남았다
+    if (!stillActive) {
+      const st = useGenerationStore.getState()
+      if (st.previewPng !== null || st.progress !== null)
+        useGenerationStore.setState({ previewPng: null, progress: null })
     }
     // 배치(활성→소진) 단위 완료 알림 — 큐 items는 세션 내내 누적되므로 배치 시작 시점 기준 델타로 계산
     const prevActive =

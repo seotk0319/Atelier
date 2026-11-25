@@ -151,7 +151,8 @@ function Toolbar(): React.JSX.Element {
   const canRedo = useCoverStore((s) => (s.mode === 'censor' ? s.history.canRedo : s.canRedo))
   const canvasId = project?.selection.canvasId ?? '1x1'
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+    // 좁은 창에선 되돌리기·모드 단추가 다음 줄로 내려간다 (한 줄이면 칸 밖으로 잘려 못 누른다)
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2.5">
       <Segmented
         value={canvasId}
         onValueChange={(v) =>

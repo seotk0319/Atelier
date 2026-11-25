@@ -132,6 +132,8 @@ function Form({ disabled }: { disabled: boolean }): React.JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault()
+              // 전역 Ctrl+Enter(NAI 메인 생성)까지 올라가지 않게 막는다
+              e.stopPropagation()
               void s.generate()
             }
           }}
@@ -491,7 +493,8 @@ function Results(): React.JSX.Element {
   const jobs = useGptStore((s) => s.jobs)
   const loadImages = useGptStore((s) => s.loadImages)
   const clearFinished = useGptStore((s) => s.clearFinished)
-  const [lightbox, setLightbox] = useState(-1)
+  // 확대 보기는 파일로 기억한다 — 새 결과가 앞에 붙으면 위치가 밀려 다른 그림이 보였다
+  const [lightboxPath, setLightboxPath] = useState<string | null>(null)
   const live = jobs.filter((j) => j.state !== 'done' && j.state !== 'cancelled')
   const hasFinished = jobs.some((j) => j.state === 'failed')
   return (
@@ -521,8 +524,8 @@ function Results(): React.JSX.Element {
           {live.map((j) => (
             <JobCard key={j.id} job={j} />
           ))}
-          {images.map((img, i) => (
-            <ResultCard key={img.id} item={img} onOpen={() => setLightbox(i)} />
+          {images.map((img) => (
+            <ResultCard key={img.id} item={img} onOpen={() => setLightboxPath(img.filePath)} />
           ))}
         </div>
         {images.length === 0 && live.length === 0 && (
@@ -536,12 +539,12 @@ function Results(): React.JSX.Element {
           </div>
         )}
       </div>
-      {lightbox >= 0 && (
+      {lightboxPath != null && images.some((x) => x.filePath === lightboxPath) && (
         <Lightbox
           filePaths={images.map((x) => x.filePath)}
-          index={lightbox}
-          onIndex={setLightbox}
-          onClose={() => setLightbox(-1)}
+          index={images.findIndex((x) => x.filePath === lightboxPath)}
+          onIndex={(i) => setLightboxPath(images[i]?.filePath ?? null)}
+          onClose={() => setLightboxPath(null)}
         />
       )}
     </section>

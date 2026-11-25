@@ -94,6 +94,9 @@ function message(e: unknown): string {
   return m.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }
 
+let imagesSeq = 0
+let loadingMore = false
+
 export const useGptStore = create<GptState>((set, get) => ({
   ...loadForm(),
   status: null,
@@ -168,9 +171,21 @@ export const useGptStore = create<GptState>((set, get) => ({
     set({ status: await window.nais.invoke('gpt:status', undefined) })
   },
   loadImages: async (more = false) => {
-    const offset = more ? get().images.length : 0
-    const { items, total } = await window.nais.invoke('gpt:images', { limit: PAGE, offset })
-    set({ images: more ? [...get().images, ...items] : items, total })
+    // 스크롤 끝에서는 onScroll이 연달아 불려 같은 쪽이 여러 번 붙었다 — 더 읽기는 한 번에 하나만,
+    // 처음부터 다시 읽으면(새 그림 완료) 그 전에 나간 응답은 버린다
+    if (more && loadingMore) return
+    const seq = more ? imagesSeq : ++imagesSeq
+    if (more) loadingMore = true
+    try {
+      const offset = more ? get().images.length : 0
+      const { items, total } = await window.nais.invoke('gpt:images', { limit: PAGE, offset })
+      if (seq !== imagesSeq) return
+      if (!more) return set({ images: items, total })
+      const have = new Set(get().images.map((i) => i.id))
+      set({ images: [...get().images, ...items.filter((i) => !have.has(i.id))], total })
+    } finally {
+      if (more) loadingMore = false
+    }
   },
   generate: async () => {
     const s = get()

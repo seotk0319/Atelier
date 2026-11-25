@@ -25,6 +25,7 @@ import { isV5Model } from '@shared/nai-models'
 import { imageUrl } from '../lib/constants'
 import { copyFileName } from '../lib/copy-file-name'
 import { requestFromMetadata } from '../lib/metadata-request'
+import { overlayOpen } from '../lib/overlay-open'
 import { cn } from '../lib/utils'
 import { setImagePathDrag } from '../lib/image-drag'
 import { randomSeed, useGenerationStore } from '../stores/generation-store'
@@ -65,6 +66,8 @@ interface InpaintTarget {
   height: number
   /** 소스 이미지 파일 경로 — 인페인트 프롬프트를 이 이미지의 메타데이터에서 읽는다 */
   filePath: string
+  /** 인페인트를 연 씬 — 다른 씬으로 옮기면 그 씬에는 인페인트 창을 보이지 않고 결과도 그 씬에 넣지 않는다 */
+  sceneId: number
 }
 
 function parse01(value: string): number | null {
@@ -116,10 +119,11 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   }
 
   // 내장 인페인트
-  const [inpaint, setInpaint] = useState<InpaintTarget | null>(null)
+  const [inpaintAny, setInpaint] = useState<InpaintTarget | null>(null)
   const [inpaintLoading, setInpaintLoading] = useState(false)
   // 진행 중 인페인트 작업 (실시간 스트리밍 미리보기)
-  const [job, setJob] = useState<{ id: string } | null>(null)
+  // sceneId: 인페인트를 건 씬 — 다른 씬에 진행 화면을 덮거나 그 씬의 보던 위치를 바꾸지 않게
+  const [job, setJob] = useState<{ id: string; sceneId: number } | null>(null)
   const [jobPreview, setJobPreview] = useState<string | null>(null)
   const [jobProgress, setJobProgress] = useState<{ stepIx: number; totalSteps: number } | null>(
     null
@@ -136,6 +140,10 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const loadedSceneId = useRef<number | null>(null)
   const reloadVersion = useRef(0)
   sceneIdRef.current = sceneId
+  // 지금 씬에서 연 인페인트만 쓴다 (씬 목록을 눌러 옮기면 다른 씬의 그림이 이 씬에 저장되던 문제)
+  const inpaint = inpaintAny && inpaintAny.sceneId === sceneId ? inpaintAny : null
+  const inpaintOpenRef = useRef(false)
+  inpaintOpenRef.current = inpaint != null
   const scene = scenes.find((s) => s.id === sceneId) ?? null
   // 이 씬에 대기 중이거나 생성 중인 장 수 (선별 화면의 "1장 생성"과 씬 탭 예약 모두)
   const liveForScene = useGenerationStore(
@@ -148,8 +156,12 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   const followNew = useRef<Map<number, number>>(new Map())
   function generateHere(): void {
     if (sceneId == null) return
-    followNew.current.set(sceneId, (followNew.current.get(sceneId) ?? 0) + 1)
-    void generateOne(sceneId)
+    const id = sceneId
+    followNew.current.set(id, (followNew.current.get(id) ?? 0) + 1)
+    // 대기열에 못 넣었으면 기다림을 되돌린다 — 남으면 나중에 다른 그림이 들어올 때 보던 위치가 맨 앞으로 튀었다
+    void generateOne(id).then((ok) => {
+      if (!ok) followNew.current.set(id, Math.max(0, (followNew.current.get(id) ?? 1) - 1))
+    })
   }
   const current = images[index] ?? null
   const currentRef = useRef(current)
@@ -162,7 +174,11 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     if (sceneIdRef.current !== id || version !== reloadVersion.current) return
     loadedSceneId.current = id
     setImages(items)
-    setIndex((i) => (resetIndex ? 0 : Math.min(i, Math.max(0, items.length - 1))))
+    // 새 그림은 목록 맨 앞에 붙는다 — 위치 숫자만 지키면 보던 그림이 옆 그림으로 바뀌어
+    // 즐겨찾기·검열이 엉뚱한 그림에 갔다. 보던 파일을 다시 찾아 그 자리로 간다.
+    const keep = resetIndex ? null : (currentRef.current?.filePath ?? null)
+    const at = keep ? items.findIndex((it) => it.filePath === keep) : -1
+    setIndex((i) => (resetIndex ? 0 : at >= 0 ? at : Math.min(i, Math.max(0, items.length - 1))))
     setLoading(false)
   }, [])
 
@@ -200,6 +216,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
       if (inpaint) return
       if (useLayoutStore.getState().centerMode !== 'curation') return // 다른 탭에 숨어 있을 때
       if (useMetadataStore.getState().open) return // 메타데이터 팝업 중엔 이동 금지
+      // 우클릭 메뉴·선택 목록·창이 떠 있으면 그쪽 화살표다 (뒤에서 그림·씬이 바뀌지 않게)
+      if (e.defaultPrevented || overlayOpen()) return
       const t = e.target as HTMLElement | null
       if (
         t &&
@@ -231,6 +249,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   useEffect(() => {
     const handler = (): void => {
       if (useLayoutStore.getState().centerMode !== 'curation') return // 다른 탭에 숨어 있을 때
+      if (inpaintOpenRef.current || overlayOpen()) return // 인페인트·창·메뉴 위에서는 안 보이는 그림을 바꾸지 않는다
       const img = currentRef.current
       if (img) void toggleFavorite(img)
     }
@@ -253,7 +272,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
         setJob(null)
         setJobPreview(null)
         setJobProgress(null)
-        setIndex(0) // 새 이미지는 목록 맨 앞(최신순) — 결과를 바로 보여준다
+        // 새 이미지는 목록 맨 앞(최신순) — 결과를 바로 보여준다 (그 씬을 보고 있을 때만)
+        if (sceneIdRef.current === job.sceneId) setIndex(0)
       } else if (item.state === 'failed' || item.state === 'cancelled') {
         toast(item.error ?? '인페인트 생성 실패', 'error')
         setJob(null)
@@ -272,6 +292,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     const favorite = !img.favorite
     setImages((list) => list.map((i) => (i.id === img.id ? { ...i, favorite } : i)))
     await window.nais.invoke('images:setFavorite', { id: img.id, favorite })
+    void useScenesStore.getState().load() // 씬 카드 썸네일은 즐겨찾기 우선이라 다시 읽는다
   }
 
   /** 선별 외 삭제 — 선별(즐겨찾기)이 하나도 없으면 절대 삭제하지 않는다. 확인창 없이 즉시 수행 */
@@ -358,8 +379,9 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   }
 
   async function startInpaint(): Promise<void> {
-    if (!current) return
+    if (!current || sceneId == null) return
     const filePath = current.filePath
+    const forScene = sceneId
     setInpaintLoading(true)
     const res = await window.nais.invoke('images:readForSource', { filePath })
     setInpaintLoading(false)
@@ -367,7 +389,14 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
       toast(res.error, 'error')
       return
     }
-    setInpaint({ base64: res.base64, width: res.width, height: res.height, filePath })
+    if (sceneIdRef.current !== forScene) return // 읽는 사이 다른 씬으로 옮겼다
+    setInpaint({
+      base64: res.base64,
+      width: res.width,
+      height: res.height,
+      filePath,
+      sceneId: forScene
+    })
   }
 
   /**
@@ -377,7 +406,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
    * 결과는 덮어쓰지 않고 현재 씬에 새 이미지로 추가 (히스토리에도 저장).
    */
   async function generateInpaint(maskBase64: string, strength: number): Promise<void> {
-    if (!scene || !inpaint) return
+    if (!scene || !inpaint || inpaint.sceneId !== scene.id) return
     let extraCharRefs: ExtraCharRef[] | undefined
     if (applyRef && reference) {
       const st = parse01(refStrength)
@@ -435,7 +464,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
     const { ids } = await window.nais.invoke('queue:enqueue', { request, count: 1 })
     setInpaint(null)
     if (ids[0]) {
-      setJob({ id: ids[0] })
+      setJob({ id: ids[0], sceneId: scene.id })
       setJobPreview(null)
       setJobProgress(null)
     }
@@ -655,7 +684,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
 
           {/* 중앙: 현재 이미지 / 내장 인페인트 */}
           <div className="flex min-h-80 flex-col overflow-hidden rounded-lg border border-line bg-surface lg:min-h-0">
-            {job ? (
+            {job && job.sceneId === sceneId ? (
               <div className="relative min-h-0 flex-1">
                 {jobPreview ? (
                   <img

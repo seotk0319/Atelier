@@ -476,6 +476,16 @@ function SceneGrid(): React.JSX.Element {
           : scenes,
     [scenes, filter]
   )
+  // 전체 선택·Shift 구간 선택이 필터에 가려진 씬까지 잡지 않게 보이는 씬을 스토어에 알린다
+  const lastFilter = useRef(filter)
+  useEffect(() => {
+    const changed = lastFilter.current !== filter
+    lastFilter.current = filter
+    useScenesStore
+      .getState()
+      .setVisibleIds(filter === 'all' ? null : visibleScenes.map((s) => s.id), changed)
+  }, [filter, visibleScenes])
+  useEffect(() => () => useScenesStore.getState().setVisibleIds(null), [])
   // 일괄 예약·취소 대상: 편집 모드 선택 → 지금 필터에 보이는 씬 → 전체 씬
   const reserveTarget = useMemo((): { ids?: number[]; label: string; chip: string } => {
     if (editMode && selection.size > 0) {
@@ -550,12 +560,13 @@ function SceneGrid(): React.JSX.Element {
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
       <>
         {/* 머리줄: 제목 · 프리셋 · 도구 */}
-        <div className="flex min-w-0 items-center gap-2.5 px-5 pb-3 pt-4">
+        {/* 좁은 창에선 도구 단추가 다음 줄로 내려간다 — 프리셋 이름이 사라지거나 「더 보기」가 옆 칸으로 밀려나지 않게 */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 px-5 pb-3 pt-4">
           <h1 className="shrink-0 text-[20px] font-bold tracking-tight text-ink">씬</h1>
           <span className="text-[13px] tabular-nums text-faint">
             {scenes.length.toLocaleString()}
           </span>
-          <PresetDropdown />
+          <PresetDropdown triggerClassName="min-w-[7rem]" />
           <div className="min-w-2 flex-1" />
           <Button
             className="h-9 shrink-0 px-3"

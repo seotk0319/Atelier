@@ -68,7 +68,12 @@ function makeRefsStore<T extends { id: number; folderId: number | null }>(
 
     load: async () => {
       const { folders, items } = await window.nais.invoke(ch.list, undefined)
-      set({ folders, items: canonicalize(folders, items as T[]), loaded: true })
+      // 슬라이더·스위치 값이 아직 저장 대기(250ms) 중이면 DB의 옛 값으로 화면을 되돌리지 않는다
+      // (화면은 옛 값, 생성에는 새 값이 나가던 문제 — 추가·복제·바이브 인코딩 직후 다시 읽을 때)
+      const merged = (items as T[]).map((it) =>
+        pendingPatch.has(it.id) ? ({ ...it, ...pendingPatch.get(it.id) } as T) : it
+      )
+      set({ folders, items: canonicalize(folders, merged), loaded: true })
     },
     add: async (folderId) => {
       const { count } = await window.nais.invoke(ch.add, { folderId })

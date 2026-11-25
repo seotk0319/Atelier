@@ -36,6 +36,9 @@ interface MetadataState {
   applyToMain: (sel: Record<string, boolean>) => void
 }
 
+/** 창을 다시 열 때마다 1씩 — 앞 그림의 늦은 응답이 새 그림 창을 덮거나 닫지 않게 */
+let request = 0
+
 export const useMetadataStore = create<MetadataState>((set, get) => ({
   open: false,
   loading: false,
@@ -52,7 +55,9 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
         ? imageUrl(src.filePath)
         : null
     set({ open: true, loading: true, meta: null, error: null, imageSrc })
+    const mine = ++request
     const res = await window.nais.invoke('images:readMetadata', src)
+    if (mine !== request) return
     if ('error' in res) {
       set({ open: false, loading: false })
       toast(res.error, 'error')
@@ -95,14 +100,15 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
     }
 
     // UC 프리셋: 체크 시 원본 네거티브+프리셋으로(재병합), 미체크 시 병합본 그대로+None
-    // 프리셋을 못 알아봤거나 고르지 않았으면 None(4) — Heavy(0)로 두면 병합본 위에 Heavy가 한 번 더 붙는다
-    const uc = (sel.ucPreset && m.ucPreset != null ? m.ucPreset : 4) as UcPresetIndex
+    // (예전엔 미체크·프리셋 모름일 때 0=Heavy를 넣어, 이미 Heavy가 병합된 네거티브에 한 번 더 붙었다. 4=None)
+    const keepPreset = sel.ucPreset && m.ucPreset != null
+    const uc = (keepPreset ? m.ucPreset : 4) as UcPresetIndex
     if (sel.negativePrompt) {
-      const rawNegative = m.promptParts?.negative ?? m.negativePrompt
-      patch.negativePrompt =
-        sel.ucPreset && m.ucPreset != null ? stripUcPreset(rawNegative, m.ucPreset) : rawNegative
+      patch.negativePrompt = keepPreset
+        ? stripUcPreset(m.promptParts?.negative ?? m.negativePrompt, m.ucPreset!)
+        : m.negativePrompt
       patch.ucPreset = uc
-    } else if (sel.ucPreset && m.ucPreset != null) {
+    } else if (keepPreset) {
       patch.ucPreset = uc
     }
     if (sel.seed && m.seed != null) patch.seed = m.seed

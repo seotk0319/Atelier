@@ -53,7 +53,9 @@ export function LibraryView(): React.JSX.Element {
   const [items, setItems] = useState<HistoryItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [lightboxIdx, setLightboxIdx] = useState(-1)
+  // 확대 보기는 위치가 아니라 파일로 기억한다 — 새 그림이 들어오거나 목록을 다시 읽으면 위치가 밀려
+  // 다른 그림이 보이거나(앞에 새 그림), 목록이 줄어 닫힌 것처럼 숨어 있다가 화살표로 엉뚱하게 열렸다
+  const [lightboxPath, setLightboxPath] = useState<string | null>(null)
   const [cols, setCols] = useState(() => Number(localStorage.getItem('library_cols')) || 4)
   const [fit, setFit] = useState<Fit>(
     () => (localStorage.getItem('library_fit') as Fit) || 'square'
@@ -397,11 +399,11 @@ export function LibraryView(): React.JSX.Element {
             </div>
           ) : fit === 'natural' ? (
             <div style={{ columnCount: cols, columnGap: '8px' }}>
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <ImageCardNatural
                   key={item.id}
                   item={item}
-                  onOpen={() => setLightboxIdx(index)}
+                  onOpen={() => setLightboxPath(item.filePath)}
                   onDelete={() => void onDelete(item.id)}
                   deleteFile={historyDeleteFile}
                 />
@@ -412,11 +414,11 @@ export function LibraryView(): React.JSX.Element {
               className="grid gap-2"
               style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
             >
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <ImageCardSquare
                   key={item.id}
                   item={item}
-                  onOpen={() => setLightboxIdx(index)}
+                  onOpen={() => setLightboxPath(item.filePath)}
                   onDelete={() => void onDelete(item.id)}
                   deleteFile={historyDeleteFile}
                 />
@@ -444,12 +446,12 @@ export function LibraryView(): React.JSX.Element {
         </div>
       </div>
 
-      {lightboxIdx >= 0 && (
+      {lightboxPath != null && items.some((item) => item.filePath === lightboxPath) && (
         <Lightbox
           filePaths={items.map((item) => item.filePath)}
-          index={lightboxIdx}
-          onIndex={setLightboxIdx}
-          onClose={() => setLightboxIdx(-1)}
+          index={items.findIndex((item) => item.filePath === lightboxPath)}
+          onIndex={(i) => setLightboxPath(items[i]?.filePath ?? null)}
+          onClose={() => setLightboxPath(null)}
         />
       )}
     </div>
@@ -580,10 +582,7 @@ function LibrarySidebar({
           </SideRow>
           <div
             onDragOver={(e) => {
-              if (
-                hasLibraryEntryDrag(e) ||
-                e.dataTransfer.types.includes(LIBRARY_FOLDER_MIME)
-              ) {
+              if (hasLibraryEntryDrag(e) || e.dataTransfer.types.includes(LIBRARY_FOLDER_MIME)) {
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
               }
@@ -668,10 +667,7 @@ function VirtualFolderRow({
           e.dataTransfer.setData(LIBRARY_FOLDER_MIME, String(node.id))
         }}
         onDragOver={(e) => {
-          if (
-            hasLibraryEntryDrag(e) ||
-            e.dataTransfer.types.includes(LIBRARY_FOLDER_MIME)
-          ) {
+          if (hasLibraryEntryDrag(e) || e.dataTransfer.types.includes(LIBRARY_FOLDER_MIME)) {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
           }

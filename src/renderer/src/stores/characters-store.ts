@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import type { CharacterCard, CharacterCardPatch, ListFolder } from '@shared/types'
-import { maxCharactersForModel, nextFreeCenter, CHARACTER_OVERLAP_DISTANCE } from '@shared/nai-models'
+import {
+  maxCharactersForModel,
+  nextFreeCenter,
+  CHARACTER_OVERLAP_DISTANCE
+} from '@shared/nai-models'
 import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
 
 // 캐릭터 상한은 생성 모델에 따라 다르다. generation-store가 이 스토어를 import하므로
@@ -63,13 +67,15 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
 
   createCard: async (folderId) => {
     const { id } = await window.nais.invoke('chars:create', { name: '', folderId })
+    // 상한이 찼으면 꺼진 채로 만든다 — 켠 것으로 보이는데 저장은 꺼진 채로 남지 않게
+    const canEnable = activeCenters(get().items).length < characterLimit()
     const card: CharacterCard = {
       id,
       name: '',
       prompt: '',
       negativePrompt: '',
       thumbnail: '',
-      enabled: true,
+      enabled: canEnable,
       // NAI 웹처럼 켜진 캐릭터와 겹치지 않는 자리에 놓는다
       center: nextFreeCenter(activeCenters(get().items)),
       folderId
@@ -77,7 +83,10 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
     const { folders, items } = get()
     const next = canonicalize(folders, [...items, card])
     set({ items: next })
-    get().updateCard(id, { enabled: true, center: card.center })
+    get().updateCard(
+      id,
+      canEnable ? { enabled: true, center: card.center } : { center: card.center }
+    )
     void window.nais.invoke('chars:reorder', { order: toOrderEntries(folders, next) })
   },
 
@@ -93,7 +102,8 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
         center &&
         !patch.center &&
         others.some(
-          (c) => Math.hypot(c.center.x - center.x, c.center.y - center.y) < CHARACTER_OVERLAP_DISTANCE
+          (c) =>
+            Math.hypot(c.center.x - center.x, c.center.y - center.y) < CHARACTER_OVERLAP_DISTANCE
         )
       )
         patch = { ...patch, center: nextFreeCenter(others.map((c) => c.center)) }
@@ -172,13 +182,15 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
         name: `가져온 캐릭터 ${i + 1}`,
         folderId: null
       })
+      // 지금 모델의 상한을 넘는 캐릭터는 꺼진 채로 가져온다 (updateCard도 넘겨 켜지 않는다)
+      const canEnable = activeCenters(get().items).length < characterLimit()
       const card: CharacterCard = {
         id,
         name: `가져온 캐릭터 ${i + 1}`,
         prompt: ch.prompt,
         negativePrompt: ch.negativePrompt,
         thumbnail: '',
-        enabled: true,
+        enabled: canEnable,
         center: ch.center ?? { x: 0.5, y: 0.5 },
         folderId: null
       }
@@ -187,7 +199,7 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
         name: card.name,
         prompt: card.prompt,
         negativePrompt: card.negativePrompt,
-        enabled: true,
+        enabled: canEnable,
         center: card.center
       })
     }

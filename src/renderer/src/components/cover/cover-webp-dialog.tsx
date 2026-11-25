@@ -383,7 +383,8 @@ export function CoverWebpDialog({
               frameList[k].bgId,
               combo.typoId,
               combo.canvas.id,
-              1
+              1,
+              true
             )
             const bytes = await encodeFrame(frameCanvas, qualityValue)
             frameCanvas.width = 1

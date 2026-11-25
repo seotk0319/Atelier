@@ -52,7 +52,9 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
   const streaming = generatingSceneId === scene.id
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [cols, setCols] = useState(3)
-  const [lightboxIdx, setLightboxIdx] = useState(-1)
+  // 확대 보기는 파일로 기억한다 — 이 씬 생성이 끝나 앞에 새 그림이 붙으면 위치가 밀려 다른 그림이 보였다
+  const [lightboxPath, setLightboxPath] = useState<string | null>(null)
+  const lightboxIdx = lightboxPath ? images.findIndex((i) => i.filePath === lightboxPath) : -1
 
   // F1 튐 방지: 스트리밍 마지막 프레임을 붙들었다가 완성본이 로드되면 교체.
   // 스트리밍 시작 시점의 최상단 이미지 id를 기록 → 그와 다른 새 이미지가 로드되면 프레임 해제.
@@ -327,7 +329,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
               </div>
             )}
             {/* 프레임을 붙들고 있는 동안엔 완성본(최상단)을 중복 표시하지 않는다 */}
-            {(newTop ? images.slice(1) : images).map((img, i) => (
+            {(newTop ? images.slice(1) : images).map((img) => (
               <ImageContextMenu
                 key={img.id}
                 filePath={img.filePath}
@@ -355,7 +357,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
                     loading="lazy"
                     draggable
                     onDragStart={(e) => setImagePathDrag(e, img.filePath)}
-                    onClick={() => setLightboxIdx(newTop ? i + 1 : i)}
+                    onClick={() => setLightboxPath(img.filePath)}
                     alt=""
                   />
                   <button
@@ -390,8 +392,8 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
         <Lightbox
           filePaths={images.map((i) => i.filePath)}
           index={lightboxIdx}
-          onIndex={setLightboxIdx}
-          onClose={() => setLightboxIdx(-1)}
+          onIndex={(i) => setLightboxPath(images[i]?.filePath ?? null)}
+          onClose={() => setLightboxPath(null)}
         />
       )}
     </div>

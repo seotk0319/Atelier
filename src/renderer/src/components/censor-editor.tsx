@@ -136,8 +136,15 @@ export function CensorEditor(): React.JSX.Element | null {
     })()
       .catch((error) => {
         afterSaveRef.current = null
+        // 저장이 안 되는 파일(지워짐·잠김)이면 닫기·이동이 매번 저장을 다시 시도하다 실패해 창을 못 벗어났다 —
+        // 한 번 알린 뒤에는 다음 닫기·이동이 저장 없이 넘어가게 한다
+        dirtyRef.current = false
         setSaveState('error')
-        toast(error instanceof Error ? error.message : '검열 이미지 저장 실패', 'error')
+        toast(
+          (error instanceof Error ? error.message : '검열 이미지 저장 실패') +
+            ' · 다시 누르면 저장하지 않고 넘어가요',
+          'error'
+        )
       })
       .finally(() => {
         savePromiseRef.current = null
@@ -236,13 +243,24 @@ export function CensorEditor(): React.JSX.Element | null {
     })
     void window.nais.invoke('images:readForSource', { filePath }).then(async (result) => {
       if (disposed) return
-      if ('error' in result) {
-        toast(result.error, 'error')
+      // 못 읽은 그림 위에 앞 그림이 남아 칠할 수 있으면 앞 그림+붓질이 이 파일에 덮어써졌다 — 판을 비우고 칠을 막는다
+      const fail = (message: string): void => {
+        sourceRef.current?.close()
+        sourceRef.current = null
+        const canvas = canvasRef.current
+        if (canvas) canvas.width = canvas.height = 0
+        toast(message, 'error')
         setLoading(false)
+      }
+      if ('error' in result) return fail(result.error)
+      const blob = new Blob([bytesFromBase64(result.base64)], { type: 'image/*' })
+      let bitmap: ImageBitmap
+      try {
+        bitmap = await createImageBitmap(blob)
+      } catch {
+        if (!disposed) fail('그림을 읽지 못했어요')
         return
       }
-      const blob = new Blob([bytesFromBase64(result.base64)], { type: 'image/*' })
-      const bitmap = await createImageBitmap(blob)
       if (disposed) {
         bitmap.close()
         return
@@ -479,7 +497,7 @@ export function CensorEditor(): React.JSX.Element | null {
               if (activeStrokeRef.current) appendPoint(event)
             }}
             onPointerDown={(event) => {
-              if (event.button !== 0 || loading) return
+              if (event.button !== 0 || loading || !sourceRef.current) return
               event.preventDefault()
               event.currentTarget.setPointerCapture(event.pointerId)
               activeStrokeRef.current = { size: brushSizeRef.current, points: [] }

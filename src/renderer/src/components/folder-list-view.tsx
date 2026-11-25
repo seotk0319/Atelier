@@ -104,6 +104,11 @@ function FolderRowInner({
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const sortable = useSortable({ id: `f-${folder.id}`, disabled: searching || editing })
+  // 접힌 폴더에 넣으면 새 카드가 안 보였다 — 먼저 펼친다
+  const addHere = (): void => {
+    if (folder.collapsed) actions.toggleCollapse(folder.id)
+    actions.addItem(folder.id)
+  }
 
   // 색이 지정되면 행 배경을 그 색으로 틴트 (surface-2 위에 얹음)
   const tintStyle = folder.color
@@ -159,7 +164,7 @@ function FolderRowInner({
               variant="ghost"
               className="h-7 w-7 p-0"
               title="이 폴더에 추가"
-              onClick={() => actions.addItem(folder.id)}
+              onClick={() => addHere()}
             >
               <Plus size={14} />
             </Button>
@@ -220,7 +225,7 @@ function FolderRowInner({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={() => actions.addItem(folder.id)}>
+        <ContextMenuItem onSelect={() => addHere()}>
           <Plus size={13} /> 이 폴더에 추가
         </ContextMenuItem>
         <ContextMenuItem
@@ -455,7 +460,8 @@ export function FolderListView<T extends FolderListItem>({
 
   const visible = rows.filter((r) => {
     if (r.type === 'folder' || r.type === 'divider') return true
-    if (r.hidden) return false
+    // 검색 중에는 접힌 폴더 안 카드도 보인다 (폴더 행이 빠져 펼 수도 없었다)
+    if (r.hidden && !searching) return false
     return draggingFolderId === null || r.item.folderId !== draggingFolderId
   })
   const counts = new Map<number, number>()

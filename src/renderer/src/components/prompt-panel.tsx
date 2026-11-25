@@ -27,6 +27,7 @@ import {
 import { effortForRefs, sentRefCount } from '@shared/char-refs'
 import { removeComments } from '@shared/nai-presets'
 import { GENERAL_WEIGHT_KEY, parseGeneralWeight } from '@shared/general-weight'
+import { mainCostInput } from '../lib/main-cost'
 import { cn } from '../lib/utils'
 import { useCharactersStore } from '../stores/characters-store'
 import { useFragmentsStore } from '../stores/fragments-store'
@@ -241,19 +242,20 @@ export function PromptPanel(): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [request.prompt, request.negativePrompt, request.model, enabledChars])
 
+  // 실제로 보내는 값 기준 (i2i·인페인트 원본 크기·강도, V5 인페인트는 레퍼 제외) — 제목줄과 같은 계산
   const anlas = useMemo(
     () =>
-      estimateAnlas({
-        width: request.width,
-        height: request.height,
-        steps,
-        model: effectiveModel,
-        charRefCount: sentCrefs,
-        isOpus: subscriptionTier === 'opus',
-        batchCount,
-        unencodedVibes: 0 // 캐시 상태는 오버레이에서 확인 — 배지로만 안내
-      }),
-    [request.width, request.height, steps, effectiveModel, subscriptionTier, batchCount, sentCrefs]
+      estimateAnlas(
+        mainCostInput({
+          request,
+          source,
+          sentCrefs,
+          isOpus: subscriptionTier === 'opus',
+          batchCount,
+          unencodedVibes: 0 // 캐시 상태는 오버레이에서 확인 — 배지로만 안내
+        })
+      ),
+    [request, source, subscriptionTier, batchCount, sentCrefs]
   )
 
   // 파라미터 요약 줄: 씬 모드는 씬마다 해상도가 달라서, 예약된 씬(없으면 전체 씬) 중 가장 큰 해상도로 판단한다.
@@ -261,7 +263,8 @@ export function PromptPanel(): React.JSX.Element {
     const seedText = seedLocked && request.seed >= 0 ? `시드 ${request.seed}` : '시드 무작위'
     if (!isScene) {
       return {
-        text: `${request.width} × ${request.height} · ${steps}스텝${sendsMedium ? ' (절약)' : forcedHigh ? ' (레퍼런스 때문에 일반)' : ''} · ${seedText}`,
+        // i2i·인페인트는 원본 그림 크기로 보낸다
+        text: `${source?.width ?? request.width} × ${source?.height ?? request.height} · ${steps}스텝${sendsMedium ? ' (절약)' : forcedHigh ? ' (레퍼런스 때문에 일반)' : ''} · ${seedText}`,
         free: anlas.total === 0,
         cost: anlas.total,
         tip: anlasTooltip(anlas, batchCount)
@@ -312,7 +315,8 @@ export function PromptPanel(): React.JSX.Element {
     steps,
     sendsMedium,
     effectiveModel,
-    forcedHigh
+    forcedHigh,
+    source
   ])
 
   // 오버레이는 하나만 열림 — 서로 배타

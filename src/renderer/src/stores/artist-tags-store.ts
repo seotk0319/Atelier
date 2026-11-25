@@ -18,6 +18,9 @@ interface ArtistTagsState {
   close: () => void
 }
 
+/** 창을 다시 열 때마다 1씩 — 앞 그림의 늦은 분석 결과가 새 그림 창에 들어가지 않게 */
+let request = 0
+
 export const useArtistTagsStore = create<ArtistTagsState>((set) => ({
   open: false,
   loading: false,
@@ -34,9 +37,10 @@ export const useArtistTagsStore = create<ArtistTagsState>((set) => ({
         ? imageUrl(src.filePath)
         : null
     set({ open: true, loading: true, tags: [], error: null, imageSrc })
+    const mine = ++request
     const res = await window.nais.invoke('images:analyzeArtists', src)
-    // 분석은 수 초 걸린다 — 기다리는 동안 닫았으면 결과를 버린다
-    if (!useArtistTagsStore.getState().open) return
+    // 분석은 수 초 걸린다 — 기다리는 동안 닫았거나 다른 그림으로 다시 열었으면 결과를 버린다
+    if (!useArtistTagsStore.getState().open || mine !== request) return
     if ('error' in res) set({ loading: false, error: res.error })
     else set({ loading: false, tags: res.tags })
   },
