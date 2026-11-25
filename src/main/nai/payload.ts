@@ -29,6 +29,7 @@ export {
   mergeUcPreset,
   removeComments
 } from '../../shared/nai-presets'
+import { applyAutoText } from '../../shared/nai-auto-text'
 import {
   mergeQualityTags,
   mergeUcPresetForModel,
@@ -158,6 +159,9 @@ export function buildGenerateImagePayload(
       negativePrompt: removeComments(c.negativePrompt)
     }))
     .filter((c) => c.enabled && c.prompt.trim())
+  // V5 Auto Text: 웹은 V5에서 따옴표 안 문구를 첫 구역 끝에 "teXt: …"로 늘 덧붙인다 (모델 능력 autoText,
+  // 설정 없음 — novelai.net 스크립트 2026-11-25 확인). 퀄리티 태그 뒤에 붙는다 (upstream NAIS3 90febc0).
+  const sentPrompt = v5 ? applyAutoText(prompt, activeChars, req.useCoords) : prompt
   // V5는 0~1 자유 좌표(소수 셋째 자리), V4.5는 5×5 칸 좌표만 받는다
   const center = (c: (typeof activeChars)[number]): { x: number; y: number } => {
     if (!req.useCoords || !c.center) return { x: 0.5, y: 0.5 }
@@ -168,7 +172,7 @@ export function buildGenerateImagePayload(
 
   return {
     action: opts.i2i ? (opts.i2i.maskBase64 ? 'infill' : 'img2img') : 'generate',
-    input: prompt,
+    input: sentPrompt,
     model: req.model,
     parameters: {
       // V4.5는 기존 실캡처 fixture와의 호환을 유지하고, V5만 현행 요청 버전을 사용한다.
@@ -238,7 +242,7 @@ export function buildGenerateImagePayload(
       seed: req.seed,
       v4_prompt: {
         caption: {
-          base_caption: prompt,
+          base_caption: sentPrompt,
           char_captions: activeChars.map((c) => ({
             char_caption: c.prompt,
             centers: [center(c)]
