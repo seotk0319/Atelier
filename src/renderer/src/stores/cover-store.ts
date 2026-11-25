@@ -226,6 +226,18 @@ export const useCoverStore = create<CoverState>((set, get) => {
     if (saveTimer !== null) window.clearTimeout(saveTimer)
     saveTimer = window.setTimeout(() => void save(), 300)
   }
+  /**
+   * 그림을 읽는 사이 다른 작품으로 바꿨으면 true — 가져온 재료는 원래 작품에 바로 저장한다.
+   * (그냥 두면 원래 작품의 메모리에만 들어가고 저장되지 않아, 다시 열면 그림이 없었다)
+   */
+  const landedElsewhere = (p: CoverProject): boolean => {
+    if (get().project === p) return false
+    void window.nais.invoke('cover:save', { project: p }).then((res) => {
+      if ('error' in res) toast('표지를 저장하지 못했어요: ' + res.error, 'error')
+      else toast('가져온 그림은 「' + p.name + '」에 넣었어요', 'info')
+    })
+    return true
+  }
   const bump = (redraw = false, source = 'inspector'): void => {
     recordHistory(source)
     set((s) => ({ rev: s.rev + 1 }))
@@ -399,6 +411,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
       try {
         const { added, failed } = await addImageFiles(p, kind, files)
         afterAdd(
+          p,
           kind,
           added.map((a) => a.id),
           failed
@@ -438,6 +451,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
           item.name = a.name
           p.selection.typoId = target
           p.selection.layerId = item.id
+          if (landedElsewhere(p)) return
           bump(true)
           toast('문구로 붙였어요', 'success')
           return
@@ -461,6 +475,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
           p.selection.typoId = item.id
           p.selection.layerId = null
         }
+        if (landedElsewhere(p)) return
         bump(true)
         toast(kind === 'backgrounds' ? '배경으로 넣었어요' : '타이포로 넣었어요', 'success')
       } finally {
@@ -476,6 +491,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
       try {
         const { added, failed } = await addImagePaths(p, kind, paths)
         afterAdd(
+          p,
           kind,
           added.map((a) => a.id),
           failed
@@ -530,6 +546,7 @@ export const useCoverStore = create<CoverState>((set, get) => {
           // 넣은 문구를 바로 편집 대상으로
           p.selection.typoId = typoId
           p.selection.layerId = added[added.length - 1].id
+          if (landedElsewhere(p)) return
           bump(true)
           toast('문구 ' + added.length + '장을 붙였어요', 'success')
         }
@@ -586,13 +603,12 @@ export const useCoverStore = create<CoverState>((set, get) => {
     }
   }
 
-  function afterAdd(kind: CoverKind, ids: string[], failed: number): void {
-    const p = get().project
-    if (!p) return
+  function afterAdd(p: CoverProject, kind: CoverKind, ids: string[], failed: number): void {
     if (ids.length) {
       // 처음 넣은 재료는 바로 편집 대상으로
       if (kind === 'backgrounds' && !p.selection.bgId) p.selection.bgId = ids[0]
       if (kind === 'typos' && !p.selection.typoId) p.selection.typoId = ids[0]
+      if (landedElsewhere(p)) return
       bump(true)
     }
     const label = kind === 'backgrounds' ? '배경' : '타이포'
