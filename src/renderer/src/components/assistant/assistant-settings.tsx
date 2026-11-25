@@ -61,9 +61,7 @@ export function AssistantSection(): React.JSX.Element {
             <p className="text-[13px] font-semibold text-ink">
               {status?.claudeReady ? 'Claude 연결됨' : 'Claude API 키가 필요해요'}
             </p>
-            <p className="mt-0.5 text-[12px] text-faint">
-              AI 답글과 같은 키를 써요. 이 프로필에만 저장돼요.
-            </p>
+            <p className="mt-0.5 text-[12px] text-faint">이 PC에만 암호화해 저장돼요.</p>
           </div>
         </div>
         {!status?.claudeReady && (

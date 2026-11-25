@@ -625,7 +625,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     const stamp = new Date().toISOString().slice(0, 10)
     const result = await dialog.showSaveDialog(win, {
       title: '데이터 내보내기',
-      defaultPath: `NAIS3-backup-${stamp}.json`,
+      defaultPath: `Atelier-backup-${stamp}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }]
     })
     if (result.canceled || !result.filePath) return { saved: false }
@@ -906,7 +906,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     if (!Notification.isSupported()) return
     const body = failed > 0 ? `${done}장 완료 · ${failed}장 실패` : `${done}장 완료`
     // silent — 소리는 앱의 알림음 설정이 따로 담당 (이중 재생 방지)
-    const n = new Notification({ title: 'NAIS3 생성 완료', body, silent: true })
+    const n = new Notification({ title: 'Atelier 생성 완료', body, silent: true })
     n.on('click', () => {
       if (win.isMinimized()) win.restore()
       win.show()

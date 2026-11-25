@@ -1177,7 +1177,7 @@ export function InboxView(): React.JSX.Element {
                         ? INBOX_PLATFORMS[selected.platform] + '에서 · '
                         : mine.via === 'ai'
                           ? 'AI 자동 · '
-                          : 'NAIS3에서 · '}
+                          : 'Atelier에서 · '}
                       {mine.at ? ago(mine.at, now) : '방금'}
                     </span>
                   </p>

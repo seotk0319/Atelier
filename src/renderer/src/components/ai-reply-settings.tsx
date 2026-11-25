@@ -407,7 +407,7 @@ export function AiReplySection(): React.JSX.Element {
             </div>
             {status?.deepseekReady && (
               <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[12px]">
-                <dt className="text-muted">이번 달 (NAIS3에서 쓴 만큼)</dt>
+                <dt className="text-muted">이번 달 (Atelier에서 쓴 만큼)</dt>
                 <dd className="text-right tabular-nums text-ink">
                   {dollars(status.usage.cost)} · {status.usage.requests.toLocaleString()}회
                 </dd>
@@ -431,7 +431,7 @@ export function AiReplySection(): React.JSX.Element {
               </div>
             </div>
             <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[12px]">
-              <dt className="text-muted">이번 달 (NAIS3에서 쓴 만큼)</dt>
+              <dt className="text-muted">이번 달 (Atelier에서 쓴 만큼)</dt>
               <dd className="text-right tabular-nums text-ink">
                 {status
                   ? `${dollars(status.usage.cost)} · ${status.usage.requests.toLocaleString()}회`

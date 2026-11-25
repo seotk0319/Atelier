@@ -159,7 +159,7 @@ app.whenReady().then(() => {
     dbVersion = initDb().version
   } catch (e) {
     // DB를 못 열면 조용히 빈 상태로 시작하지 않는다 — 세이브 유실로 오인되는 최악의 UX
-    dialog.showErrorBox('NAIS3 데이터베이스 오류', e instanceof Error ? e.message : String(e))
+    dialog.showErrorBox('Atelier 데이터베이스 오류', e instanceof Error ? e.message : String(e))
     app.quit()
     return
   }
