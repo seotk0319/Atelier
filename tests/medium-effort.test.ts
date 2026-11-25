@@ -32,18 +32,19 @@ describe('V5 Full medium effort (NAI 웹 fixedSettings 기준)', () => {
   it('sends the medium model with 14 steps, Euler Ancestral, no rescale and only the V5 heavy preset as UC', () => {
     const p = buildGenerateImagePayload(request)
     expect(p.model).toBe('nai-diffusion-5-full-medium')
+    // 웹 fixedSettings: UC = 모델 규칙(T)으로 Heavy만 — 프롬프트에 nsfw가 없으니 앞에 nsfw가 붙는다
     expect(p.parameters).toMatchObject({
       steps: 14,
       sampler: 'k_euler_ancestral',
       cfg_rescale: 0,
       ucPreset: 0,
-      negative_prompt: UC_HEAVY_V5
+      negative_prompt: `nsfw, ${UC_HEAVY_V5}`
     })
     expect(UC_HEAVY_V5.startsWith('lowres')).toBe(true)
     const neg = p.parameters.v4_negative_prompt as {
       caption: { base_caption: string; char_captions: { char_caption: string }[] }
     }
-    expect(neg.caption.base_caption).toBe(UC_HEAVY_V5)
+    expect(neg.caption.base_caption).toBe(`nsfw, ${UC_HEAVY_V5}`)
     expect(neg.caption.char_captions[0].char_caption).toBe('')
     expect((p.parameters.characterPrompts as { uc: string }[])[0].uc).toBe('')
     // 프롬프트 안의 음수 가중치(빼기)는 그대로 간다

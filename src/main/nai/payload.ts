@@ -29,12 +29,7 @@ export {
   mergeUcPreset,
   removeComments
 } from '../../shared/nai-presets'
-import {
-  mergeQualityTags,
-  mergeUcPreset,
-  removeComments,
-  UC_HEAVY_V5
-} from '../../shared/nai-presets'
+import { mergeQualityTags, mergeUcPresetForModel, removeComments } from '../../shared/nai-presets'
 
 /**
  * Variety+(skip_cfg_above_sigma) 값.
@@ -141,9 +136,14 @@ export function buildGenerateImagePayload(
   // V5 투명 배경: NAI 웹과 같이 퀄리티 접미사 앞에 태그를 붙이고 tag_hint로 알린다
   const transparent = v5 && req.transparentBackground === true
   const prompt = mergeQualityTags(removeComments(req.prompt), req.qualityToggle, transparent)
-  const negative = medium
-    ? UC_HEAVY_V5
-    : mergeUcPreset(removeComments(req.negativePrompt), req.ucPreset)
+  // UC 프리셋은 웹 규칙대로 모델별 표에서 붙이고, 프롬프트에 nsfw가 없을 때만 앞에 nsfw를 붙인다.
+  // Medium은 웹처럼 유저 네거티브를 비우고 Heavy만 (withFixedSettings가 ucPreset 0·네거티브 ''로 맞춤).
+  const negative = mergeUcPresetForModel(
+    medium ? '' : removeComments(req.negativePrompt),
+    medium ? 0 : req.ucPreset,
+    req.model,
+    prompt
+  )
 
   // 캐릭터 프롬프트도 주석(#) 제거 — 기본/네거만 걸러지고 캐릭터 칸은 그대로 전송되던 버그 수정
   const activeChars = req.characterPrompts
