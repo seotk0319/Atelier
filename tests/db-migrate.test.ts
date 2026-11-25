@@ -13,7 +13,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { migrateDatabase, pruneBackups, snapshotBeforeImport } from '../src/main/db/migrate'
+import {
+  migrateDatabase,
+  pruneBackups,
+  snapshotBeforeImport,
+  writeSnapshot
+} from '../src/main/db/migrate'
 import { migrations } from '../src/main/db/migrations'
 
 // better-sqlite3는 Electron용으로 빌드돼 있어 vitest(Node)에서 열 수 없다.
@@ -338,5 +343,18 @@ describe('snapshotBeforeImport', () => {
     writeFileSync(join(backupDir, 'pre-migration-v1.db'), 'x')
     pruneBackups(backupDir, 0)
     expect(readdirSync(folder)).toHaveLength(3)
+  })
+})
+
+describe('writeSnapshot', () => {
+  it('같은 이름의 옛 백업을 새 스냅샷으로 바꾸고 임시 파일을 남기지 않는다', () => {
+    const path = join(dir, 'nais3.db')
+    const db = connect(path)
+    migrateDatabase(db, migrations, { backupDir: join(dir, 'b') })
+    const destination = join(dir, 'snap.db')
+    writeFileSync(destination, 'old')
+    writeSnapshot(db, destination)
+    expect(version(destination)).toBe(migrations.length)
+    expect(readdirSync(dir).filter((f) => f.includes('.tmp'))).toEqual([])
   })
 })

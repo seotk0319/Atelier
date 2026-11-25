@@ -109,7 +109,7 @@ function assertSupportedVersion(version: number, target: number): void {
   if (version > target) {
     throw new Error(
       `DB version ${version} is newer than app supports (${target}). ` +
-        'NAIS3를 최신 버전으로 업데이트하세요.'
+        'Atelier를 최신 버전으로 업데이트해 주세요.'
     )
   }
 }
@@ -193,7 +193,8 @@ export function writeSnapshot(db: Database.Database, destination: string): void 
   const temporary = `${destination}.${randomUUID()}.tmp`
   try {
     db.prepare('VACUUM INTO ?').run(temporary)
-    rmSync(destination, { force: true })
+    // 옛 백업을 먼저 지우지 않는다 — renameSync는 있는 파일을 바로 바꿔 단다(Windows도 덮어씀).
+    // 바꿔 달기가 막히면 옛 백업이 그대로 남는다.
     renameSync(temporary, destination)
   } finally {
     rmSync(temporary, { force: true })
