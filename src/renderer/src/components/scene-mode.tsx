@@ -517,9 +517,13 @@ function SceneGrid(): React.JSX.Element {
     await window.nais.invoke('scenes:exportJson', { presetId: activePresetId })
   }
   async function importJson(): Promise<void> {
-    const { count, presetId, presetName } = await window.nais.invoke('scenes:importJson', {
+    const { count, presetId, presetName, error } = await window.nais.invoke('scenes:importJson', {
       presetId: activePresetId
     })
+    if (error) {
+      toast(error, 'error')
+      return
+    }
     if (count > 0) {
       if (presetName && presetId !== activePresetId) {
         // 이름 있는 프리셋 파일(NAIS2) → 새 프리셋 생성 후 자동 전환

@@ -786,7 +786,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   handle('frags:delete', ({ id }) => {
     deleteFragment(id)
   })
-  handle('frags:importTxt', async () => ({ count: await importTxtFragments() }))
+  handle('frags:importTxt', () => importTxtFragments())
   handle('frags:exportTxt', async ({ id }) => ({ saved: await exportTxtFragment(id) }))
   handle('frags:exportAll', async () => ({ count: await exportAllFragmentsZip() }))
   handle('frags:resetSequential', () => {

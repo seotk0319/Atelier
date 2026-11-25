@@ -120,7 +120,9 @@ export function reorderFragments(order: CharacterOrderEntry[]): void {
 
 export function createFragmentFolder(name: string): number {
   const db = getDb()
-  const max = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM fragment_folders').get() as {
+  const max = db
+    .prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM fragment_folders')
+    .get() as {
     m: number
   }
   return Number(
@@ -175,29 +177,54 @@ export function fragmentSource(): FragmentSource {
 }
 
 /** txt/zip 가져오기 (다중 선택). txt=파일명이 조각 이름, zip=안의 txt들을 일괄 가져오기 */
-export async function importTxtFragments(): Promise<number> {
+export async function importTxtFragments(): Promise<{ count: number; error?: string }> {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   const result = await dialog.showOpenDialog(win, {
     title: '조각 TXT 가져오기',
     properties: ['openFile', 'multiSelections'],
     filters: [{ name: '텍스트/ZIP', extensions: ['txt', 'zip'] }]
   })
-  if (result.canceled) return 0
-  let count = 0
-  for (const filePath of result.filePaths) {
+  if (result.canceled) return { count: 0 }
+  const read = await readFragmentFiles(result.filePaths)
+  if ('error' in read) return { count: 0, error: read.error }
+  // 전부 읽은 뒤에만 넣는다 — 중간 파일이 깨져 있어도 앞의 것만 반쯤 들어가지 않게
+  for (const f of read.items) createFragment(f.name, null, f.content)
+  return { count: read.items.length }
+}
+
+/** 고른 txt/zip을 모두 읽는다. 하나라도 못 읽으면 그 파일 이름과 이유를 돌려준다 */
+export async function readFragmentFiles(
+  filePaths: string[]
+): Promise<{ items: { name: string; content: string }[] } | { error: string }> {
+  const items: { name: string; content: string }[] = []
+  for (const filePath of filePaths) {
+    const file = basename(filePath)
+    let buf: Buffer
+    try {
+      buf = readFileSync(filePath)
+    } catch {
+      return { error: `「${file}」을 열지 못했어요.` }
+    }
     if (filePath.toLowerCase().endsWith('.zip')) {
-      const zip = await JSZip.loadAsync(readFileSync(filePath))
+      let zip: JSZip
+      try {
+        zip = await JSZip.loadAsync(buf)
+      } catch {
+        return { error: `「${file}」은 열 수 있는 ZIP 파일이 아니에요.` }
+      }
       for (const entry of Object.values(zip.files)) {
         if (entry.dir || !entry.name.toLowerCase().endsWith('.txt')) continue
-        createFragment(basename(entry.name, '.txt'), null, await entry.async('string'))
-        count++
+        try {
+          items.push({ name: basename(entry.name, '.txt'), content: await entry.async('string') })
+        } catch {
+          return { error: `「${file}」 안의 「${entry.name}」을 읽지 못했어요.` }
+        }
       }
     } else {
-      createFragment(basename(filePath, '.txt'), null, readFileSync(filePath, 'utf-8'))
-      count++
+      items.push({ name: basename(filePath, '.txt'), content: buf.toString('utf-8') })
     }
   }
-  return count
+  return { items }
 }
 
 /** 조각 전체를 ZIP(각 조각 = name.txt)으로 내보내기 — 공유/백업용 */
@@ -227,8 +254,7 @@ export async function exportAllFragmentsZip(): Promise<number> {
 
 export async function exportTxtFragment(id: number): Promise<boolean> {
   const row = getDb().prepare('SELECT name, content FROM fragments WHERE id = ?').get(id) as
-    | { name: string; content: string }
-    | undefined
+    { name: string; content: string } | undefined
   if (!row) return false
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   const result = await dialog.showSaveDialog(win, {

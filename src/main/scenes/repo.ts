@@ -693,9 +693,60 @@ export async function exportScenesJson(presetId: number): Promise<boolean> {
   return true
 }
 
+type ImportedScene = {
+  name?: string
+  prompt?: string
+  /** NAIS2 씬 내보내기(JSON) 포맷의 프롬프트 필드명 */
+  scenePrompt?: string
+  negativePrompt?: string
+  width?: number
+  height?: number
+  /** 씬별 시드 (0~4294967295). 없거나 이상하면 메인 시드 설정을 따른다 */
+  seed?: unknown
+}
+
+/**
+ * 씬 JSON을 읽어 검사한다. 문제가 있으면 무엇이 잘못됐는지 글로 돌려주고 아무것도 넣지 않는다.
+ * 크기는 64 배수로 맞추고, 숫자가 아니면 기본값(832×1216)으로 둔다 (64 배수가 아니면 생성이 400으로 실패).
+ */
+export function parseScenesJson(
+  text: string
+): { name: string; scenes: ImportedScene[] } | { error: string } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text.replace(/^\uFEFF/, ''))
+  } catch {
+    return { error: '씬 파일을 읽지 못했어요. JSON 모양이 깨져 있어요.' }
+  }
+  const root = parsed as { name?: unknown; scenes?: unknown } | null
+  if (!root || typeof root !== 'object' || !Array.isArray(root.scenes))
+    return { error: '씬 파일이 아니에요. "scenes" 목록이 없어요.' }
+  const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+  const size = (v: unknown, fallback: number): number =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0
+      ? Math.min(4096, Math.max(64, Math.round(v / 64) * 64))
+      : fallback
+  const scenes: ImportedScene[] = []
+  for (const [i, raw] of root.scenes.entries()) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+      return { error: `씬 파일의 ${i + 1}번째 씬이 씬 모양이 아니에요.` }
+    const s = raw as Record<string, unknown>
+    scenes.push({
+      name: str(s.name),
+      prompt: str(s.prompt),
+      scenePrompt: str(s.scenePrompt),
+      negativePrompt: str(s.negativePrompt),
+      width: size(s.width, 832),
+      height: size(s.height, 1216),
+      seed: s.seed
+    })
+  }
+  return { name: typeof root.name === 'string' ? root.name.trim() : '', scenes }
+}
+
 export async function importScenesJson(
   presetId: number
-): Promise<{ count: number; presetId: number; presetName: string | null }> {
+): Promise<{ count: number; presetId: number; presetName: string | null; error?: string }> {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   const result = await dialog.showOpenDialog(win, {
     title: '씬 불러오기',
@@ -705,29 +756,22 @@ export async function importScenesJson(
   if (result.canceled || result.filePaths.length === 0) {
     return { count: 0, presetId, presetName: null }
   }
-  const parsed = JSON.parse(readFileSync(result.filePaths[0], 'utf-8')) as {
-    /** NAIS2 프리셋 내보내기(JSON)는 프리셋 이름을 담는다 → 새 프리셋으로 분리 */
-    name?: string
-    scenes?: {
-      name?: string
-      prompt?: string
-      /** NAIS2 씬 내보내기(JSON) 포맷의 프롬프트 필드명 */
-      scenePrompt?: string
-      negativePrompt?: string
-      width?: number
-      height?: number
-      /** 씬별 시드 (0~4294967295). 없거나 이상하면 메인 시드 설정을 따른다 */
-      seed?: unknown
-    }[]
+  let text: string
+  try {
+    text = readFileSync(result.filePaths[0], 'utf-8')
+  } catch {
+    return { count: 0, presetId, presetName: null, error: '씬 파일을 열지 못했어요.' }
   }
-  const scenes = parsed.scenes ?? []
+  const parsed = parseScenesJson(text)
+  if ('error' in parsed) return { count: 0, presetId, presetName: null, error: parsed.error }
+  const { scenes } = parsed
   const db = getDb()
   // 이름 있는 프리셋 파일(NAIS2)이면 그 이름으로 새 프리셋을 만들어 거기에 담는다.
   // 이름 없는 NAIS3 자체 포맷이면 기존대로 현재 활성 프리셋 맨 뒤에 추가.
-  const rawName = typeof parsed.name === 'string' ? parsed.name.trim() : ''
+  const rawName = parsed.name
   let targetPresetId = presetId
   let presetName: string | null = null
-  if (rawName) {
+  if (rawName && scenes.length > 0) {
     presetName = uniquePresetName(rawName)
     targetPresetId = createPreset(presetName)
   }

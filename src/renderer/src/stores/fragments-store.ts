@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Fragment, ListFolder } from '@shared/types'
 import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
+import { toast } from './toast-store'
 
 interface FragmentsState {
   folders: ListFolder[]
@@ -67,7 +68,9 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
   toggleCollapse: (id) => {
     const folder = get().folders.find((f) => f.id === id)
     if (!folder) return
-    set({ folders: get().folders.map((f) => (f.id === id ? { ...f, collapsed: !f.collapsed } : f)) })
+    set({
+      folders: get().folders.map((f) => (f.id === id ? { ...f, collapsed: !f.collapsed } : f))
+    })
     void window.nais.invoke('frags:folderCollapse', { id, collapsed: !folder.collapsed })
   },
 
@@ -92,7 +95,8 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
   },
 
   importTxt: async () => {
-    const { count } = await window.nais.invoke('frags:importTxt', undefined)
+    const { count, error } = await window.nais.invoke('frags:importTxt', undefined)
+    if (error) toast(error, 'error')
     if (count > 0) await get().load()
     return count
   },
