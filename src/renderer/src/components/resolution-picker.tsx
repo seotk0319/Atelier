@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react'
 import { RESOLUTIONS } from '../lib/constants'
-import { useResolutionsStore, snapDim } from '../stores/resolutions-store'
+import { useResolutionsStore, snapResolution } from '../stores/resolutions-store'
 import { toast } from '../stores/toast-store'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { cn } from '../lib/utils'
@@ -29,6 +29,7 @@ export function ResolutionPicker({
   const [open, setOpen] = useState(false)
   const [w, setW] = useState('')
   const [h, setH] = useState('')
+  const fitted = snapResolution(Number(w) || 64, Number(h) || 64)
 
   const currentLabel =
     RESOLUTIONS.find((r) => r.width === width && r.height === height)?.label ??
@@ -133,7 +134,9 @@ export function ResolutionPicker({
           />
           <button
             title={
-              w && h ? `추가 (64 배수 스냅: ${snapDim(Number(w))}×${snapDim(Number(h))})` : '추가'
+              w && h
+                ? `추가 (64 배수·최대 300만 픽셀로 맞춤: ${fitted.width}×${fitted.height})`
+                : '추가'
             }
             onClick={doAdd}
             className="grid size-7 shrink-0 place-items-center rounded bg-accent-fill text-on-accent hover:opacity-90"
