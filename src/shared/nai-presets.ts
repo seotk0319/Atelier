@@ -82,6 +82,20 @@ export function ucPresetText(ucPreset: UcPresetIndex, model?: string): string {
   return UC_PRESETS_V45_FULL[ucPreset] ?? ''
 }
 
+/**
+ * 병합된 네거티브에서 프리셋 텍스트를 떼어 유저 입력분만 남긴다 (메타데이터 불러오기).
+ * V5 그림은 V5 Heavy 텍스트로, 예전 V5 그림·V4.5 그림은 V4.5 텍스트로 병합돼 있다 — 둘 다 본다.
+ */
+export function stripUcPresetText(uc: string, ucPreset: number): string {
+  const idx = ucPreset as UcPresetIndex
+  const texts = [UC_PRESETS_V45_FULL[idx], idx === 0 ? UC_HEAVY_V5 : ''].filter(Boolean)
+  for (const preset of texts) {
+    if (uc === preset) return ''
+    if (uc.startsWith(preset + ', ')) return uc.slice(preset.length + 2)
+  }
+  return uc
+}
+
 /** 캡처 확정: 프리셋 텍스트 + ", " + 유저 네거티브 순서로 병합. model이 없으면 V4.5 텍스트 */
 export function mergeUcPreset(
   negativePrompt: string,

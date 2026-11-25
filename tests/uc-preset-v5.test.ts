@@ -40,3 +40,14 @@ describe('UC preset text per model', () => {
     expect(mergeUcPreset('x', 4, 'nai-diffusion-5-full')).toBe('x')
   })
 })
+
+describe('stripping the preset when loading metadata', () => {
+  it('removes either heavy text so the preset is not merged twice', async () => {
+    const { stripUcPresetText } = await import('../src/shared/nai-presets')
+    expect(stripUcPresetText(UC_HEAVY_V5 + ', bad hands', 0)).toBe('bad hands')
+    expect(stripUcPresetText(UC_HEAVY_V5, 0)).toBe('')
+    expect(stripUcPresetText(UC_PRESETS_V45_FULL[0] + ', bad hands', 0)).toBe('bad hands')
+    expect(stripUcPresetText(UC_PRESETS_V45_FULL[1] + ', x', 1)).toBe('x')
+    expect(stripUcPresetText('bad hands', 4)).toBe('bad hands')
+  })
+})

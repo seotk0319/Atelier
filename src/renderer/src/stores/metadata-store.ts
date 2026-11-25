@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { ImageMetadata, UcPresetIndex } from '@shared/types'
-import { UC_PRESETS_V45_FULL, splitQualityTags } from '@shared/nai-presets'
+import { splitQualityTags, stripUcPresetText } from '@shared/nai-presets'
 import { imageUrl } from '../lib/constants'
 import { useCharactersStore } from './characters-store'
 import { mergePromptParts, useGenerationStore } from './generation-store'
@@ -19,10 +19,8 @@ function stripQuality(prompt: string): string {
   return splitQualityTags(prompt).prompt
 }
 function stripUcPreset(uc: string, idx: number): string {
-  const preset = UC_PRESETS_V45_FULL[idx as keyof typeof UC_PRESETS_V45_FULL]
-  if (!preset) return uc
-  if (uc === preset) return ''
-  return uc.startsWith(preset + ', ') ? uc.slice(preset.length + 2) : uc
+  // V5 Heavy(nsfw 없음)로 병합된 그림도 벗긴다 — 못 벗기면 다시 생성할 때 프리셋이 두 번 붙는다
+  return stripUcPresetText(uc, idx)
 }
 
 interface MetadataState {
