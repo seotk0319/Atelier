@@ -457,6 +457,12 @@ export function bindGenerationEvents(): () => void {
     if (!stillActive && useGenerationStore.getState().viewPinned) {
       useGenerationStore.setState({ viewPinned: false })
     }
+    // 취소·실패로 끝나면 완료 때처럼 지우지 않아 반쯤 그려진 미리보기와 진행 값이 화면에 남았다
+    if (!stillActive) {
+      const st = useGenerationStore.getState()
+      if (st.previewPng !== null || st.progress !== null)
+        useGenerationStore.setState({ previewPng: null, progress: null })
+    }
     // 배치(활성→소진) 단위 완료 알림 — 큐 items는 세션 내내 누적되므로 배치 시작 시점 기준 델타로 계산
     const prevActive =
       prev?.items.some((i) => i.state === 'pending' || i.state === 'generating') ?? false
