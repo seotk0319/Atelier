@@ -84,6 +84,17 @@ export function AssistantSection(): React.JSX.Element {
             <Button variant="accent" loading={busy} onClick={() => void saveKey()}>
               저장
             </Button>
+            {editing && (
+              <Button
+                onClick={() => {
+                  setEditing(false)
+                  setKey('')
+                  setNote(null)
+                }}
+              >
+                취소
+              </Button>
+            )}
           </div>
         )}
         {note && (

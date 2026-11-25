@@ -65,9 +65,10 @@ function rago(word: string): string {
 }
 /** 프롬프트 속 {user}를 호칭으로, {call}을 "사용자를 ~라고 부르고, "로 바꾼다 */
 function addressed(text: string, title: string): string {
-  return text
-    .replaceAll('{call}', title ? `사용자를 "${title}"${rago(title)} 부르고, ` : '')
-    .replaceAll('{user}', title || '사용자')
+  // 바꿔 넣는 글에 $가 있어도 그대로 들어가게 함수로 넘긴다
+  const call = title ? `사용자를 "${title}"${rago(title)} 부르고, ` : ''
+  const user = title || '사용자'
+  return text.replaceAll('{call}', () => call).replaceAll('{user}', () => user)
 }
 
 export function assistantStatus(): AssistantStatus {
