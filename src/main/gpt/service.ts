@@ -8,6 +8,7 @@ import type { GptAuthStatus, GptEdit, GptJob, GptRef, GptRequest } from '../../s
 import type { HistoryItem } from '../../shared/types'
 import { getDb } from '../db'
 import { saveGeneratedImage } from '../images/storage'
+import { sanitizeImageMetadata } from '../images/strip-metadata'
 import { GptAuthError, getCredentials } from './auth'
 import { GptHttpError, GptNoImageError, requestImage } from './client'
 import { alphaMask } from './mask'
@@ -58,7 +59,17 @@ async function prepareRefs(refs: GptRef[]): Promise<GptRef[]> {
       const big =
         (meta.width ?? 0) > 2048 || (meta.height ?? 0) > 2048 || buf.length > 6 * 1024 * 1024
       const okMime = r.mime === 'image/png' || r.mime === 'image/jpeg' || r.mime === 'image/webp'
-      if (!big && okMime) return r
+      // 생성한 그림에는 프롬프트·설정이 메타데이터로 들어 있다 — 밖으로 보내기 전에 지운다
+      // (PNG·WebP는 메타데이터 덩어리와 알파 채널 숨김 정보만 빼고, JPEG는 다시 인코딩해 버린다).
+      // upstream NAIS3 9e9acd0이 외부 배경 제거 업로드에 한 것과 같은 일.
+      if (!big && (r.mime === 'image/png' || r.mime === 'image/webp')) {
+        const clean = await sanitizeImageMetadata(buf, r.mime === 'image/png' ? 'png' : 'webp')
+        return { ...r, b64: clean.toString('base64') }
+      }
+      if (!big && okMime) {
+        const out = await sharp(buf).jpeg({ quality: 95 }).toBuffer()
+        return { ...r, b64: out.toString('base64') }
+      }
       const out = await sharp(buf)
         .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
         .png()
