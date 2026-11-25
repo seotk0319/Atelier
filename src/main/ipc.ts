@@ -617,7 +617,12 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     startUpdateDownload()
   })
   handle('update:check', () => checkForUpdate())
-  handle('update:install', () => installUpdateNow(() => ctx.queue.status()))
+  handle('update:install', () => {
+    // GPT 이미지도 생성 중이면 설치(앱 종료)를 미룬다 — 끄면 그 작업이 말없이 사라진다
+    if (gpt.listJobs().some((j) => j.state === 'running' || j.state === 'retrying'))
+      return { ok: false, busy: true }
+    return installUpdateNow(() => ctx.queue.status())
+  })
 
   handle('backup:export', async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
