@@ -47,8 +47,21 @@ function headers(token: string): Record<string, string> {
 export async function verifyToken(
   token: string
 ): Promise<{ valid: boolean; subscription?: SubscriptionInfo; error?: string }> {
-  const res = await fetch(ENDPOINTS.subscription, { headers: headers(token) })
-  if (res.status === 401) return { valid: false, error: '유효하지 않은 API 토큰' }
+  let res: Response
+  try {
+    // 처음 토큰을 넣는 사람이 오프라인·방화벽이면 확인 중에서 멈추지 않게 시간을 둔다
+    res = await fetch(ENDPOINTS.subscription, {
+      headers: headers(token),
+      signal: AbortSignal.timeout(15_000)
+    })
+  } catch {
+    return { valid: false, error: 'NovelAI에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.' }
+  }
+  if (res.status === 401)
+    return {
+      valid: false,
+      error: '토큰이 맞지 않아요. NovelAI 계정 설정에서 받은 영구 API 토큰(pst-…)을 넣어 주세요.'
+    }
   if (!res.ok) return { valid: false, error: `API 오류: ${res.status}` }
 
   const data = (await res.json()) as {
@@ -67,9 +80,7 @@ export async function verifyToken(
 }
 
 /** 현재 Anlas 잔액(fixed + purchased)과 구독 tier. 실패 시 둘 다 null */
-export async function fetchAnlasBalance(
-  token: string
-): Promise<{
+export async function fetchAnlasBalance(token: string): Promise<{
   anlas: number | null
   tier: string | null
   v5Usage: V5UsageStatus | null
