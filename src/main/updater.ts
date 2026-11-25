@@ -47,7 +47,7 @@ function emit(status: UpdateStatus): UpdateStatus {
 }
 
 /** 업데이트 오류를 사용자가 알아들을 수 있는 말로 (원문은 뒤에 짧게) */
-function friendlyError(err: unknown): string {
+export function friendlyError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err)
   const code = /net::[A-Z_]+|E[A-Z]{3,}|HttpError: \d{3}/.exec(raw)?.[0] ?? ''
   if (/net::|ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(raw))
@@ -55,7 +55,20 @@ function friendlyError(err: unknown): string {
   if (/\b(403|429)\b/.test(raw)) return 'GitHub가 잠시 요청을 막았어요. 조금 뒤 다시 확인해 주세요.'
   if (/sha512|checksum/i.test(raw)) return '받은 파일이 손상됐어요. 다시 받아 주세요.'
   if (/ENOSPC/i.test(raw)) return '디스크 공간이 부족해요.'
-  return raw.split('\n')[0].slice(0, 160)
+  // 릴리스가 없거나, 릴리스에 업데이트 정보(latest.yml)가 아직 안 올라간 경우 (electron-updater 오류 코드)
+  const errCode = (err as { code?: unknown } | null)?.code
+  if (
+    errCode === 'ERR_UPDATER_NO_PUBLISHED_VERSIONS' ||
+    errCode === 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND' ||
+    errCode === 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND' ||
+    /No published versions|Unable to find latest version|Cannot find .*\.yml/i.test(raw)
+  )
+    return '아직 받을 수 있는 업데이트 정보가 없어요. 조금 뒤 다시 확인해 주세요.'
+  if (errCode === 'ERR_UPDATER_INVALID_RELEASE_FEED' || /Cannot parse releases feed/i.test(raw))
+    return '업데이트 목록을 읽지 못했어요. 조금 뒤 다시 확인해 주세요.'
+  // 그 밖의 영어 원문은 화면에 붙이지 않는다 (원인은 로그로)
+  console.error('업데이트 오류:', raw)
+  return `업데이트를 확인하지 못했어요. 조금 뒤 다시 해 주세요.${typeof errCode === 'string' ? ` (${errCode})` : ''}`
 }
 
 function configure(): void {
