@@ -71,7 +71,7 @@ interface ScenesState {
   selectAll: () => void
   clearSelection: () => void
   /** 필터가 바뀌면 보이는 씬을 알려 준다 — 전체 선택·Shift 구간·선택이 숨은 씬을 잡지 않게 */
-  setVisibleIds: (ids: number[] | null) => void
+  setVisibleIds: (ids: number[] | null, prune?: boolean) => void
 
   create: (name: string) => Promise<void>
   update: (id: number, patch: Partial<Scene>) => Promise<void>
@@ -391,10 +391,11 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   },
   selectAll: () => set({ selection: new Set(get().visibleIds ?? get().scenes.map((s) => s.id)) }),
   clearSelection: () => set({ selection: new Set() }),
-  setVisibleIds: (visibleIds) => {
+  setVisibleIds: (visibleIds, prune = false) => {
     const prev = get().selection
-    if (!visibleIds) return set({ visibleIds })
-    // 필터에 가려진 씬은 선택에서 뺀다 (안 보이는 씬이 일괄 삭제·이미지 비우기에 들어가지 않게)
+    if (!visibleIds || !prune) return set({ visibleIds })
+    // 필터를 바꾸면 가려진 씬은 선택에서 뺀다 (안 보이는 씬이 일괄 삭제·이미지 비우기에 들어가지 않게).
+    // 그림이 생기거나 예약을 지워 필터에서 빠지는 것만으로는 빼지 않는다 (작업 중 선택이 사라지지 않게)
     const shown = new Set(visibleIds)
     const selection = new Set([...prev].filter((id) => shown.has(id)))
     set(selection.size === prev.size ? { visibleIds } : { visibleIds, selection })

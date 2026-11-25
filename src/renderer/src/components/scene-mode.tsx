@@ -477,10 +477,13 @@ function SceneGrid(): React.JSX.Element {
     [scenes, filter]
   )
   // 전체 선택·Shift 구간 선택이 필터에 가려진 씬까지 잡지 않게 보이는 씬을 스토어에 알린다
+  const lastFilter = useRef(filter)
   useEffect(() => {
+    const changed = lastFilter.current !== filter
+    lastFilter.current = filter
     useScenesStore
       .getState()
-      .setVisibleIds(filter === 'all' ? null : visibleScenes.map((s) => s.id))
+      .setVisibleIds(filter === 'all' ? null : visibleScenes.map((s) => s.id), changed)
   }, [filter, visibleScenes])
   useEffect(() => () => useScenesStore.getState().setVisibleIds(null), [])
   // 일괄 예약·취소 대상: 편집 모드 선택 → 지금 필터에 보이는 씬 → 전체 씬
