@@ -39,6 +39,9 @@ interface MetadataState {
   applyToMain: (sel: Record<string, boolean>) => void
 }
 
+/** 창을 다시 열 때마다 1씩 — 앞 그림의 늦은 응답이 새 그림 창을 덮거나 닫지 않게 */
+let request = 0
+
 export const useMetadataStore = create<MetadataState>((set, get) => ({
   open: false,
   loading: false,
@@ -55,7 +58,9 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
         ? imageUrl(src.filePath)
         : null
     set({ open: true, loading: true, meta: null, error: null, imageSrc })
+    const mine = ++request
     const res = await window.nais.invoke('images:readMetadata', src)
+    if (mine !== request) return
     if ('error' in res) {
       set({ open: false, loading: false })
       toast(res.error, 'error')
