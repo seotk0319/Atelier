@@ -28,6 +28,8 @@ interface ScenesState {
   editMode: boolean
   selection: Set<number> // 편집 모드 체크된 씬들
   selectionAnchor: number | null // shift 범위선택 기준점(마지막 단일 클릭 씬)
+  /** 씬 목록 필터(이미지 없는 씬·예약된 씬)로 지금 보이는 씬 id 순서. null = 전체 */
+  visibleIds: number[] | null
   columns: number // 2~5
   cardOrientation: 'portrait' | 'landscape' | 'square' // 카드 비율 고정 (해상도 무관)
 
@@ -68,6 +70,8 @@ interface ScenesState {
   toggleSelected: (id: number, shift?: boolean) => void
   selectAll: () => void
   clearSelection: () => void
+  /** 필터가 바뀌면 보이는 씬을 알려 준다 — 전체 선택·Shift 구간·선택이 숨은 씬을 잡지 않게 */
+  setVisibleIds: (ids: number[] | null) => void
 
   create: (name: string) => Promise<void>
   update: (id: number, patch: Partial<Scene>) => Promise<void>
@@ -215,6 +219,7 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   editMode: false,
   selection: new Set(),
   selectionAnchor: null,
+  visibleIds: null,
   columns: Number(localStorage.getItem('scene_columns')) || 3,
   cardOrientation:
     (localStorage.getItem('scene_orientation') as 'portrait' | 'landscape' | 'square') ||
@@ -367,7 +372,7 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     const anchor = get().selectionAnchor
     if (shift && anchor != null && anchor !== id) {
       // 앵커~클릭 씬 사이 구간 전체에 앵커의 현재 선택 상태를 적용 (범위 체크/해제 모두 지원)
-      const ids = get().scenes.map((s) => s.id)
+      const ids = get().visibleIds ?? get().scenes.map((s) => s.id)
       const ai = ids.indexOf(anchor)
       const bi = ids.indexOf(id)
       if (ai !== -1 && bi !== -1) {
@@ -384,8 +389,16 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     next.has(id) ? next.delete(id) : next.add(id)
     set({ selection: next, selectionAnchor: id })
   },
-  selectAll: () => set({ selection: new Set(get().scenes.map((s) => s.id)) }),
+  selectAll: () => set({ selection: new Set(get().visibleIds ?? get().scenes.map((s) => s.id)) }),
   clearSelection: () => set({ selection: new Set() }),
+  setVisibleIds: (visibleIds) => {
+    const prev = get().selection
+    if (!visibleIds) return set({ visibleIds })
+    // 필터에 가려진 씬은 선택에서 뺀다 (안 보이는 씬이 일괄 삭제·이미지 비우기에 들어가지 않게)
+    const shown = new Set(visibleIds)
+    const selection = new Set([...prev].filter((id) => shown.has(id)))
+    set(selection.size === prev.size ? { visibleIds } : { visibleIds, selection })
+  },
 
   create: async (name) => {
     await window.nais.invoke('scenes:create', { presetId: get().activePresetId, name })
