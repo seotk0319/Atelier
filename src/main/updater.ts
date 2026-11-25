@@ -13,10 +13,10 @@ const { autoUpdater } = electronUpdater
  * 자동 업데이트는 이 저장소의 GitHub 릴리스만 본다.
  * (1.0.13에서 원본 NAIS3 저장소를 보던 업데이터를 뺐다 — 커스텀판이 원본으로 덮이지 않게 주소를 여기서 고정한다)
  */
-/** 릴리스 저장소를 정하기 전까지 자동 업데이트를 끈다 */
-const ATELIER_UPDATES = false
+/** 업데이트 확인을 켜고 끄는 스위치 — 릴리스 저장소는 github.com/seotk0319/Atelier */
+const ATELIER_UPDATES = true
 const OWNER = 'seotk0319'
-const REPO = 'NAIS3-Custom'
+const REPO = 'Atelier'
 export const RELEASE_PAGE = `https://github.com/${OWNER}/${REPO}/releases/latest`
 
 type UpdateStatus = IpcEventMap['update:status']

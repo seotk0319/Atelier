@@ -1,14 +1,14 @@
 {
   "name": "atelier",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Atelier - 캐릭터챗 작품 제작툴 (NAIS3 Custom 2.13.0에서 포크)",
   "main": "./out/main/index.js",
   "author": "sunanakgo",
   "license": "GPL-3.0",
-  "homepage": "https://github.com/seotk0319/NAIS3-Custom",
+  "homepage": "https://github.com/seotk0319/Atelier",
   "repository": {
     "type": "git",
-    "url": "https://github.com/seotk0319/NAIS3-Custom.git"
+    "url": "https://github.com/seotk0319/Atelier.git"
   },
   "scripts": {
     "format": "prettier --write .",
