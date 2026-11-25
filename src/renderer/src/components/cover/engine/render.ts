@@ -379,11 +379,20 @@ export async function renderCoverCanvas(
   bgId: string | null,
   typoId: string | null,
   canvasId: CoverCanvasId,
-  scale = 1
+  scale = 1,
+  /** 파일로 내보낼 때: 배경·검열 마스크·타이포를 못 읽으면 회색·검열 없는 그림을 저장하지 않고 실패로 알린다 */
+  strict = false
 ): Promise<HTMLCanvasElement> {
   const canvas = getCoverCanvas(canvasId)
   if (!canvas) throw new Error('알 수 없는 캔버스: ' + canvasId)
   const spec = await buildSpec(project, bgId, typoId, canvasId)
+  if (strict) {
+    const bgItem = findItem(project.backgrounds, bgId)
+    if (bgItem && !spec.bg) throw new Error('배경 그림 파일을 읽지 못했어요')
+    if (bgItem?.maskKey && !spec.mask)
+      throw new Error('검열 마스크를 읽지 못해서 검열 없이 저장하지 않았어요')
+    if (typoId && !spec.layers?.length) throw new Error('타이포 그림 파일을 읽지 못했어요')
+  }
   const el = document.createElement('canvas')
   el.width = Math.max(1, Math.round(canvas.w * scale))
   el.height = Math.max(1, Math.round(canvas.h * scale))
@@ -399,7 +408,7 @@ export async function renderCoverBlob(
   typoId: string | null,
   canvasId: CoverCanvasId
 ): Promise<Blob> {
-  const el = await renderCoverCanvas(project, bgId, typoId, canvasId, 1)
+  const el = await renderCoverCanvas(project, bgId, typoId, canvasId, 1, true)
   return new Promise((resolve, reject) => {
     el.toBlob((blob) => {
       if (blob) resolve(blob)
