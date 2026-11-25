@@ -111,9 +111,17 @@ async function refresh(path: string, data: AuthFile): Promise<GptCredentials> {
     refresh_token: body.refresh_token ?? rt
   }
   const next: AuthFile = { ...latest, tokens, last_refresh: new Date().toISOString() }
+  // 서버는 이미 갱신 토큰을 바꿨다 — 새 토큰을 파일에 못 남기면 다음 갱신이 옛 토큰으로 실패하고
+  // Codex 로그인까지 풀린다. Windows에서 다른 프로그램이 파일을 열고 있어 rename이 막히면 직접 덮어쓴다.
+  const text = JSON.stringify(next, null, 2)
   const tmp = path + '.nais3-tmp'
-  await fs.writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fs.rename(tmp, path)
+  try {
+    await fs.writeFile(tmp, text, { encoding: 'utf8', mode: 0o600 })
+    await fs.rename(tmp, path)
+  } catch {
+    await fs.rm(tmp, { force: true }).catch(() => undefined)
+    await fs.writeFile(path, text, { encoding: 'utf8', mode: 0o600 })
+  }
   return toCredentials(next)
 }
 
