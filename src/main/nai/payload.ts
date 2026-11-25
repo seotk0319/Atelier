@@ -226,8 +226,10 @@ export function buildGenerateImagePayload(
       legacy: false,
       // 인페인트는 add_original_image=true: 서버가 마스크 밖을 원본으로 합성
       add_original_image: true,
-      cfg_rescale: req.cfgRescale,
-      noise_schedule: req.noiseSchedule,
+      // 웹은 모델이 고르지 못하는 값은 요청에서 지운다: V5는 noise schedule, V5 절약은 CFG rescale도
+      // (novelai.net 스크립트 2026-11-25: 능력표 noiseSchedule·cfgRescale이 false면 delete)
+      ...(medium ? {} : { cfg_rescale: req.cfgRescale }),
+      ...(v5 ? {} : { noise_schedule: req.noiseSchedule }),
       legacy_v3_extend: false,
       skip_cfg_above_sigma: varietySigma({
         model: req.model,

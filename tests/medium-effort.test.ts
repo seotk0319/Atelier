@@ -36,10 +36,12 @@ describe('V5 Full medium effort (NAI 웹 fixedSettings 기준)', () => {
     expect(p.parameters).toMatchObject({
       steps: 14,
       sampler: 'k_euler_ancestral',
-      cfg_rescale: 0,
       ucPreset: 0,
       negative_prompt: `nsfw, ${UC_HEAVY_V5}`
     })
+    // 웹은 Medium에서 CFG rescale, V5에서 noise schedule을 요청에서 지운다
+    expect('cfg_rescale' in p.parameters).toBe(false)
+    expect('noise_schedule' in p.parameters).toBe(false)
     expect(UC_HEAVY_V5.startsWith('lowres')).toBe(true)
     const neg = p.parameters.v4_negative_prompt as {
       caption: { base_caption: string; char_captions: { char_caption: string }[] }
