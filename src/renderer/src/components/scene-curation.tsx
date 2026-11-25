@@ -25,6 +25,7 @@ import { isV5Model } from '@shared/nai-models'
 import { imageUrl } from '../lib/constants'
 import { copyFileName } from '../lib/copy-file-name'
 import { requestFromMetadata } from '../lib/metadata-request'
+import { overlayOpen } from '../lib/overlay-open'
 import { cn } from '../lib/utils'
 import { setImagePathDrag } from '../lib/image-drag'
 import { randomSeed, useGenerationStore } from '../stores/generation-store'
@@ -141,6 +142,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   sceneIdRef.current = sceneId
   // 지금 씬에서 연 인페인트만 쓴다 (씬 목록을 눌러 옮기면 다른 씬의 그림이 이 씬에 저장되던 문제)
   const inpaint = inpaintAny && inpaintAny.sceneId === sceneId ? inpaintAny : null
+  const inpaintOpenRef = useRef(false)
+  inpaintOpenRef.current = inpaint != null
   const scene = scenes.find((s) => s.id === sceneId) ?? null
   // 이 씬에 대기 중이거나 생성 중인 장 수 (선별 화면의 "1장 생성"과 씬 탭 예약 모두)
   const liveForScene = useGenerationStore(
@@ -213,6 +216,8 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
       if (inpaint) return
       if (useLayoutStore.getState().centerMode !== 'curation') return // 다른 탭에 숨어 있을 때
       if (useMetadataStore.getState().open) return // 메타데이터 팝업 중엔 이동 금지
+      // 우클릭 메뉴·선택 목록·창이 떠 있으면 그쪽 화살표다 (뒤에서 그림·씬이 바뀌지 않게)
+      if (e.defaultPrevented || overlayOpen()) return
       const t = e.target as HTMLElement | null
       if (
         t &&
@@ -244,6 +249,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
   useEffect(() => {
     const handler = (): void => {
       if (useLayoutStore.getState().centerMode !== 'curation') return // 다른 탭에 숨어 있을 때
+      if (inpaintOpenRef.current || overlayOpen()) return // 인페인트·창·메뉴 위에서는 안 보이는 그림을 바꾸지 않는다
       const img = currentRef.current
       if (img) void toggleFavorite(img)
     }
