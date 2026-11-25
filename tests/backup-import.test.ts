@@ -102,4 +102,25 @@ describe('백업 가져오기 (importAll)', () => {
     importAll(backup)
     expect(raw.prepare('SELECT name FROM scene_preset_folders').all()).toEqual([{ name: 'keep' }])
   })
+
+  it('빈 백업은 거절하고 아무것도 지우지 않는다', () => {
+    raw.exec(
+      `INSERT INTO prompt_presets (name, prompt, negative_prompt, sort_order) VALUES ('keep', 'x', '', 0)`
+    )
+    expect(() =>
+      importAll({ _app: 'NAIS3', tables: { prompt_presets: [], gen_scenes: [] } })
+    ).toThrow('백업에 가져올 항목이 없어요')
+    expect(raw.prepare('SELECT name FROM prompt_presets').all()).toEqual([{ name: 'keep' }])
+  })
+
+  it('지금 표에 없는 열(새 판 백업)은 빼고 넣는다', () => {
+    const backup = exportAll() as { tables: Record<string, Record<string, unknown>[]> }
+    backup.tables.prompt_presets = [
+      { id: 7, name: 'from-newer', prompt: 'p', negative_prompt: '', sort_order: 0, future_col: 1 }
+    ]
+    importAll(backup)
+    expect(raw.prepare('SELECT id, name FROM prompt_presets').all()).toEqual([
+      { id: 7, name: 'from-newer' }
+    ])
+  })
 })

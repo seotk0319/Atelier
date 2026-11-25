@@ -84,7 +84,18 @@ export function importAll(data: Record<string, unknown>): {
 } {
   const tables = (data.tables ?? {}) as Record<string, Row[]>
   const present = TABLES.filter((t) => Array.isArray(tables[t]))
+  // 줄이 하나도 없는 백업으로 지금 데이터를 비우지 않는다
+  if (present.every((t) => tables[t].length === 0)) throw new Error('백업에 가져올 항목이 없어요')
   const db = getDb()
+  // 다른 판의 백업이면 열이 다를 수 있다 — 지금 표에 있는 열만 넣는다 (없는 열은 기본값)
+  const columnsOf = new Map(
+    present.map((t) => [
+      t,
+      new Set(
+        (db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name)
+      )
+    ])
+  )
   const libDir = join(imagesRoot(), '_imported')
   mkdirSync(libDir, { recursive: true })
 
@@ -116,8 +127,9 @@ export function importAll(data: Record<string, unknown>): {
       const rows = tables[t]
       for (const raw of rows) {
         const row: Row = {}
+        const known = columnsOf.get(t)!
         for (const [k, v] of Object.entries(raw)) {
-          if (k === '__image') continue
+          if (k === '__image' || !known.has(k)) continue
           row[k] = decodeValue(v)
         }
         // 이미지 파일 복원 → 새 경로로 재기록
