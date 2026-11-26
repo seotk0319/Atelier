@@ -37,6 +37,7 @@ import { Switch } from './ui/switch'
 import { RemoteMark } from './remote-mark'
 import { useAiReplyStore } from '../stores/ai-reply-store'
 import { useLayoutStore } from '../stores/layout-store'
+import { usePlatformSource } from '../lib/platform-source'
 import { useTranslateStore } from '../stores/translate-store'
 import { ReplyComposer, TranslatableText } from './inbox-translate'
 import { InboxWorks } from './inbox-works'
@@ -290,7 +291,10 @@ export function InboxView(): React.JSX.Element {
   const [revision, setRevision] = useState(0)
   const pendingRef = useRef(false)
   const [busy, setBusy] = useState(false)
+  // 이 PC가 크롬 로그인으로 직접 모으는지 (맥미니에서 받는 PC는 로그인·연결 해제를 맥미니에서 한다)
+  const direct = usePlatformSource() === 'direct'
   // Sign-in checks this window started; the service also reports its own.
+  const [linking, setLinking] = useState<Set<string>>(new Set())
   // Relative times are measured against the moment the data was fetched, which also
   // keeps render pure; the list refetches every 10 seconds anyway.
   const [now, setNow] = useState(0)
@@ -396,6 +400,33 @@ export function InboxView(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
+  }
+  // Sign-in can take the person minutes in the browser; each platform tracks its own check.
+  async function link(id: string, label: string): Promise<void> {
+    setLinking((previous) => new Set(previous).add(id))
+    setMessage(label + ' 로그인 상태를 확인하고 있어요. 크롬 창이 잠깐 열릴 수 있어요.')
+    try {
+      const result = await window.nais.invoke('inbox:connect', { platform: id })
+      setMessage(label + ': ' + result.message)
+    } catch {
+      setMessage(label + ' 연결을 확인하지 못했어요.')
+    } finally {
+      setLinking((previous) => {
+        const next = new Set(previous)
+        next.delete(id)
+        return next
+      })
+      setRevision((v) => v + 1)
+    }
+  }
+  async function unlink(id: string, label: string): Promise<void> {
+    try {
+      await window.nais.invoke('inbox:disconnect', { platform: id })
+      setMessage(label + ' 로그인 정보를 Atelier에서 지웠어요. 이미 모은 알림은 그대로예요.')
+    } catch {
+      setMessage(label + ' 연결을 해제하지 못했어요.')
+    }
+    setRevision((v) => v + 1)
   }
   async function select(id: string, selected: boolean): Promise<void> {
     try {
@@ -792,21 +823,28 @@ export function InboxView(): React.JSX.Element {
               </button>
             </div>
             <p className="leading-relaxed text-muted">
-              알림은 맥미니의 아틀리에가 모으고, 이 PC는 받아서 보여 줘요. 플랫폼 로그인과 연결
-              해제는 맥미니의 아틀리에에서 해요. 체크를 끈 플랫폼은 모으지도, 목록에 보여주지도
-              않아요.
+              {direct
+                ? '플랫폼마다 한 번 로그인하면 Atelier가 직접 알림을 모아요. 로그인 창은 크롬(없으면 엣지)으로 열리고, Atelier 전용 프로필이라 평소 쓰는 크롬과 섞이지 않아요. 로그인한 뒤 그 창을 닫으면 Atelier가 연결을 마쳐요. 로그인 정보는 이 PC에만 암호화해 저장해요. '
+                : '알림은 맥미니의 아틀리에가 모으고, 이 PC는 받아서 보여 줘요. 플랫폼 로그인과 연결 해제는 맥미니의 아틀리에에서 해요. '}
+              체크를 끈 플랫폼은 모으지도, 목록에 보여주지도 않아요.
             </p>
             {data?.directError && <p className="mt-2 text-danger">{data.directError}</p>}
             <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
               {(data?.platforms || []).map((p) => {
-                const checking = p.connecting
+                const checking = linking.has(p.id) || p.connecting
                 const relogin = p.appConnected && p.status === 'login'
                 const state = checking
                   ? '로그인 상태를 확인하고 있어요…'
                   : p.awaitingLogin
-                    ? '맥미니에서 로그인하는 중이에요'
+                    ? !direct
+                      ? '맥미니에서 로그인하는 중이에요'
+                      : p.loginWindowOpen
+                        ? '로그인한 뒤 창을 닫으면 알아서 연결돼요'
+                        : '로그인 창이 닫혔어요. 로그인했다면 ‘로그인 완료’를 눌러주세요'
                     : relogin
-                      ? '맥미니에서 다시 로그인이 필요해요'
+                      ? direct
+                        ? '다시 로그인이 필요해요'
+                        : '맥미니에서 다시 로그인이 필요해요'
                       : p.appConnected
                         ? '연결됨' +
                           (p.lastAttempt ? ` · ${ago(p.lastAttempt, now)} 확인` : '') +
@@ -841,6 +879,29 @@ export function InboxView(): React.JSX.Element {
                     >
                       {failed ? state + ' · 수집 오류: ' + String(p.detail).slice(0, 80) : state}
                     </span>
+                    {direct && p.appConnected && !checking && !p.awaitingLogin && (
+                      <button
+                        className="shrink-0 text-faint hover:text-ink"
+                        onClick={() => void unlink(p.id, p.label)}
+                      >
+                        해제
+                      </button>
+                    )}
+                    {direct && (
+                      <button
+                        className={button}
+                        disabled={checking || !data?.available}
+                        onClick={() => void link(p.id, p.label)}
+                      >
+                        {p.awaitingLogin
+                          ? '로그인 완료'
+                          : relogin
+                            ? '다시 로그인'
+                            : p.appConnected
+                              ? '다시 연결'
+                              : '로그인'}
+                      </button>
+                    )}
                   </li>
                 )
               })}
@@ -966,7 +1027,9 @@ export function InboxView(): React.JSX.Element {
               ) : !data.items.length ? (
                 <p className="p-10 text-center text-[13px] text-muted">
                   {!data.total
-                    ? '연결된 계정의 첫 알림을 기다리고 있어요.'
+                    ? direct && !data.platforms.some((p) => p.appConnected)
+                      ? '아직 연결된 플랫폼이 없어요. 오른쪽 위 「연결 관리」에서 플랫폼에 로그인하면 알림을 모아요.'
+                      : '연결된 계정의 첫 알림을 기다리고 있어요.'
                     : unrepliedQuery
                       ? '미답글 없음'
                       : unreadOnly

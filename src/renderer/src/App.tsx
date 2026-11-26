@@ -36,6 +36,7 @@ import { bindShortcuts, refreshWork, useShortcutsStore } from './stores/shortcut
 import { bindUpdateEvents } from './stores/update-store'
 import { bindNavMouse } from './lib/nav-history'
 import { useLayoutStore, type CenterMode } from './stores/layout-store'
+import { platformSource } from './lib/platform-source'
 import { useThemeStore } from './stores/theme-store'
 import { usePrivacyStore } from './stores/privacy-store'
 
@@ -96,9 +97,9 @@ export default function App(): React.JSX.Element {
     let cancelled = false
     let timer = 0
     const order: CenterMode[] = ['scene', 'director', 'library', 'gpt', 'cover']
-    // 작품·알림 탭은 맥미니 연결이 설정된 본 프로필에만 있다
-    void window.nais.invoke('app:profile', undefined).then(({ remoteView }) => {
-      if (remoteView) order.push('works', 'inbox')
+    // 작품·알림 탭은 본 프로필에만 있다
+    void platformSource().then((source) => {
+      if (source) order.push('works', 'inbox')
     })
     const next = (i: number): void => {
       if (cancelled || i >= order.length) return

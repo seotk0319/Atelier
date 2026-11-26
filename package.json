@@ -25,7 +25,7 @@
     "build:win": "npm run build:app && electron-builder --win",
     "build:mac": "npm run build:app && electron-builder --mac",
     "build:linux": "npm run build:app && electron-builder --linux",
-    "test": "vitest run",
+    "test": "vitest run && node --test tests/engine.test.mjs",
     "test:watch": "vitest",
     "test:engine": "node --test tests/engine.test.mjs"
   },

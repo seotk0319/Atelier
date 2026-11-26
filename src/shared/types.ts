@@ -534,8 +534,12 @@ export interface IpcInvokeMap {
   /** Custom 프로필 (0=기본, 1/2=Custom N). title은 표시용 앱 이름 */
   'app:profile': {
     req: void
-    /** remoteView: 작품·알림 화면을 받을 맥미니 연결이 설정돼 있는지 (본 프로필 + 연결 정보 파일) */
-    res: { profile: number; title: string; remoteView: boolean }
+    /**
+     * platforms: 작품·알림 화면의 내용을 어디서 가져오는지.
+     * 'macmini' = 맥미니 연결 정보 파일이 있어 맥미니에서 받음, 'direct' = 이 PC가 크롬 로그인으로 직접 모음,
+     * null = 이 프로필에는 그 화면이 없음(시험용 프로필)
+     */
+    res: { profile: number; title: string; platforms: 'direct' | 'macmini' | null }
   }
   'nai:verifyToken': {
     req: { token: string }

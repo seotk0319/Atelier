@@ -22,6 +22,8 @@ Atelier는 [NAIS3](https://github.com/sunanakgo/NAIS3)(sunanakgo)에서 갈라�
 - **디렉터·라이브러리**: NAI 디렉터 도구, 저장한 그림 모아 보기
 - **GPT 이미지**: ChatGPT 계정으로 이미지 만들기·고치기
 - **표지**: 작품 표지 만들기
+- **알림**: 캐릭터챗 플랫폼 11곳(에덴·베이비챗·루나·엘린·네코·티팟·크랙·알플레이·젠잇·우마이·챗플)의 알림과 댓글을 한 화면에 모아 보기, 되는 플랫폼은 답글 달기
+- **작품**: 내가 올린 작품이 어느 플랫폼에 올라가 있는지 한 표로 보기
 - **AI 비서**(Ctrl+K): Claude에게 씬 프리셋 정리나 프롬프트 쓰기를 말로 시키기
 
 ## 설치
@@ -40,6 +42,7 @@ Atelier는 [NAIS3](https://github.com/sunanakgo/NAIS3)(sunanakgo)에서 갈라�
 | GPT 이미지 | ChatGPT 계정으로 로그인한 Codex CLI. [Node.js](https://nodejs.org/)를 깐 뒤 명령 창에서 `npm i -g @openai/codex`, `codex login`. Atelier는 그 로그인 파일(`%USERPROFILE%\.codex\auth.json`)을 읽어요 | 따로 넣을 곳 없음. GPT 이미지 탭 오른쪽 위 연결 표시를 누르면 다시 확인해요 |
 | AI 비서 | Claude API 키([console.anthropic.com](https://console.anthropic.com/)) | 설정 → **AI 비서** |
 | AI 태그 도우미 | OpenRouter 키([openrouter.ai](https://openrouter.ai/keys)). DeepSeek V4.1 Flash를 써요 | 설정 → **AI 도우미** |
+| 알림·작품 | 플랫폼 계정과 크롬(없으면 엣지). 로그인 창은 Atelier 전용 크롬 프로필로 열려서 평소 쓰는 크롬과 섞이지 않아요 | **알림** 탭 → **연결 관리** → 플랫폼마다 **로그인**. 로그인한 뒤 그 창을 닫으면 연결돼요 |
 
 NovelAI 생성에는 Anlas나 Opus 구독이 필요해요. 화면 위쪽 **Anlas 소모** 스위치를 끄면 Anlas가 드는 생성은 막혀요.
 
@@ -50,7 +53,7 @@ NovelAI 생성에는 Anlas나 Opus 구독이 필요해요. 화면 위쪽 **Anlas
 - 앱을 지워도 두 폴더는 남아요. 완전히 지우려면 직접 지워 주세요.
 - 설정 → **저장** → **데이터 백업**으로 라이브러리를 JSON으로 내보내고 불러올 수 있어요(NAIS2 백업도 불러와요).
 
-`작품`·`알림` 탭은 만든 사람의 서버에 이어져 있을 때만 보여요. 새로 깐 PC에서는 보이지 않아요.
+- 플랫폼 로그인 정보와 모은 알림: `%APPDATA%\Atelier\creator-inbox`, 로그인용 크롬 프로필은 `%APPDATA%\Atelier\moa-login`. 로그인 정보는 이 PC에만 저장해요. **연결 관리**의 **해제**를 누르면 그 플랫폼의 로그인 정보를 지워요.
 
 ## 개발
 

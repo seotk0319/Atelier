@@ -1,4 +1,6 @@
-// 알림·작품·AI 답글 화면의 내용은 맥미니(아틀리에MCP)에서 받는다.
+// 알림·작품·AI 답글 화면의 내용을 어디서 가져올지.
+// 맥미니 연결 정보 파일이 있으면 맥미니(아틀리에MCP)에서 받고('macmini'),
+// 없으면 이 PC가 크롬 로그인으로 직접 모은다('direct').
 // 맥미니와는 작품 MCP와 같은 포트(mcp_port)의 통로로 이어진다.
 import { app } from 'electron'
 import { existsSync } from 'node:fs'
@@ -16,9 +18,18 @@ function port(): number {
 
 const tokenFile = (): string => join(app.getPath('userData'), 'mcp', 'connection.json')
 
-/** 맥미니 연결 정보 파일이 있는지. 없으면(새로 깐 PC) 작품·알림 화면을 보여 주지 않는다 */
+/** 맥미니 연결 정보 파일이 있는지. 없으면(새로 깐 PC) 이 PC가 직접 모은다 */
 export function remoteConfigured(): boolean {
   return existsSync(tokenFile())
+}
+
+export type PlatformSource = 'direct' | 'macmini'
+
+let source: PlatformSource | null = null
+/** 켤 때 한 번 정한다 (도는 중에 바뀌면 수집과 화면이 서로 다른 곳을 본다) */
+export function platformSource(): PlatformSource {
+  source ??= remoteConfigured() ? 'macmini' : 'direct'
+  return source
 }
 
 let client: ViewClient | null = null

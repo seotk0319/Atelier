@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, dialog, protocol } from 'electron'
+import { app, shell, BrowserWindow, dialog, net, protocol } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import sharp from 'sharp'
@@ -31,6 +31,7 @@ import {
   APP_NAME,
   APP_TITLE,
   APP_USER_MODEL_ID,
+  PLATFORMS_ON,
   PROFILE,
   SHOULD_INVERT_ICON,
   initProfilePaths
@@ -38,7 +39,10 @@ import {
 import { GenerationQueue } from './queue/generation-queue'
 import { startClaudeGenServer } from './claude-gen/server'
 import { getPresetName, getScene } from './scenes/repo'
-import { viewClient } from './remote/source'
+import { platformSource, viewClient } from './remote/source'
+import { sniffImage, thumbAllowed } from './notifications/work-images'
+import { startInbox, closeInbox } from './notifications/service'
+import { startAiReplies, stopAiReplies } from './ai-reply/service'
 import { initGpt } from './gpt/service'
 
 // Custom 프로필이면 userData를 먼저 분리 (단일 인스턴스 잠금·DB보다 앞서야 함)
@@ -116,14 +120,27 @@ app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
 
-  // 작품 썸네일은 맥미니가 대신 받아 준다 (이 PC는 플랫폼 이미지 서버에 닿지 않는다)
+  // 작품 썸네일: 맥미니에서 받는 PC는 맥미니가 대신 받아 주고, 직접 모으는 PC는 허용된 그림 주소만 직접 받는다
   protocol.handle('nais-thumb', async (request) => {
     try {
       const image = new URL(request.url).searchParams.get('u') ?? ''
-      const got = image.startsWith('https://') ? await viewClient().thumb(image) : null
-      if (!got) return new Response(null, { status: 404 })
-      return new Response(Buffer.from(got.bytes), {
-        headers: { 'Content-Type': got.type, 'Cache-Control': 'private, max-age=86400' }
+      if (!PLATFORMS_ON) return new Response(null, { status: 404 })
+      if (platformSource() === 'macmini') {
+        const got = image.startsWith('https://') ? await viewClient().thumb(image) : null
+        if (!got) return new Response(null, { status: 404 })
+        return new Response(Buffer.from(got.bytes), {
+          headers: { 'Content-Type': got.type, 'Cache-Control': 'private, max-age=86400' }
+        })
+      }
+      if (!thumbAllowed(image)) return new Response(null, { status: 404 })
+      const response = await net.fetch(image, { redirect: 'error' })
+      if (!response.ok) return new Response(null, { status: 404 })
+      // 크랙처럼 이미지를 binary/octet-stream으로 보내는 서버가 있어 머리 바이트로 형식을 판단한다.
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      const type = sniffImage(bytes)
+      if (!type || bytes.length > 12 * 1024 * 1024) return new Response(null, { status: 404 })
+      return new Response(bytes, {
+        headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=86400' }
       })
     } catch {
       return new Response(null, { status: 404 })
@@ -266,7 +283,7 @@ app.whenReady().then(async () => {
       const { vibes, newlyEncoded } =
         supportsVibes(rawRequest.model) && !fromClaude
           ? await prepareVibes(token, maySpend)
-        : { vibes: [], newlyEncoded: [] }
+          : { vibes: [], newlyEncoded: [] }
       if (newlyEncoded.length) broadcast('vibes:encoded', {}) // 카드 인코딩 표시 갱신
       const extraCharacterReferences = rawRequest.extraCharRefs?.length
         ? await prepareExtraCharRefs(rawRequest.extraCharRefs, rawRequest.model)
@@ -435,6 +452,13 @@ app.whenReady().then(async () => {
     (jobs) => broadcast('gpt:changed', { jobs }),
     (item) => broadcast('images:added', item)
   )
+  // 맥미니에서 받는 PC는 알림 수집·사이트 로그인 연장·AI 답글을 시작하지 않는다 (맥미니의 아틀리에MCP가 한다).
+  // 맥미니 연결이 없는 PC는 여기서 직접 모은다.
+  if (PLATFORMS_ON && platformSource() === 'direct') {
+    void startInbox()
+    startAiReplies()
+  }
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -452,6 +476,20 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+let inboxClosed = false
+app.on('before-quit', (event) => {
+  // 두 번째 실행이나 맥미니에서 받는 PC는 수집을 시작하지 않았다 — 정리할 것도 없다
+  if (!hasSingleInstanceLock || !PLATFORMS_ON || platformSource() !== 'direct' || inboxClosed)
+    return
+  event.preventDefault()
+  stopAiReplies()
+  // 받아 둔 알림을 파일에 다 쓴 뒤 끝낸다
+  void closeInbox().finally(() => {
+    inboxClosed = true
+    app.quit()
+  })
 })
 
 app.on('quit', () => {

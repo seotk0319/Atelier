@@ -50,6 +50,11 @@ function detectProfile(): number {
 
 export const PROFILE = detectProfile()
 /**
+ * 알림·작품 화면(플랫폼 수집)을 켜는 프로필. 본 프로필에서만 돈다 — 프로필마다 따로 모으면
+ * 같은 계정으로 두 번 로그인하게 된다. --platforms 는 빈 프로필로 시험할 때만 붙인다.
+ */
+export const PLATFORMS_ON = PROFILE === 1 || process.argv.includes('--platforms')
+/**
  * 내부 앱 이름. app.setName()에 쓰이고, 기본 이미지 저장 폴더(사진/<이름>)도 이 값을 따른다.
  * 기존 사용자의 저장 경로가 바뀌지 않도록 번호를 항상 유지한다.
  */

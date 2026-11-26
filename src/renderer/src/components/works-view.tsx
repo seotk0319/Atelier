@@ -16,6 +16,7 @@ import {
 } from '../lib/works-table'
 import { cn } from '../lib/utils'
 import { useLayoutStore } from '../stores/layout-store'
+import { usePlatformSource } from '../lib/platform-source'
 import { toast } from '../stores/toast-store'
 import { Button } from './ui/button'
 import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
@@ -192,6 +193,8 @@ export function WorksView(): React.JSX.Element {
   const [now, setNow] = useState(0)
   const active = useLayoutStore((s) => s.centerMode === 'works')
   const mcp = useMcp(active)
+  // 작품 MCP 기록은 맥미니에서 받는 PC에만 있다. 직접 모으는 PC는 「최근 작업」 열과 작업 기록을 보이지 않는다
+  const hasMcp = usePlatformSource() === 'macmini'
   const activity = mcp.items
 
   // 「새로고침」: 연결된 플랫폼에 다시 묻는다. 누를 때만 부른다.
@@ -269,7 +272,7 @@ export function WorksView(): React.JSX.Element {
       : '읽는 중…'
     : !rows.length
       ? !data.supported.length
-        ? '연결된 플랫폼이 없어요. 알림 탭 설정에서 플랫폼에 로그인하면 작품을 읽을 수 있어요.'
+        ? '연결된 플랫폼이 없어요. 알림 탭의 「연결 관리」에서 플랫폼에 로그인하면 작품을 읽을 수 있어요.'
         : !data.fetchedAt
           ? '아직 읽어 온 작품 목록이 없어요. 「새로고침」을 누르면 연결된 플랫폼에서 읽어 와요.'
           : '작품 없음'
@@ -366,7 +369,10 @@ export function WorksView(): React.JSX.Element {
                 <th className={cn(TH, 'min-w-[56px]')} scope="col">
                   댓글
                 </th>
-                <th className={cn(TH, 'min-w-[260px] pr-4 text-left')} scope="col">
+                <th
+                  className={cn(TH, 'min-w-[260px] pr-4 text-left', !hasMcp && 'hidden')}
+                  scope="col"
+                >
                   최근 작업
                 </th>
               </tr>
@@ -416,7 +422,7 @@ export function WorksView(): React.JSX.Element {
                       <span className="text-faint">—</span>
                     )}
                   </td>
-                  <td className={cn(TD, 'max-w-[360px] pr-4 text-left')}>
+                  <td className={cn(TD, 'max-w-[360px] pr-4 text-left', !hasMcp && 'hidden')}>
                     {row.activity ? (
                       <span
                         className="flex min-w-0 items-center gap-2"
@@ -479,7 +485,7 @@ export function WorksView(): React.JSX.Element {
         </span>
         <span title="최근 30일 안에 온, 답글 안 단 댓글">댓글 = 미답글</span>
       </div>
-      <ActivitySection items={mcp.items} status={mcp.status} known={mcp.known} />
+      {hasMcp && <ActivitySection items={mcp.items} status={mcp.status} known={mcp.known} />}
     </div>
   )
 }

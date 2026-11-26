@@ -5,6 +5,7 @@ import { droppedImagePaths, hasImageDrop } from '../lib/image-drag'
 import { cn } from '../lib/utils'
 import { sendToCover } from '../stores/cover-store'
 import { useLayoutStore, type CenterMode } from '../stores/layout-store'
+import { usePlatformSource } from '../lib/platform-source'
 
 type Page = CenterMode
 
@@ -28,14 +29,11 @@ export function PageNav(): React.JSX.Element {
   const centerMode = useLayoutStore((s) => s.centerMode)
   const setCenterMode = useLayoutStore((s) => s.setCenterMode)
   const hiddenPages = useLayoutStore((s) => s.hiddenPages)
-  const [remoteView, setRemoteView] = useState(false)
-  useEffect(() => {
-    void window.nais.invoke('app:profile', undefined).then((v) => setRemoteView(v.remoteView))
-  }, [])
+  const platforms = usePlatformSource()
   const visible = PAGES.filter(
     (p) =>
-      // 작품·알림 탭은 맥미니 연결이 설정된 본 프로필에만 있다
-      ((p.id !== 'inbox' && p.id !== 'works') || remoteView) &&
+      // 작품·알림 탭은 본 프로필에만 있다
+      ((p.id !== 'inbox' && p.id !== 'works') || !!platforms) &&
       (p.id === 'main' || !hiddenPages.includes(p.id))
   )
   const activePage: Page = centerMode
