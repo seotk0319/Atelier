@@ -107,7 +107,13 @@ export async function fetchAnlasBalance(token: string): Promise<{
       tier?: number
       active?: boolean
       trainingStepsLeft?: { fixedTrainingStepsLeft?: number; purchasedTrainingSteps?: number }
-      usage?: { isNegative?: boolean; percent?: number; timeUntilNextPercent?: number }
+      usage?: {
+        isNegative?: boolean
+        percent?: number
+        /** Opus Usage Boost로 쌓인 추가 사용량 (없는 계정은 0이거나 칸이 없다) */
+        purchasedPercent?: number
+        timeUntilNextPercent?: number
+      }
     }
     const tierNames = ['paper', 'tablet', 'scroll', 'opus'] as const
     const usage = data.usage
@@ -116,6 +122,9 @@ export async function fetchAnlasBalance(token: string): Promise<{
         ? {
             isNegative: usage.isNegative === true,
             percent: Math.max(0, Math.trunc(usage.percent ?? 0)),
+            purchasedPercent: Number.isFinite(usage.purchasedPercent)
+              ? Math.max(0, Math.trunc(usage.purchasedPercent ?? 0))
+              : 0,
             timeUntilNextPercent: Math.max(0, Math.trunc(usage.timeUntilNextPercent ?? 0))
           }
         : null

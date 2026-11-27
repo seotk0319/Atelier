@@ -941,9 +941,7 @@ function AccountSection(): React.JSX.Element {
           const masked = `${account.prefix}${'*'.repeat(Math.max(0, account.length - account.prefix.length))}`
           const metrics = accountUsage.find((item) => item.accountId === account.id)
           const v5Text = metrics?.v5Usage
-            ? metrics.v5Usage.isNegative
-              ? `−${metrics.v5Usage.percent}% · 제한`
-              : `${metrics.v5Usage.percent}%`
+            ? v5UsageText(metrics.v5Usage) + (metrics.v5Usage.isNegative ? ' · 제한' : '')
             : '—'
           return (
             <div key={account.id} className="rounded-lg border border-line bg-surface-2/40 p-2.5">
@@ -1326,7 +1324,7 @@ export function SettingsDialog({
     </Dialog>
   )
 }
-import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
+import { estimateV5Images, v5UsageText, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
 import {
   DEFAULT_GENERAL_WEIGHT,
   GENERAL_WEIGHT_KEY,

@@ -211,7 +211,13 @@ export interface NaiAccountInfo {
 /** V5 무료 생성 사용량. 서버는 정확한 장수 대신 정수 비율과 1%당 충전 시간을 제공한다. */
 export interface V5UsageStatus {
   isNegative: boolean
+  /** 기본 잔량 (시간이 지나면 100%까지 다시 찬다) */
   percent: number
+  /**
+   * 추가 사용량 — Opus Usage Boost(부스터)를 쓰면 기본 잔량과 따로 100%씩 쌓인다 (NovelAI 웹의 "Extra Usage").
+   * 서버 응답 usage.purchasedPercent. 없으면 0.
+   */
+  purchasedPercent: number
   /** 1% 충전에 필요한 초 (NovelAI 웹의 "Sec / %") */
   timeUntilNextPercent: number
 }

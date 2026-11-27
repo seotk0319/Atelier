@@ -1,5 +1,6 @@
 import type { GenerationRequest } from '../../shared/types'
 import { isV5Model } from '../../shared/nai-models'
+import { v5Remaining } from '../../shared/v5-usage'
 import { AccountPausedError } from '../queue/generation-queue'
 import { fetchAnlasBalance } from './client'
 
@@ -32,7 +33,8 @@ export async function checkFreeGeneration(
     throw new AccountPausedError('활성 Opus 구독 확인 불가', 60000)
   if (
     isV5Model(request.model) &&
-    (!status.v5Usage || status.v5Usage.isNegative || status.v5Usage.percent < 1)
+    // 기본 잔량이 0이어도 부스터로 쌓인 추가 사용량이 남아 있으면 무료로 나간다
+    (!status.v5Usage || v5Remaining(status.v5Usage) < 1)
   )
     throw new AccountPausedError('V5 잔량 부족 또는 확인 불가 (1% 미만 보호)', 60000)
 }

@@ -14,7 +14,7 @@ import { estimateAnlas } from '@shared/anlas'
 import { isMediumEffort } from '@shared/nai-models'
 import { sentRefCount } from '@shared/char-refs'
 import type { V5UsageStatus } from '@shared/types'
-import { estimateV5Images, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
+import { estimateV5Images, v5Extra, v5UsageText, V5_ESTIMATE_BASIS } from '@shared/v5-usage'
 import { mainCostInput } from '../lib/main-cost'
 import { cn } from '../lib/utils'
 import { useGenerationStore } from '../stores/generation-store'
@@ -88,7 +88,10 @@ function v5Tooltip(usage: V5UsageStatus, model: string): string {
   const refillRate = secondsPerPercent > 0 ? Math.round((3600 / secondsPerPercent) * 10) / 10 : 0
   const percentToFull = usage.isNegative ? usage.percent + 100 : 100 - usage.percent
   const fullIn = percentToFull * secondsPerPercent
-  return `V5 생성 한도 잔량 ${usage.percent}%\n${
+  const extra = v5Extra(usage)
+  return `V5 생성 한도 잔량 ${usage.percent}%${
+    extra > 0 ? `\n추가 사용량 +${extra}% (부스터로 채운 양, 기본 잔량과 따로 쌓여요)` : ''
+  }\n${
     usage.percent >= 100
       ? '충전 완료'
       : `충전 속도 ${refillRate}%/시간 · 1%당 ${formatDuration(secondsPerPercent)}\n100%까지 약 ${formatDuration(fullIn)}`
@@ -198,8 +201,7 @@ function HeaderMeters(): React.JSX.Element | null {
               v5Usage.isNegative ? 'text-bad' : 'text-ink'
             )}
           >
-            {v5Usage.isNegative ? '−' : ''}
-            {v5Usage.percent}%
+            {v5UsageText(v5Usage)}
           </b>
           <span
             className="hidden h-1 w-10 shrink-0 overflow-hidden bg-surface-3 min-[1240px]:inline-block"
