@@ -19,6 +19,7 @@ import { Lightbox } from './lightbox'
 import { PromptEditor } from './prompt-editor'
 import { Button } from './ui/button'
 import { EditableCount } from './ui/editable-count'
+import { SceneBaseRefControl } from './base-ref-dialog'
 
 export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
   const select = useScenesStore((s) => s.select)
@@ -164,6 +165,7 @@ export function SceneDetail({ scene }: { scene: Scene }): React.JSX.Element {
           value={scene.name}
           onChange={(e) => void update(scene.id, { name: e.target.value })}
         />
+        <SceneBaseRefControl scene={scene} />
         <ResolutionPicker
           className="w-48"
           disabled={!!source}

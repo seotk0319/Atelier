@@ -3,6 +3,7 @@ import { readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { isAbsolute, relative } from 'path'
 import JSZip from 'jszip'
 import type {
+  BaseRef,
   CharacterOrderEntry,
   ListFolder,
   Scene,
@@ -11,6 +12,7 @@ import type {
 } from '../../shared/types'
 import { getDb } from '../db'
 import { normalizeSceneSeed } from '../../shared/scene-seed'
+import { parseBaseRefs, sceneOrPresetRefs, serializeBaseRefs } from '../../shared/base-refs'
 import { libraryRoot } from '../images/storage'
 import {
   planSceneZipEntries,
@@ -30,6 +32,7 @@ interface Row {
   height: number
   reserve_count: number
   seed: number | null
+  base_refs?: string | null
 }
 
 function toScene(
@@ -52,7 +55,8 @@ function toScene(
     thumbnail: '',
     thumbnailPath: r.thumb_path ?? '',
     imageCount: r.image_count,
-    hasFavorite: r.has_favorite === 1
+    hasFavorite: r.has_favorite === 1,
+    baseRefs: parseBaseRefs(r.base_refs)
   }
 }
 
@@ -60,18 +64,53 @@ function toScene(
 export function listPresets(): ScenePreset[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, name, default_width AS defaultWidth, default_height AS defaultHeight, character_ids, folder_id AS folderId FROM scene_presets ORDER BY sort_order, id'
+      'SELECT id, name, default_width AS defaultWidth, default_height AS defaultHeight, character_ids, folder_id AS folderId, base_refs FROM scene_presets ORDER BY sort_order, id'
     )
-    .all() as (Omit<ScenePreset, 'characterIds'> & { character_ids: string | null })[]
-  return rows.map(({ character_ids, ...r }) => {
+    .all() as (Omit<ScenePreset, 'characterIds' | 'baseRefs'> & {
+    character_ids: string | null
+    base_refs: string | null
+  })[]
+  return rows.map(({ character_ids, base_refs, ...r }) => {
     let characterIds: number[] | null = null
     try {
       characterIds = character_ids ? (JSON.parse(character_ids) as number[]) : null
     } catch {
       // 깨진 JSON은 바인드 없음으로
     }
-    return { ...r, characterIds }
+    return { ...r, characterIds, baseRefs: parseBaseRefs(base_refs) }
   })
+}
+
+/** 프리셋 기준 레퍼 (null·빈 목록 = 지우기) */
+export function setPresetBaseRefs(id: number, refs: BaseRef[] | null): boolean {
+  return (
+    getDb()
+      .prepare('UPDATE scene_presets SET base_refs = ? WHERE id = ?')
+      .run(serializeBaseRefs(refs), id).changes > 0
+  )
+}
+
+/** 씬 기준 레퍼 (null·빈 목록 = 지우기 → 프리셋 것을 따른다) */
+export function setSceneBaseRefs(id: number, refs: BaseRef[] | null): boolean {
+  return (
+    getDb()
+      .prepare('UPDATE gen_scenes SET base_refs = ? WHERE id = ?')
+      .run(serializeBaseRefs(refs), id).changes > 0
+  )
+}
+
+/** 이 씬을 뽑을 때 실을 기준 레퍼 — 씬 것이 있으면 씬 것, 없으면 프리셋 것. 없거나 모르는 씬이면 null */
+export function resolveSceneBaseRefs(sceneId: number): BaseRef[] | null {
+  const row = getDb()
+    .prepare(
+      `SELECT s.base_refs AS scene_refs, p.base_refs AS preset_refs
+       FROM gen_scenes s LEFT JOIN scene_presets p ON p.id = s.preset_id WHERE s.id = ?`
+    )
+    .get(sceneId) as { scene_refs: string | null; preset_refs: string | null } | undefined
+  if (!row) return null
+  return (
+    sceneOrPresetRefs(parseBaseRefs(row.scene_refs), parseBaseRefs(row.preset_refs))?.refs ?? null
+  )
 }
 
 /** 프리셋의 새 씬 기본 해상도 설정 */
@@ -277,16 +316,17 @@ export function manageScenePresets(ids: number[], action: 'duplicate' | 'delete'
     return selected.map((p) => {
       const id = createPreset(uniquePresetName(`${p.name} 복사`), p.folderId ?? null)
       db.prepare(
-        'UPDATE scene_presets SET default_width = ?, default_height = ?, character_ids = ? WHERE id = ?'
+        'UPDATE scene_presets SET default_width = ?, default_height = ?, character_ids = ?, base_refs = ? WHERE id = ?'
       ).run(
         p.defaultWidth ?? null,
         p.defaultHeight ?? null,
         p.characterIds ? JSON.stringify(p.characterIds) : null,
+        serializeBaseRefs(p.baseRefs),
         id
       )
       db.prepare(
-        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count, seed)
-        SELECT ?, name, prompt, negative_prompt, width, height, sort_order, 0, seed FROM gen_scenes WHERE preset_id = ? ORDER BY sort_order, id`
+        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count, seed, base_refs)
+        SELECT ?, name, prompt, negative_prompt, width, height, sort_order, 0, seed, base_refs FROM gen_scenes WHERE preset_id = ? ORDER BY sort_order, id`
       ).run(id, p.id)
       return id
     })
@@ -299,7 +339,7 @@ export function listScenes(presetId: number): Scene[] {
   // 카드 썸네일: 즐겨찾기가 있으면 최상단(최신) 즐겨찾기, 없으면 최신 이미지 (NAIS2 방식)
   const rows = getDb()
     .prepare(
-      `SELECT s.id, s.preset_id, s.name, s.prompt, s.negative_prompt, s.width, s.height, s.reserve_count, s.seed,
+      `SELECT s.id, s.preset_id, s.name, s.prompt, s.negative_prompt, s.width, s.height, s.reserve_count, s.seed, s.base_refs,
               (SELECT COUNT(*) FROM images WHERE scene_id = s.id) AS image_count,
               (SELECT file_path FROM images WHERE scene_id = s.id ORDER BY favorite DESC, id DESC LIMIT 1) AS thumb_path,
               EXISTS(SELECT 1 FROM images WHERE scene_id = s.id AND favorite = 1) AS has_favorite
@@ -332,7 +372,7 @@ export function getPresetName(id: number): string | null {
 export function getScene(id: number): Scene | null {
   const r = getDb()
     .prepare(
-      `SELECT id, preset_id, name, prompt, negative_prompt, width, height, reserve_count, seed,
+      `SELECT id, preset_id, name, prompt, negative_prompt, width, height, reserve_count, seed, base_refs,
               (SELECT COUNT(*) FROM images WHERE scene_id = ?) AS image_count
        FROM gen_scenes WHERE id = ?`
     )
@@ -368,8 +408,8 @@ export function duplicateScene(id: number): number {
   return Number(
     db
       .prepare(
-        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count, seed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
+        `INSERT INTO gen_scenes (preset_id, name, prompt, negative_prompt, width, height, sort_order, reserve_count, seed, base_refs)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
       )
       .run(
         s.preset_id,
@@ -379,7 +419,8 @@ export function duplicateScene(id: number): number {
         s.width,
         s.height,
         max.m + 1,
-        s.seed ?? null
+        s.seed ?? null,
+        s.base_refs ?? null
       ).lastInsertRowid
   )
 }

@@ -528,6 +528,15 @@ export const migrations: ((db: Database.Database) => void)[] = [
       ALTER TABLE images DROP COLUMN payload_json;
       ALTER TABLE images DROP COLUMN thumbnail;
     `)
+  },
+
+  // v24: 기준 레퍼 (씬·프리셋에 저장해 두고 그 씬을 뽑을 때 싣는 캐릭터 레퍼런스). JSON 배열, null = 없음.
+  // 씬 칸이 있으면 씬 것, 없으면 프리셋 것 (shared/base-refs.ts)
+  (db) => {
+    if (!hasColumn(db, 'scene_presets', 'base_refs'))
+      db.exec('ALTER TABLE scene_presets ADD COLUMN base_refs TEXT;')
+    if (!hasColumn(db, 'gen_scenes', 'base_refs'))
+      db.exec('ALTER TABLE gen_scenes ADD COLUMN base_refs TEXT;')
   }
 ]
 

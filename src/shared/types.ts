@@ -387,6 +387,18 @@ export interface ScenePreset {
   characterIds: number[] | null
   /** 작품별 묶음 폴더 (null = 폴더 없음). 앱 안 목록만 정리하고 디스크 폴더와는 무관 */
   folderId: number | null
+  /** 기준 레퍼 — 이 프리셋의 씬을 뽑을 때 싣는다 (씬에 기준 레퍼가 있으면 씬 것). null = 없음 */
+  baseRefs: BaseRef[] | null
+}
+
+/**
+ * 기준 레퍼: 씬·프리셋에 저장해 두고 그 씬을 뽑을 때마다 싣는 캐릭터 레퍼런스.
+ * 충실도는 저장하지 않는다 (V5는 1로 고정, V4.5로 가면 1). 규칙은 shared/base-refs.ts.
+ */
+export interface BaseRef {
+  filePath: string
+  refType: CharRefType
+  strength: number
 }
 
 /** 프리셋에 함께 저장되는 생성 파라미터 (시드·캐릭터는 제외) */
@@ -441,6 +453,8 @@ export interface Scene {
   imageCount: number
   /** 즐겨찾기 이미지 보유 여부 — 카드 썸네일 고정(즐겨찾기 우선) 판정용 */
   hasFavorite: boolean
+  /** 이 씬만의 기준 레퍼. null = 프리셋 것을 따른다 */
+  baseRefs: BaseRef[] | null
 }
 
 /** 씬 상세의 생성 이미지 (페이지네이션 단위) */
@@ -790,6 +804,18 @@ export interface IpcInvokeMap {
     req: { id: number; characterIds: number[] | null }
     res: void
   }
+  /** 프리셋 기준 레퍼 — null = 지우기 */
+  'scenePresets:setBaseRefs': {
+    req: { id: number; refs: BaseRef[] | null }
+    res: { ok: true } | { error: string }
+  }
+  /** 씬 기준 레퍼 — null = 지우기 (프리셋 것을 따른다) */
+  'scenes:setBaseRefs': {
+    req: { id: number; refs: BaseRef[] | null }
+    res: { ok: true } | { error: string }
+  }
+  /** 기준 레퍼로 쓸 그림 고르기 (여러 장). 취소하면 빈 목록 */
+  'baseRefs:pick': { req: void; res: { paths: string[] } }
   'promptPresets:reorder': { req: { ids: number[] }; res: void }
   'promptPresets:list': { req: void; res: { items: PromptPreset[] } }
   'promptPresets:create': {

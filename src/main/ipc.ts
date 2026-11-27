@@ -8,7 +8,7 @@ import {
   Notification,
   shell
 } from 'electron'
-import type { IpcEventMap, IpcInvokeMap } from '../shared/types'
+import type { BaseRef, IpcEventMap, IpcInvokeMap } from '../shared/types'
 import type { ReturnedReservation } from './queue/generation-queue'
 import {
   getInbox,
@@ -73,6 +73,7 @@ import * as cover from './cover/repo'
 import * as coverArchive from './cover/archive'
 import { tagKnowledge } from './nai/tag-knowledge'
 import { normalizeSceneSeed } from '../shared/scene-seed'
+import { normalizeBaseRefs } from '../shared/base-refs'
 import { analyzeArtists } from './images/artists'
 import { metadataFromPng, metadataFromPayloadJson } from './images/metadata'
 import {
@@ -138,6 +139,8 @@ import {
   movePresetsToFolder,
   reorderPresetTree,
   setPresetCharacters,
+  setPresetBaseRefs,
+  setSceneBaseRefs,
   setPresetDefaultResolution,
   listScenes,
   createScene,
@@ -651,6 +654,37 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
   })
   handle('scenePresets:setCharacters', ({ id, characterIds }) => {
     setPresetCharacters(id, characterIds)
+  })
+  // 기준 레퍼: 모양을 확인하고 그림 파일이 있는 것만 받는다 (없으면 아무것도 바꾸지 않는다)
+  const checkedBaseRefs = (refs: unknown): { refs: BaseRef[] | null } | { error: string } => {
+    const checked = normalizeBaseRefs(refs)
+    if (!checked.ok) return { error: checked.error }
+    const missing = (checked.refs ?? []).find((r) => !existsSync(r.filePath))
+    if (missing) return { error: `그림 파일이 없어요: ${basename(missing.filePath)}` }
+    return { refs: checked.refs }
+  }
+  handle('scenePresets:setBaseRefs', ({ id, refs }) => {
+    const checked = checkedBaseRefs(refs)
+    if ('error' in checked) return checked
+    return setPresetBaseRefs(Number(id), checked.refs)
+      ? { ok: true as const }
+      : { error: '프리셋을 찾지 못했어요' }
+  })
+  handle('scenes:setBaseRefs', ({ id, refs }) => {
+    const checked = checkedBaseRefs(refs)
+    if ('error' in checked) return checked
+    return setSceneBaseRefs(Number(id), checked.refs)
+      ? { ok: true as const }
+      : { error: '씬을 찾지 못했어요' }
+  })
+  handle('baseRefs:pick', async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showOpenDialog(win, {
+      title: '기준 레퍼 그림 고르기',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '그림', extensions: ['png', 'webp', 'jpg', 'jpeg'] }]
+    })
+    return { paths: result.canceled ? [] : result.filePaths }
   })
   handle('scenePresets:setDefaultResolution', ({ id, width, height }) => {
     setPresetDefaultResolution(id, width, height)

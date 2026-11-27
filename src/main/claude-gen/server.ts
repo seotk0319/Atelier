@@ -5,8 +5,19 @@ import { homedir } from 'os'
 import { join } from 'path'
 import type { GenerationQueue } from '../queue/generation-queue'
 import { getSetting } from '../db/settings'
-import { createPreset, createScene, listPresets, listScenes, updateScene } from '../scenes/repo'
+import { getDb } from '../db'
+import {
+  createPreset,
+  createScene,
+  listPresetFolders,
+  listPresets,
+  listScenes,
+  setPresetBaseRefs,
+  setSceneBaseRefs,
+  updateScene
+} from '../scenes/repo'
 import { buildClaudeRequest, checkJobs, parseMainParams, seedFor } from './build'
+import { planBaseRefs } from './base-refs-plan'
 
 /**
  * 클로 생성 창구: 집 PC의 클로 세션이 NAI 생성을 앱 대기열에 넣는 로컬 주소.
@@ -14,6 +25,8 @@ import { buildClaudeRequest, checkJobs, parseMainParams, seedFor } from './build
  *   (Claude 앱 셸에서 %APPDATA%가 다른 폴더로 돌려지는 일을 피해 홈 폴더에 둔다).
  * - 설정 claude_gen_enabled='0'이면 모든 요청을 거절한다 (기본 켜짐).
  * - 받은 건마다 프리셋(기본 「클로 생성」) 아래 같은 이름의 씬을 만들거나 고치고, 바로 뽑기 줄에 넣는다.
+ *   건에 charRefs가 있으면 그 씬의 기준 레퍼로도 저장한다 (화면에서 다시 뽑아도 같은 레퍼가 실린다).
+ * - POST /base-refs: 이미 있는 프리셋·씬에 기준 레퍼를 넣거나 지운다. GET /base-refs: 확인용 목록.
  */
 
 export const CLAUDE_GEN_ENABLED_KEY = 'claude_gen_enabled'
@@ -136,6 +149,8 @@ function handleGenerate(deps: ClaudeGenDeps, body: Record<string, unknown>): [nu
       width,
       height
     })
+    // 받은 레퍼는 이 씬의 기준 레퍼로 남긴다. 레퍼 없이 온 건은 있던 기준 레퍼를 건드리지 않는다.
+    if (job.charRefs?.length) setSceneBaseRefs(sceneId, job.charRefs)
     const ids: string[] = []
     let error: string | undefined
     for (let i = 0; i < (job.count ?? 1); i++) {
@@ -164,6 +179,63 @@ function handleGenerate(deps: ClaudeGenDeps, body: Record<string, unknown>): [nu
   }
   deps.onScenesChanged(preset.id)
   return [200, { ok: true, preset: { id: preset.id, name: presetName }, allowAnlas, jobs }]
+}
+
+function handleSetBaseRefs(deps: ClaudeGenDeps, body: Record<string, unknown>): [number, unknown] {
+  const plan = planBaseRefs(body.items, {
+    presets: listPresets(),
+    folders: listPresetFolders(),
+    scenesOf: (presetId) => listScenes(presetId),
+    fileExists: (path) => existsSync(path)
+  })
+  if (!plan.ok) return [400, { ok: false, errors: plan.errors }]
+  const summary = {
+    presets: plan.changes.filter((c) => c.target === 'preset').length,
+    scenes: plan.changes.filter((c) => c.target === 'scene').length,
+    cleared: plan.changes.filter((c) => !c.refs).length
+  }
+  if (body.dryRun === true) return [200, { ok: true, dryRun: true, ...summary }]
+  getDb().transaction(() => {
+    for (const c of plan.changes)
+      if (c.target === 'preset') setPresetBaseRefs(c.id, c.refs)
+      else setSceneBaseRefs(c.id, c.refs)
+  })()
+  for (const presetId of new Set(plan.changes.map((c) => c.presetId)))
+    deps.onScenesChanged(presetId)
+  return [200, { ok: true, ...summary }]
+}
+
+/** 확인용: ?presetId=1,2 또는 ?folder=이름(그 폴더와 하위 폴더의 프리셋) */
+function handleListBaseRefs(params: URLSearchParams): [number, unknown] {
+  const presets = listPresets()
+  const folders = listPresetFolders()
+  let picked = presets
+  const ids = (params.get('presetId') ?? '')
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0)
+  const folder = params.get('folder')?.trim()
+  if (ids.length) picked = presets.filter((p) => ids.includes(p.id))
+  else if (folder) {
+    const top = folders.filter((f) => f.name === folder).map((f) => f.id)
+    const all = new Set([
+      ...top,
+      ...folders.filter((f) => top.includes(f.parentId ?? -1)).map((f) => f.id)
+    ])
+    picked = presets.filter((p) => p.folderId != null && all.has(p.folderId))
+  } else return [400, { ok: false, error: 'presetId나 folder를 주세요' }]
+  return [
+    200,
+    {
+      ok: true,
+      presets: picked.map((p) => ({
+        id: p.id,
+        name: p.name,
+        baseRefs: p.baseRefs,
+        scenes: listScenes(p.id).map((s) => ({ id: s.id, name: s.name, baseRefs: s.baseRefs }))
+      }))
+    }
+  ]
 }
 
 function handleJobs(deps: ClaudeGenDeps, idsParam: string | null): [number, unknown] {
@@ -205,7 +277,7 @@ function handleStatus(deps: ClaudeGenDeps): [number, unknown] {
       pending: s.counts.pending,
       generating: s.counts.generating,
       // 옛 판은 모르는 칸(charRefs)을 말없이 버린다 — 스크립트가 이걸 보고 레퍼를 보낼지 정한다.
-      features: ['charRefs', 'seed']
+      features: ['charRefs', 'seed', 'baseRefs']
     }
   ]
 }
@@ -254,7 +326,15 @@ export function startClaudeGenServer(deps: ClaudeGenDeps): Server | null {
             body && typeof body === 'object'
               ? handleGenerate(deps, body as Record<string, unknown>)
               : [400, { ok: false, error: '본문은 객체여야 해요' }]
-        } else if (req.method === 'POST' && parsed.pathname === '/cancel') {
+        } else if (req.method === 'POST' && parsed.pathname === '/base-refs') {
+          const body = await readBody(req)
+          result =
+            body && typeof body === 'object'
+              ? handleSetBaseRefs(deps, body as Record<string, unknown>)
+              : [400, { ok: false, error: '본문은 객체여야 해요' }]
+        } else if (req.method === 'GET' && parsed.pathname === '/base-refs')
+          result = handleListBaseRefs(parsed.searchParams)
+        else if (req.method === 'POST' && parsed.pathname === '/cancel') {
           const body = (await readBody(req)) as { ids?: unknown }
           const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string') : []
           deps.queue.cancel(ids as string[])

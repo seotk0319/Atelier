@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { recordNav } from '../lib/nav-history'
-import type { GenerationRequest, ListFolder, Scene, SceneImage, ScenePreset } from '@shared/types'
+import type {
+  BaseRef,
+  GenerationRequest,
+  ListFolder,
+  Scene,
+  SceneImage,
+  ScenePreset
+} from '@shared/types'
 import { canonicalize, moveRow, toOrderEntries } from '../lib/folder-list'
 import { moveFolderRow, orderFolders } from '../lib/preset-tree'
 import { joinPromptSections } from '@shared/char-sections'
@@ -116,6 +123,9 @@ interface ScenesState {
   generateAllReserved: () => Promise<number>
   /** 프리셋 캐릭터 바인드 (null = 해제) */
   setPresetCharacters: (id: number, characterIds: number[] | null) => Promise<void>
+  /** 기준 레퍼 저장 (null = 지우기). 실패하면 토스트를 띄우고 false */
+  setPresetBaseRefs: (id: number, refs: BaseRef[] | null) => Promise<boolean>
+  setSceneBaseRefs: (id: number, refs: BaseRef[] | null) => Promise<boolean>
   /** 이 씬 1장 바로 생성 (예약 없이 — NAIS2식 즉석 생성) */
   // 큐에 실제로 들어갔는지 돌려준다 (인페인트 확정 시 소스 정리 판단용)
   generateOne: (sceneId: number) => Promise<boolean>
@@ -704,6 +714,28 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
     await window.nais.invoke('scenePresets:setCharacters', { id, characterIds: normalized })
   },
 
+  setPresetBaseRefs: async (id, refs) => {
+    const res = await window.nais.invoke('scenePresets:setBaseRefs', { id, refs })
+    if ('error' in res) {
+      toast(res.error, 'error')
+      return false
+    }
+    const baseRefs = refs && refs.length > 0 ? refs : null
+    set({ presets: get().presets.map((p) => (p.id === id ? { ...p, baseRefs } : p)) })
+    return true
+  },
+
+  setSceneBaseRefs: async (id, refs) => {
+    const res = await window.nais.invoke('scenes:setBaseRefs', { id, refs })
+    if ('error' in res) {
+      toast(res.error, 'error')
+      return false
+    }
+    const baseRefs = refs && refs.length > 0 ? refs : null
+    set({ scenes: get().scenes.map((s) => (s.id === id ? { ...s, baseRefs } : s)) })
+    return true
+  },
+
   generateOne: async (sceneId) => {
     const scene = get().scenes.find((s) => s.id === sceneId)
     if (!scene) return false
@@ -813,7 +845,8 @@ export function bindSceneEvents(): () => void {
   const offPresets = window.nais.on('scenePresets:changed', ({ presetId }) => {
     const st = useScenesStore.getState()
     void st.loadPresets(false).then(() => {
-      if (useScenesStore.getState().activePresetId === presetId) void useScenesStore.getState().load()
+      if (useScenesStore.getState().activePresetId === presetId)
+        void useScenesStore.getState().load()
     })
   })
   // 취소한 예약이 씬으로 돌아옴 — 예약 수만 다시 읽어 맞춘다 (썸네일·장수는 건드리지 않는다)

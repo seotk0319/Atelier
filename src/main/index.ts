@@ -13,6 +13,7 @@ import { applyCharSections } from '../shared/char-sections'
 import { composeWeakened, GENERAL_WEIGHT_KEY, parseGeneralWeight } from '../shared/general-weight'
 import { isV5Model, maxCharactersForModel, supportsVibes } from '../shared/nai-models'
 import { effortForRefs, refsForModel, sentRefCount } from '../shared/char-refs'
+import { refsWithBase } from '../shared/base-refs'
 import type { CharRefType } from '../shared/types'
 import { withFixedSettings } from '../shared/nai-models'
 import { fragmentSource } from './fragments/repo'
@@ -38,7 +39,7 @@ import {
 } from './profile'
 import { GenerationQueue } from './queue/generation-queue'
 import { startClaudeGenServer } from './claude-gen/server'
-import { getPresetName, getScene } from './scenes/repo'
+import { getPresetName, getScene, resolveSceneBaseRefs } from './scenes/repo'
 import { platformSource, viewClient } from './remote/source'
 import { sniffImage, thumbAllowed } from './notifications/work-images'
 import { startInbox, closeInbox } from './notifications/service'
@@ -197,19 +198,29 @@ app.whenReady().then(async () => {
       // 있음 확인)를 쓸데없이 일반으로 올려 보내지 않게.
       // 클로 생성 창구에서 온 요청은 화면에서 켜 둔 레퍼·바이브를 싣지 않는다 (받은 프롬프트만 보낸다).
       const fromClaude = queuedRequest.origin === 'claude'
+      // 기준 레퍼: 씬 생성이면 지금 DB의 씬(없으면 프리셋) 기준 레퍼를 싣고, 화면에서 켜 둔 레퍼는 뺀다
+      // (프리셋 캐릭터 바인드와 같은 규칙, shared/base-refs.ts).
+      const { extraCharRefs: sendExtraRefs, screenRefs } = refsWithBase(
+        queuedRequest.extraCharRefs,
+        !fromClaude && queuedRequest.sceneId != null
+          ? resolveSceneBaseRefs(queuedRequest.sceneId)
+          : null,
+        fromClaude
+      )
       const crefCount =
         queuedRequest.source?.maskBase64 && isV5Model(queuedRequest.model)
           ? 0
           : sentRefCount(
               [
-                ...(fromClaude ? [] : enabledCharRefRows().map((r) => r.refType as CharRefType)),
-                ...(queuedRequest.extraCharRefs ?? []).map((r) => r.refType)
+                ...(screenRefs ? enabledCharRefRows().map((r) => r.refType as CharRefType) : []),
+                ...sendExtraRefs.map((r) => r.refType)
               ],
               queuedRequest.model
             )
       // V5 Full Medium은 스텝·샘플러·네거티브가 고정이다. 무료 확인·저장 기록도 실제로 보낸 값으로 맞춘다.
       const rawRequest = withFixedSettings({
         ...queuedRequest,
+        extraCharRefs: sendExtraRefs.length ? sendExtraRefs : undefined,
         model: effortForRefs(queuedRequest.model, crefCount)
       })
       const token = account.token
@@ -291,7 +302,7 @@ app.whenReady().then(async () => {
       // 그림 모양(V4.5 캔버스 / V5 버킷)은 보낼 모델로 정한다. 인페인트로 바뀌어도 V4.5/V5는 그대로다.
       const preparedCharRefs = [
         ...extraCharacterReferences,
-        ...(fromClaude ? [] : await prepareCharRefs(rawRequest.model))
+        ...(screenRefs ? await prepareCharRefs(rawRequest.model) : [])
       ]
 
       let source = request.source

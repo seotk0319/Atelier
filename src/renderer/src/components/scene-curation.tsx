@@ -36,6 +36,7 @@ import { toast } from '../stores/toast-store'
 import { useLayoutStore } from '../stores/layout-store'
 import { formatCombo, useShortcutsStore } from '../stores/shortcuts-store'
 import { PresetDropdown } from './scene-mode'
+import { SceneBaseRefControl } from './base-ref-dialog'
 import { Button } from './ui/button'
 import {
   ContextMenu,
@@ -489,6 +490,7 @@ export function SceneCuration({ onClose }: { onClose: () => void }): React.JSX.E
                 : `씬 ${scenes.length}`}
               {images.length > 0 && ` · ${index + 1} / ${images.length}장`}
             </span>
+            {scene && <SceneBaseRefControl scene={scene} />}
             <span className="hidden items-center gap-1 text-[12px] text-faint xl:flex">
               <kbd>↑</kbd>
               <kbd>↓</kbd> 씬 이동 <kbd className="ml-1">←</kbd>

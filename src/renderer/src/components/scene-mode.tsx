@@ -6,6 +6,7 @@ import {
   FolderArchive,
   FolderOpen,
   ImageOff,
+  Images,
   ListChecks,
   Loader2,
   Minus,
@@ -58,6 +59,7 @@ import { useQueueRun } from '../lib/queue-run'
 import { useLayoutStore } from '../stores/layout-store'
 import { PresetManager } from './preset-manager'
 import { ScenePresetPicker } from './scene-preset-picker'
+import { BaseRefChip, PresetBaseRefDialog } from './base-ref-dialog'
 import { Button } from './ui/button'
 import { Segmented, SegmentedCount, SegmentedItem } from './ui/segmented'
 import { EditableCount } from './ui/editable-count'
@@ -371,6 +373,8 @@ function useGridWindow(
 function SceneGrid(): React.JSX.Element {
   const scenes = useScenesStore((s) => s.scenes)
   const activePresetId = useScenesStore((s) => s.activePresetId)
+  const activePreset = useScenesStore((s) => s.presets.find((p) => p.id === s.activePresetId))
+  const [baseRefOpen, setBaseRefOpen] = useState(false)
   const create = useScenesStore((s) => s.create)
   const editMode = useScenesStore((s) => s.editMode)
   const setEditMode = useScenesStore((s) => s.setEditMode)
@@ -559,6 +563,13 @@ function SceneGrid(): React.JSX.Element {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
       <>
+        {baseRefOpen && activePreset && (
+          <PresetBaseRefDialog
+            key={activePreset.id}
+            preset={activePreset}
+            onClose={() => setBaseRefOpen(false)}
+          />
+        )}
         {/* 머리줄: 제목 · 프리셋 · 도구 */}
         {/* 좁은 창에선 도구 단추가 다음 줄로 내려간다 — 프리셋 이름이 사라지거나 「더 보기」가 옆 칸으로 밀려나지 않게 */}
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 px-5 pb-3 pt-4">
@@ -567,6 +578,12 @@ function SceneGrid(): React.JSX.Element {
             {scenes.length.toLocaleString()}
           </span>
           <PresetDropdown triggerClassName="min-w-[7rem]" />
+          {activePreset?.baseRefs?.length ? (
+            <BaseRefChip
+              count={activePreset.baseRefs.length}
+              onClick={() => setBaseRefOpen(true)}
+            />
+          ) : null}
           <div className="min-w-2 flex-1" />
           <Button
             className="h-9 shrink-0 px-3"
@@ -602,6 +619,12 @@ function SceneGrid(): React.JSX.Element {
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-60 p-1">
+              <MenuItem
+                icon={<Images size={13} />}
+                label="기준 레퍼"
+                onClick={() => setBaseRefOpen(true)}
+              />
+              <div className="my-1 h-px bg-line" />
               <MenuItem icon={<FileUp size={13} />} label="씬 JSON 내보내기" onClick={exportJson} />
               <MenuItem
                 icon={<FolderArchive size={13} />}
