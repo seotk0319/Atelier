@@ -14,6 +14,8 @@ export interface ClaudeGenJob {
   height?: number
   count?: number
   model?: string
+  /** 시드. 주면 장마다 seed, seed+1, …(2^32 넘으면 0부터). 없으면 장마다 무작위. */
+  seed?: number
   /** 이 건에만 싣는 캐릭터 레퍼런스. 화면에서 켜 둔 레퍼는 여전히 싣지 않는다. */
   charRefs?: ClaudeGenCharRef[]
 }
@@ -58,6 +60,11 @@ export function parseMainParams(raw: string | null | undefined): GenerationReque
 
 function mergeParts(parts: { base: string; additional: string; detail: string }): string {
   return [parts.base, parts.additional, parts.detail].filter((p) => p.trim()).join(', ')
+}
+
+/** 건의 i번째 장 시드 — 시드를 받았으면 seed+i(넘치면 0부터), 아니면 무작위 */
+export function seedFor(job: ClaudeGenJob, i: number): number {
+  return job.seed === undefined ? randomSeed() : (job.seed + i) % 4294967296
 }
 
 export function randomSeed(): number {
@@ -119,6 +126,7 @@ const MAX_JOBS = 8
 const MAX_COUNT = 8
 const MAX_TOTAL = 32
 const MAX_REFS = 4
+const MAX_SEED = 4294967295
 /** delta(예전 방식)는 파일 경로만으로 만들 수 없어 받지 않는다. */
 const REF_TYPES: readonly CharRefType[] = [
   'character',
@@ -188,6 +196,14 @@ export function checkJobs(input: unknown): JobCheck {
       (typeof raw.model !== 'string' || !/^nai-diffusion-[\w.-]+$/.test(raw.model))
     )
       return { ok: false, error: `${name}: model 이름이 이상해요` }
+    if (
+      raw.seed !== undefined &&
+      (typeof raw.seed !== 'number' ||
+        !Number.isInteger(raw.seed) ||
+        raw.seed < 0 ||
+        raw.seed > MAX_SEED)
+    )
+      return { ok: false, error: `${name}: seed는 0~${MAX_SEED} 정수예요` }
     const refCheck = checkRefs(name, raw.charRefs)
     if (refCheck.error) return { ok: false, error: refCheck.error }
     total += count
@@ -199,6 +215,7 @@ export function checkJobs(input: unknown): JobCheck {
       height: raw.height as number | undefined,
       count,
       model: raw.model as string | undefined,
+      ...(raw.seed !== undefined ? { seed: raw.seed as number } : {}),
       ...(refCheck.refs?.length ? { charRefs: refCheck.refs } : {})
     })
   }

@@ -6,7 +6,7 @@ import { join } from 'path'
 import type { GenerationQueue } from '../queue/generation-queue'
 import { getSetting } from '../db/settings'
 import { createPreset, createScene, listPresets, listScenes, updateScene } from '../scenes/repo'
-import { buildClaudeRequest, checkJobs, parseMainParams, randomSeed } from './build'
+import { buildClaudeRequest, checkJobs, parseMainParams, seedFor } from './build'
 
 /**
  * 클로 생성 창구: 집 PC의 클로 세션이 NAI 생성을 앱 대기열에 넣는 로컬 주소.
@@ -147,7 +147,7 @@ function handleGenerate(deps: ClaudeGenDeps, body: Record<string, unknown>): [nu
         { width, height },
         {
           allowAnlas,
-          seed: randomSeed()
+          seed: seedFor(job, i)
         }
       )
       const result = deps.queue.tryEnqueueQuick(request)
@@ -205,7 +205,7 @@ function handleStatus(deps: ClaudeGenDeps): [number, unknown] {
       pending: s.counts.pending,
       generating: s.counts.generating,
       // 옛 판은 모르는 칸(charRefs)을 말없이 버린다 — 스크립트가 이걸 보고 레퍼를 보낼지 정한다.
-      features: ['charRefs']
+      features: ['charRefs', 'seed']
     }
   ]
 }

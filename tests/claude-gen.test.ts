@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildClaudeRequest, checkJobs, parseMainParams } from '../src/main/claude-gen/build'
+import {
+  buildClaudeRequest,
+  checkJobs,
+  parseMainParams,
+  seedFor
+} from '../src/main/claude-gen/build'
 import { buildGenerateImagePayload } from '../src/main/nai/payload'
 
 const job = {
@@ -133,11 +138,31 @@ describe('claude-gen buildClaudeRequest', () => {
   })
 })
 
+describe('claude-gen seedFor', () => {
+  it('시드를 받으면 장마다 하나씩 올리고, 넘치면 0부터', () => {
+    expect(seedFor({ name: 'a', prompt: 'x', seed: 2107633743 }, 0)).toBe(2107633743)
+    expect(seedFor({ name: 'a', prompt: 'x', seed: 2107633743 }, 1)).toBe(2107633744)
+    expect(seedFor({ name: 'a', prompt: 'x', seed: 4294967295 }, 1)).toBe(0)
+  })
+  it('시드가 없으면 무작위 정수', () => {
+    const v = seedFor({ name: 'a', prompt: 'x' }, 0)
+    expect(Number.isInteger(v) && v >= 0 && v < 4294967296).toBe(true)
+  })
+})
+
 describe('claude-gen checkJobs', () => {
   it('정상 입력은 글을 고치지 않고 돌려준다', () => {
     const r = checkJobs([{ ...job, count: 2, width: 832, height: 1216 }])
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.jobs[0].prompt).toBe(job.prompt)
+  })
+
+  it('seed는 그대로 넘긴다', () => {
+    const r = checkJobs([
+      { ...job, seed: 0 },
+      { ...job, name: 'b', seed: 4294967295 }
+    ])
+    expect(r.ok && r.jobs.map((j) => j.seed)).toEqual([0, 4294967295])
   })
 
   it('charRefs는 종류 기본 character·강도 기본 1로 받고, 윈도 경로를 그대로 둔다', () => {
@@ -173,6 +198,9 @@ describe('claude-gen checkJobs', () => {
     ],
     [[{ name: 'a', prompt: 'x', model: 'gpt-image' }], 'model'],
     [Array.from({ length: 5 }, (_, i) => ({ name: `n${i}`, prompt: 'x', count: 7 })), '32장'],
+    [[{ name: 'a', prompt: 'x', seed: -1 }], 'seed'],
+    [[{ name: 'a', prompt: 'x', seed: 1.5 }], 'seed'],
+    [[{ name: 'a', prompt: 'x', seed: 4294967296 }], 'seed'],
     [[{ name: 'a', prompt: 'x', charRefs: [{ filePath: 'rel/a.png' }] }], '절대 경로'],
     [[{ name: 'a', prompt: 'x', charRefs: [{ filePath: 'C:/a.gif' }] }], '절대 경로'],
     [
