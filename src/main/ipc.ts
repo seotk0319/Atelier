@@ -615,9 +615,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
 
   handle('scenePresets:list', () => ({ items: listPresets(), folders: listPresetFolders() }))
   handle('scenePresets:create', ({ name, folderId }) => ({ id: createPreset(name, folderId) }))
-  handle('scenePresets:rename', ({ id, name }) => {
-    renamePreset(id, name)
-  })
+  handle('scenePresets:rename', ({ id, name }) => renamePreset(id, name))
   handle('scenePresets:delete', ({ id }) => {
     // 마지막 프리셋은 지우지 않는다(deletePreset이 그냥 돌아간다) — 그때는 큐도 건드리지 않는다
     if (listPresets().length <= 1) return
@@ -815,9 +813,7 @@ export function registerIpcHandlers(ctx: { dbVersion: number; queue: GenerationQ
     adjustReserveAll(presetId, delta, ids)
   })
   handle('scenes:reservedTotal', () => ({ total: reservedTotal() }))
-  handle('scenes:bulkMove', ({ ids, presetId }) => {
-    bulkMove(ids, presetId)
-  })
+  handle('scenes:bulkMove', ({ ids, presetId }) => bulkMove(ids, presetId))
   handle('scenes:bulkDelete', ({ ids }) => {
     ctx.queue.cancelScenes(ids)
     bulkDelete(ids)

@@ -12,51 +12,17 @@ import {
   serializeBaseRefs
 } from '../src/shared/base-refs'
 import { planBaseRefs, type PlanSource } from '../src/main/claude-gen/base-refs-plan'
+import { sqliteShim } from './fixtures/sqlite-shim'
 
-// better-sqlite3는 Electron용 빌드라 vitest에서 못 연다 — node:sqlite로 필요한 API만 흉내 낸다
 let raw: DatabaseSync
-function shim(): Database.Database {
-  const api = {
-    exec(sql: string) {
-      raw.exec(sql)
-      return api
-    },
-    prepare(sql: string) {
-      const st = raw.prepare(sql)
-      return {
-        run: (...p: never[]) => st.run(...p),
-        get: (...p: never[]) => st.get(...p),
-        all: (...p: never[]) => st.all(...p)
-      }
-    },
-    pragma(source: string, options?: { simple?: boolean }) {
-      if (source.includes('=')) {
-        raw.exec(`PRAGMA ${source}`)
-        return []
-      }
-      const row = raw.prepare(`PRAGMA ${source}`).get() as Record<string, unknown>
-      return options?.simple ? Object.values(row)[0] : [row]
-    },
-    transaction<T>(fn: () => T) {
-      const run = (): T => {
-        raw.exec('BEGIN')
-        try {
-          const r = fn()
-          raw.exec('COMMIT')
-          return r
-        } catch (e) {
-          raw.exec('ROLLBACK')
-          throw e
-        }
-      }
-      return Object.assign(run, { immediate: run, deferred: run })
-    }
-  }
-  return api as unknown as Database.Database
-}
+const shim = (): Database.Database => sqliteShim(() => raw)
 
 vi.mock('electron', () => ({ BrowserWindow: {}, dialog: {} }))
-vi.mock('../src/main/images/storage', () => ({ libraryRoot: () => 'C:/lib' }))
+vi.mock('../src/main/images/storage', () => ({
+  libraryRoot: () => 'C:/lib',
+  sceneDir: (p: string | null, s: string) => `C:/scenes/${p}/${s}`,
+  scenePresetDir: (p: string | null) => `C:/scenes/${p}`
+}))
 vi.mock('../src/main/db', () => ({ getDb: () => shim() }))
 
 const A = { filePath: 'D:\\refs\\a.webp', refType: 'character' as const, strength: 2.5 }

@@ -13,7 +13,8 @@ import type {
 import { getDb } from '../db'
 import { normalizeSceneSeed } from '../../shared/scene-seed'
 import { parseBaseRefs, sceneOrPresetRefs, serializeBaseRefs } from '../../shared/base-refs'
-import { libraryRoot } from '../images/storage'
+import { libraryRoot, sceneDir, scenePresetDir } from '../images/storage'
+import { relocateSceneImages, removeIfEmpty, type RelocateResult } from './relocate'
 import {
   planSceneZipEntries,
   sanitizeZipName,
@@ -285,8 +286,25 @@ export function uniquePresetName(base: string): string {
   return `${base} (${n})`
 }
 
-export function renamePreset(id: number, name: string): void {
-  getDb().prepare('UPDATE scene_presets SET name = ? WHERE id = ?').run(name, id)
+/** 이름을 바꾸고 씬 그림 폴더({프리셋}/{씬})도 새 이름 아래로 옮긴다 */
+export function renamePreset(id: number, name: string): RelocateResult {
+  const db = getDb()
+  const old = getPresetName(id)
+  db.prepare('UPDATE scene_presets SET name = ? WHERE id = ?').run(name, id)
+  if (old === null || old === name) return { moved: 0, failed: 0 }
+  const scenes = db.prepare('SELECT id, name FROM gen_scenes WHERE preset_id = ?').all(id) as {
+    id: number
+    name: string
+  }[]
+  const result = relocateSceneImages(
+    scenes.map((s) => ({
+      sceneId: s.id,
+      fromDir: sceneDir(old, s.name, s.id),
+      toDir: sceneDir(name, s.name, s.id)
+    }))
+  )
+  removeIfEmpty(scenePresetDir(old))
+  return result
 }
 
 /** 프리셋 삭제 — 마지막 하나는 못 지움. 안의 씬도 함께 삭제(이미지는 scene_id만 끊김) */
@@ -512,11 +530,31 @@ function placeholders(n: number): string {
   return Array(n).fill('?').join(',')
 }
 
-export function bulkMove(ids: number[], presetId: number): void {
-  if (ids.length === 0) return
-  getDb()
-    .prepare(`UPDATE gen_scenes SET preset_id = ? WHERE id IN (${placeholders(ids.length)})`)
-    .run(presetId, ...ids)
+/** 씬을 다른 프리셋으로 옮기고 그 씬 그림 폴더({프리셋}/{씬})도 새 프리셋 아래로 옮긴다 */
+export function bulkMove(ids: number[], presetId: number): RelocateResult {
+  if (ids.length === 0) return { moved: 0, failed: 0 }
+  const db = getDb()
+  const before = db
+    .prepare(
+      `SELECT s.id, s.name, p.name AS preset_name FROM gen_scenes s
+       LEFT JOIN scene_presets p ON p.id = s.preset_id WHERE s.id IN (${placeholders(ids.length)})`
+    )
+    .all(...ids) as { id: number; name: string; preset_name: string | null }[]
+  const target = getPresetName(presetId)
+  db.prepare(`UPDATE gen_scenes SET preset_id = ? WHERE id IN (${placeholders(ids.length)})`).run(
+    presetId,
+    ...ids
+  )
+  if (target === null) return { moved: 0, failed: 0 }
+  const result = relocateSceneImages(
+    before.map((s) => ({
+      sceneId: s.id,
+      fromDir: sceneDir(s.preset_name, s.name, s.id),
+      toDir: sceneDir(target, s.name, s.id)
+    }))
+  )
+  for (const name of new Set(before.map((s) => s.preset_name))) removeIfEmpty(scenePresetDir(name))
+  return result
 }
 
 export function bulkDelete(ids: number[]): void {

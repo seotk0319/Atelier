@@ -773,7 +773,11 @@ export interface IpcInvokeMap {
   }
   'scenePresets:list': { req: void; res: { items: ScenePreset[]; folders: ListFolder[] } }
   'scenePresets:create': { req: { name: string; folderId?: number | null }; res: { id: number } }
-  'scenePresets:rename': { req: { id: number; name: string }; res: void }
+  /** 이름을 바꾸면 씬 그림 폴더도 옮긴다. failed = 옮기지 못한 그림 수 */
+  'scenePresets:rename': {
+    req: { id: number; name: string }
+    res: { moved: number; failed: number }
+  }
   'scenePresets:delete': { req: { id: number }; res: void }
   'scenePresets:reorder': { req: { ids: number[] }; res: void }
   /** 폴더·프리셋 전체 순서 (미분류 먼저, 소속은 직전 폴더에서 파생) */
@@ -873,7 +877,11 @@ export interface IpcInvokeMap {
   /** 모든 프리셋의 예약 총합 — 좌측 "씬 생성 n장" 표시용 */
   'scenes:reservedTotal': { req: void; res: { total: number } }
   /** 편집 모드 일괄 작업 (선택 씬 대상) */
-  'scenes:bulkMove': { req: { ids: number[]; presetId: number }; res: void }
+  /** 씬을 옮기면 씬 그림 폴더도 새 프리셋 아래로 옮긴다 */
+  'scenes:bulkMove': {
+    req: { ids: number[]; presetId: number }
+    res: { moved: number; failed: number }
+  }
   'scenes:bulkDelete': { req: { ids: number[] }; res: void }
   'scenes:bulkSetResolution': { req: { ids: number[]; width: number; height: number }; res: void }
   'scenes:bulkClearFavorites': { req: { ids: number[] }; res: void }

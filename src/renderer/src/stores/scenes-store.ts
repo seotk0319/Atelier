@@ -269,7 +269,14 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
   },
   renamePreset: async (id, name) => {
     set({ presets: get().presets.map((p) => (p.id === id ? { ...p, name } : p)) })
-    await window.nais.invoke('scenePresets:rename', { id, name })
+    // 씬 그림 폴더도 새 이름 아래로 옮겨진다 — 카드·상세가 옛 경로를 들고 있지 않게 다시 읽는다
+    const { moved, failed } = await window.nais.invoke('scenePresets:rename', { id, name })
+    if (failed > 0) toast(`그림 ${failed}장은 옮기지 못해 옛 폴더에 남았어요`, 'error')
+    if (moved > 0 && get().activePresetId === id) {
+      await get().load()
+      const sel = get().selectedId
+      if (sel != null) void get().loadImages(sel, true)
+    }
   },
   deletePreset: async (id) => {
     await window.nais.invoke('scenePresets:delete', { id })
@@ -528,7 +535,8 @@ export const useScenesStore = create<ScenesState>((set, get) => ({
 
   bulkMove: async (presetId) => {
     const ids = [...get().selection]
-    await window.nais.invoke('scenes:bulkMove', { ids, presetId })
+    const { failed } = await window.nais.invoke('scenes:bulkMove', { ids, presetId })
+    if (failed > 0) toast(`그림 ${failed}장은 옮기지 못해 옛 폴더에 남았어요`, 'error')
     set({ selection: new Set() })
     await get().load()
   },
