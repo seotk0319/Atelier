@@ -106,6 +106,27 @@ describe('claude-gen buildClaudeRequest', () => {
     expect(text).not.toContain('# 캐릭터')
   })
 
+  it('건에 charRefs가 있으면 그것만 extraCharRefs로 싣고 메인의 레퍼는 버린다', () => {
+    const base = parseMainParams(
+      JSON.stringify({
+        model: 'nai-diffusion-5-full',
+        prompt: '',
+        extraCharRefs: [{ filePath: 'C:/old.png', refType: 'style', strength: 1, fidelity: 1 }]
+      })
+    )
+    const req = buildClaudeRequest(
+      base,
+      false,
+      { ...job, charRefs: [{ filePath: 'D:/ref/E01.webp', refType: 'character', strength: 2.5 }] },
+      1,
+      { width: 1024, height: 1024 },
+      { allowAnlas: true, seed: 9 }
+    )
+    expect(req.extraCharRefs).toEqual([
+      { filePath: 'D:/ref/E01.webp', refType: 'character', strength: 2.5, fidelity: 1 }
+    ])
+  })
+
   it('main_params가 깨졌으면 기본값으로 시작한다', () => {
     expect(parseMainParams('{oops').steps).toBe(28)
     expect(parseMainParams(null).prompt).toBe('')
@@ -117,6 +138,24 @@ describe('claude-gen checkJobs', () => {
     const r = checkJobs([{ ...job, count: 2, width: 832, height: 1216 }])
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.jobs[0].prompt).toBe(job.prompt)
+  })
+
+  it('charRefs는 종류 기본 character·강도 기본 1로 받고, 윈도 경로를 그대로 둔다', () => {
+    const r = checkJobs([
+      {
+        ...job,
+        charRefs: [
+          { filePath: 'D:\\에셋\\E01_레퍼.webp', refType: 'character', strength: 2.5 },
+          { filePath: 'C:/a/b.png' }
+        ]
+      }
+    ])
+    expect(r.ok).toBe(true)
+    if (r.ok)
+      expect(r.jobs[0].charRefs).toEqual([
+        { filePath: 'D:\\에셋\\E01_레퍼.webp', refType: 'character', strength: 2.5 },
+        { filePath: 'C:/a/b.png', refType: 'character', strength: 1 }
+      ])
   })
 
   it.each([
@@ -133,7 +172,24 @@ describe('claude-gen checkJobs', () => {
       '같은 이름'
     ],
     [[{ name: 'a', prompt: 'x', model: 'gpt-image' }], 'model'],
-    [Array.from({ length: 5 }, (_, i) => ({ name: `n${i}`, prompt: 'x', count: 7 })), '32장']
+    [Array.from({ length: 5 }, (_, i) => ({ name: `n${i}`, prompt: 'x', count: 7 })), '32장'],
+    [[{ name: 'a', prompt: 'x', charRefs: [{ filePath: 'rel/a.png' }] }], '절대 경로'],
+    [[{ name: 'a', prompt: 'x', charRefs: [{ filePath: 'C:/a.gif' }] }], '절대 경로'],
+    [
+      [{ name: 'a', prompt: 'x', charRefs: [{ filePath: 'C:/a.png', refType: 'delta' }] }],
+      'refType'
+    ],
+    [[{ name: 'a', prompt: 'x', charRefs: [{ filePath: 'C:/a.png', strength: 6 }] }], 'strength'],
+    [
+      [
+        {
+          name: 'a',
+          prompt: 'x',
+          charRefs: Array.from({ length: 5 }, () => ({ filePath: 'C:/a.png' }))
+        }
+      ],
+      '4장'
+    ]
   ])('잘못된 입력을 거절한다 %#', (input, message) => {
     const r = checkJobs(input)
     expect(r.ok).toBe(false)

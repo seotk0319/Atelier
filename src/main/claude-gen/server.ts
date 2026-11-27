@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { randomBytes, timingSafeEqual } from 'crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { GenerationQueue } from '../queue/generation-queue'
@@ -109,6 +109,11 @@ function presetIdByName(name: string): { id: number; created: boolean } {
 function handleGenerate(deps: ClaudeGenDeps, body: Record<string, unknown>): [number, unknown] {
   const checked = checkJobs(body.jobs)
   if (!checked.ok) return [400, { ok: false, error: checked.error }]
+  // 레퍼 파일이 없으면 대기열에 넣기 전에 돌려보낸다 (생성 중에 실패하면 무료 확인까지 헛돈다).
+  for (const job of checked.jobs)
+    for (const ref of job.charRefs ?? [])
+      if (!existsSync(ref.filePath))
+        return [400, { ok: false, error: `${job.name}: 레퍼 파일이 없어요: ${ref.filePath}` }]
   const presetName =
     typeof body.preset === 'string' && body.preset.trim()
       ? body.preset.trim().slice(0, 60)
@@ -198,7 +203,9 @@ function handleStatus(deps: ClaudeGenDeps): [number, unknown] {
       acceleration: s.accelerationEnabled,
       appAnlasSpending: s.anlasSpendingEnabled,
       pending: s.counts.pending,
-      generating: s.counts.generating
+      generating: s.counts.generating,
+      // 옛 판은 모르는 칸(charRefs)을 말없이 버린다 — 스크립트가 이걸 보고 레퍼를 보낼지 정한다.
+      features: ['charRefs']
     }
   ]
 }
